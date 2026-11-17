@@ -7,7 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
-- CLIProxyAPI provider for ChatGPT (Codex), Claude, Antigravity and other accounts connected to your proxy. Sign in through Settings, load your models and use them for chat and text generation in Studio.
+- AI subscription sign-in buttons for ChatGPT, Claude and Antigravity. The local CLIProxyAPI launcher handles proxy authentication and the app loads models after sign-in.
 
 ### Removed
 

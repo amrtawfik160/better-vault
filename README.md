@@ -91,30 +91,19 @@ Local models work when better-vault runs on the same machine as the model server
 
 ### Use AI subscriptions through CLIProxyAPI
 
-Run [CLIProxyAPI v8](https://github.com/router-for-me/CLIProxyAPI/releases) alongside better-vault. On macOS you can install it with `brew install cliproxyapi`. Use this configuration for a personal proxy, replacing both placeholders with different, randomly generated keys.
+Install [CLIProxyAPI v8](https://github.com/router-for-me/CLIProxyAPI/releases). On macOS, use `brew install cliproxyapi`. If you downloaded the release binary, point `BETTER_VAULT_CLIPROXYAPI_BIN` at its executable.
 
-```yaml
-config-version: 8
-server:
-  host: "127.0.0.1"
-  port: 8317
-access:
-  api-keys:
-    - "replace-with-your-client-key"
-management:
-  allow-remote: false
-  secret-key: "replace-with-your-management-key"
+Build and start the browser app from this checkout.
+
+```bash
+bun install --frozen-lockfile
+bun run build
+bun run start:subscriptions
 ```
 
-Save the configuration as `config.yaml` outside this repository. Start the proxy with `cliproxyapi --config /path/to/config.yaml` (the release binary is named `cli-proxy-api`). For the browser app, run `bun install --frozen-lockfile` and `bun run dev` from this checkout.
+Open **Settings → AI providers → AI subscriptions** and choose **Connect ChatGPT**, **Connect Claude**, or **Connect Antigravity**. Sign in and authorize access in your browser. Your models load in the model picker, where you can use them in Chat and Studio.
 
-1. Open **Settings → AI providers → CLIProxyAPI**. Paste your **Proxy client API key** to enable the provider.
-2. In **Connect a subscription**, enter the **Proxy management key** and pick **ChatGPT (Codex)**, **Claude**, or **Antigravity**. Open the sign-in link, authorize the account in your browser, then return to better-vault.
-3. Choose **Load models** and pick one in the prompt bar. The same models are available for Studio's text generation. Repeat the sign-in and reload the list to add another account.
-
-CLIProxyAPI stores the provider account tokens. Use its [management console](https://help.router-for.me/management/webui) or CLI for other supported accounts and to remove accounts. The models available to you depend on the accounts and configuration in your proxy. Notebook text included in a request goes through the proxy to the selected provider.
-
-If you run the proxy at another address, set `BETTER_VAULT_CLIPROXYAPI_URL` when starting better-vault. Remote proxy addresses require HTTPS. Connect accounts on the proxy itself for a remote deployment.
+The launcher creates a private proxy configuration on your computer and starts both services on loopback. The proxy stores provider tokens under `~/.better-vault/cliproxyapi` by default. Notebook text included in a request goes through the proxy to the selected provider. For the desktop app, build it in `desktop/` first, then start it from the checkout root with `bun run start:subscriptions --desktop`.
 
 ## 🔐 Where your data lives
 

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { providerIds } from "@/lib/ai/catalog";
+import { rejectCliProxyRequest } from "@/lib/ai/cliproxyapi";
 import { describeError } from "@/lib/ai/errors";
 import { listModels } from "@/lib/ai/list-models";
 import { credentialsSchema } from "@/lib/ai/request";
@@ -13,6 +14,8 @@ const bodySchema = z.object({
 export async function POST(request: Request) {
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Invalid request." }, { status: 400 });
+  const denied = rejectCliProxyRequest(request, parsed.data.provider);
+  if (denied) return denied;
   try {
     return Response.json(await listModels(parsed.data.provider, parsed.data.credentials));
   } catch (error) {

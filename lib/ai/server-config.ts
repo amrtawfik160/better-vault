@@ -10,6 +10,20 @@ export function localProvidersAllowed(): boolean {
 }
 
 let desktopRuntime = false;
+let loopbackRuntime = false;
+
+export function isLoopbackHost(host: string): boolean {
+  return ["localhost", "127.0.0.1", "::1", "[::1]"].includes(host);
+}
+
+/** A web server must listen only on loopback to use its own proxy credentials. */
+export function setLoopbackRuntime(loopback: boolean) {
+  loopbackRuntime = loopback;
+}
+
+export function isLoopbackRuntime(): boolean {
+  return loopbackRuntime;
+}
 
 /** Set by `createApi({ desktop: true })` when the API runs inside the desktop app. */
 export function setDesktopRuntime(desktop: boolean) {

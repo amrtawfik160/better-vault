@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
+import { isLoopbackHost } from "@/lib/ai/server-config";
 import { inlineScriptHashes, securityHeaders } from "@/lib/security/csp";
 import { createApi } from "./app";
 
@@ -24,7 +25,7 @@ app.use("*", async (c, next) => {
   await next();
   for (const [name, value] of Object.entries(headers)) c.res.headers.set(name, value);
 });
-app.route("/", createApi());
+app.route("/", createApi({ loopback: isLoopbackHost(hostname) }));
 app.use("/*", serveStatic({ root: path.relative(process.cwd(), client) }));
 // Every other path is a page of the single-page app.
 app.get("*", (c) => c.html(index));

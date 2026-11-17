@@ -1,10 +1,50 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { wrapLanguageModel } from "ai";
 import { z } from "zod";
-import { localProvidersAllowed } from "./server-config";
+import type { ProviderId } from "./catalog";
+import {
+  isDesktopRuntime,
+  isLoopbackHost,
+  isLoopbackRuntime,
+  localProvidersAllowed,
+} from "./server-config";
 
 const defaultAddress = "http://127.0.0.1:8317";
-const loopbackHosts = ["127.0.0.1", "[::1]", "localhost"];
+
+export function rejectCliProxyRequest(request: Request, provider: ProviderId = "cliproxyapi") {
+  if (provider !== "cliproxyapi") return;
+
+  const url = new URL(request.url);
+  const desktop = isDesktopRuntime() && url.protocol === "app:" && url.host === "better-vault";
+  const web = isLoopbackRuntime() && url.protocol === "http:" && isLoopbackHost(url.hostname);
+  const expectedOrigin = desktop ? "app://better-vault" : url.origin;
+  const origin = request.headers.get("origin");
+  const fetchSite = request.headers.get("sec-fetch-site");
+  const json = request.headers.get("content-type")?.split(";")[0].trim() === "application/json";
+  if (
+    (desktop || web) &&
+    json &&
+    (origin === null || origin === expectedOrigin) &&
+    fetchSite !== "cross-site" &&
+    fetchSite !== "same-site"
+  ) {
+    return;
+  }
+
+  return Response.json(
+    { error: "AI subscription connections are available on this computer only." },
+    { status: 403 },
+  );
+}
+
+export function cliProxyKey(kind: "client" | "management"): string {
+  const key =
+    kind === "client"
+      ? process.env.BETTER_VAULT_CLIPROXYAPI_CLIENT_KEY
+      : process.env.BETTER_VAULT_CLIPROXYAPI_MANAGEMENT_KEY;
+  if (!key?.trim()) throw new Error("Start Better Vault with its local subscription proxy.");
+  return key.trim();
+}
 
 export function cliProxyURL({ management = false } = {}): URL {
   if (!localProvidersAllowed()) throw new Error("CLIProxyAPI is turned off on this server.");
@@ -14,7 +54,7 @@ export function cliProxyURL({ management = false } = {}): URL {
   if (!url || url.username || url.password || url.search || url.hash) {
     throw new Error("Set BETTER_VAULT_CLIPROXYAPI_URL to the CLIProxyAPI server address.");
   }
-  const loopback = loopbackHosts.includes(url.hostname);
+  const loopback = isLoopbackHost(url.hostname);
   if (url.protocol !== "https:" && !(loopback && url.protocol === "http:")) {
     throw new Error("Use HTTPS for a CLIProxyAPI server on another machine.");
   }
@@ -36,11 +76,10 @@ export const cliProxyFetch: typeof fetch = async (input, init) => {
 
 export function cliProxyError(status: number, management = false): string {
   if (status === 401 || status === 403) {
-    const key = management ? "management key" : "client API key";
-    return `CLIProxyAPI rejected the ${key} (HTTP ${status}).`;
+    return "The local subscription proxy could not authenticate Better Vault.";
   }
   if (management && status === 404) {
-    return "Check that CLIProxyAPI v8 is running with a management key configured.";
+    return "Start Better Vault with its local subscription proxy to connect accounts.";
   }
   if (status === 429) return "CLIProxyAPI or the selected provider is rate limited.";
   return `CLIProxyAPI returned HTTP ${status}. Check the proxy logs for details.`;
@@ -53,9 +92,9 @@ const modelListSchema = z.object({
 const nonTextModel =
   /(^|[-_/])(image|realtime|tts|transcribe|audio|embeddings?|moderation|whisper|dall-e|imagen|veo|computer-use)(?=$|[-_/])/i;
 
-export async function listCliProxyModels(apiKey: string | undefined): Promise<string[]> {
+export async function listCliProxyModels(): Promise<string[]> {
   const response = await cliProxyFetch(new URL("v1/models", cliProxyURL()), {
-    headers: { authorization: `Bearer ${apiKey}` },
+    headers: { authorization: `Bearer ${cliProxyKey("client")}` },
     signal: AbortSignal.timeout(10_000),
   });
   if (!response.ok) {
@@ -68,11 +107,11 @@ export async function listCliProxyModels(apiKey: string | undefined): Promise<st
   return [...new Set(list.data.data.map(({ id }) => id).filter((id) => !nonTextModel.test(id)))];
 }
 
-export function cliProxyLanguageModel(modelId: string, apiKey: string | undefined) {
+export function cliProxyLanguageModel(modelId: string) {
   const proxy = createOpenAICompatible({
     name: "cliproxyapi",
     baseURL: new URL("v1", cliProxyURL()).href,
-    apiKey,
+    apiKey: cliProxyKey("client"),
     includeUsage: true,
     fetch: async (input, init) => {
       const response = await cliProxyFetch(input, init);

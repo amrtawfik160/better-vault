@@ -8,6 +8,7 @@ import {
 } from "ai";
 import { z } from "zod";
 import { providers } from "@/lib/ai/catalog";
+import { rejectCliProxyRequest } from "@/lib/ai/cliproxyapi";
 import { describeError } from "@/lib/ai/errors";
 import { chatSystemPrompt } from "@/lib/ai/prompts";
 import { createLanguageModel, createWebSearchTools } from "@/lib/ai/providers";
@@ -64,7 +65,10 @@ function withoutOldCitations(messages: ChatMessage[]): ChatMessage[] {
 }
 
 function textLength(message: ChatMessage): number {
-  return message.parts.reduce((sum, part) => sum + (part.type === "text" ? part.text.length : 0), 0);
+  return message.parts.reduce(
+    (sum, part) => sum + (part.type === "text" ? part.text.length : 0),
+    0,
+  );
 }
 
 /** The provider's count, without the parts that are unknown. */
@@ -81,6 +85,8 @@ export async function POST(request: Request) {
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Invalid request." }, { status: 400 });
   const { mode, model, credentials, effort } = parsed.data;
+  const denied = rejectCliProxyRequest(request, model.provider);
+  if (denied) return denied;
   const messages = parsed.data.messages as unknown as ChatMessage[];
   const passages = parsed.data.passages as Passage[];
 

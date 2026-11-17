@@ -20,6 +20,7 @@
     "dev": "vite",
     "build": "vite build && vite build --ssr server/node.ts --outDir dist/server --emptyOutDir",
     "start": "node dist/server/node.js",
+    "start:subscriptions": "bun scripts/start-subscriptions.mjs",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

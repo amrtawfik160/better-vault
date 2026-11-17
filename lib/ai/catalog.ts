@@ -199,9 +199,9 @@ export const providers: Record<ProviderId, ProviderInfo> = {
   cliproxyapi: {
     id: "cliproxyapi",
     kind: "chat",
-    name: "CLIProxyAPI",
+    name: "AI subscriptions",
     local: false,
-    needsKey: true,
+    needsKey: false,
     webSearch: false,
     suggestedModels: [],
     contextChars: 100_000,

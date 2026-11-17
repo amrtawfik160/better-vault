@@ -69,7 +69,7 @@ async function baseLanguageModel(
     case "opencode":
       return createOpenCodeModel(ref.modelId, credentials.apiKey ?? "", credentials.baseURL);
     case "cliproxyapi":
-      return cliProxyLanguageModel(ref.modelId, credentials.apiKey);
+      return cliProxyLanguageModel(ref.modelId);
     case "ollama":
     case "lmstudio": {
       const base = parseBaseURL(credentials.baseURL, info.defaultBaseURL ?? "");

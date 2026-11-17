@@ -120,7 +120,7 @@ async function listModelIds(
     case "opencode":
       return listOpenCodeModels(credentials.baseURL);
     case "cliproxyapi":
-      return listCliProxyModels(credentials.apiKey);
+      return listCliProxyModels();
     case "bettervault":
       return [...info.suggestedModels];
     case "elevenlabs": {

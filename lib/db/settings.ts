@@ -72,6 +72,7 @@ function withDefaults(saved: Partial<AppSettings> | undefined): AppSettings {
   for (const id of providerIds) {
     base.providers[id] = { ...base.providers[id], ...saved.providers?.[id] };
   }
+  base.providers.cliproxyapi.apiKey = "";
   base.model = saved.model ?? null;
   base.favoriteModels = saved.favoriteModels ?? [];
   return base;
@@ -107,6 +108,7 @@ export function useSettings(): AppSettings | undefined {
 export function isProviderReady(settings: AppSettings, id: ProviderId): boolean {
   const saved = settings.providers[id];
   if (!saved.enabled) return false;
+  if (id === "cliproxyapi") return saved.models.length > 0;
   if (usesChatGPT(settings, id)) return true;
   return providers[id].needsKey ? saved.apiKey.trim() !== "" : saved.baseURL.trim() !== "";
 }
@@ -118,6 +120,7 @@ export function usesChatGPT(settings: AppSettings, id: ProviderId): boolean {
 
 /** The credentials for text requests (chat, Studio). */
 export function credentialsFor(settings: AppSettings, id: ProviderId): ProviderCredentials {
+  if (id === "cliproxyapi") return {};
   const saved = settings.providers[id];
   if (usesChatGPT(settings, id)) return { chatgpt: true };
   if (!providers[id].needsKey)

@@ -1,34 +1,31 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { z } from "zod";
-import { Field } from "@/components/common/field";
 import { Button, buttonVariants } from "@/components/panelui/button";
-import { Input } from "@/components/panelui/input";
+import { Sheet } from "@/components/panelui/sheet";
 import {
   cliProxyLoginSchema,
   cliProxyLoginStatusSchema,
   cliProxySignInProviders,
   type CliProxySignInProvider,
 } from "@/lib/ai/cliproxyapi-oauth";
+import { updateProvider, type ProviderSettings } from "@/lib/db/settings";
+import { desktopBridge } from "@/lib/desktop/bridge";
 
 const names: Record<CliProxySignInProvider, string> = {
-  codex: "ChatGPT (Codex)",
+  codex: "ChatGPT",
   claude: "Claude",
   antigravity: "Antigravity",
 };
 
 const errorSchema = z.object({ error: z.string() });
-type SignInRequest = { key: string } & (
-  | { action: "start"; provider: CliProxySignInProvider }
-  | { action: "status" | "cancel"; state: string }
-);
+const modelsSchema = z.object({
+  models: z.array(z.string()),
+  contextTokens: z.record(z.string(), z.number()),
+});
 
-async function signInRequest<T>(
-  body: SignInRequest,
-  schema: z.ZodType<T>,
-  signal?: AbortSignal,
-): Promise<T> {
-  const response = await fetch("/api/cliproxyapi/oauth", {
+async function request<T>(path: string, body: object, schema: z.ZodType<T>, signal?: AbortSignal) {
+  const response = await fetch(path, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -37,21 +34,47 @@ async function signInRequest<T>(
   const result: unknown = await response.json();
   if (!response.ok) {
     const error = errorSchema.safeParse(result);
-    if (error.success) throw new Error(error.data.error);
+    throw new Error(error.success ? error.data.error : response.statusText);
   }
   return schema.parse(result);
 }
 
-type PendingLogin = { provider: CliProxySignInProvider; url: string; state: string };
+const oauth = "/api/cliproxyapi/oauth";
 
-export function CliProxySignIn() {
+async function syncModels(signal?: AbortSignal) {
+  const result = await request(
+    "/api/models",
+    { provider: "cliproxyapi", credentials: {} },
+    modelsSchema,
+    signal,
+  );
+  if (signal?.aborted) return;
+  await updateProvider("cliproxyapi", { ...result, enabled: result.models.length > 0, apiKey: "" });
+}
+
+type PendingLogin = {
+  provider: CliProxySignInProvider;
+  url: string;
+  state: string;
+  opened: boolean;
+};
+
+export function CliProxyPanel({ saved }: { saved: ProviderSettings }) {
   const { t } = useTranslation("settings");
-  const keyId = useId();
-  const [key, setKey] = useState("");
+  const popupRef = useRef<Window | null>(null);
   const [login, setLogin] = useState<PendingLogin | null>(null);
   const [connected, setConnected] = useState<CliProxySignInProvider | null>(null);
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void syncModels(controller.signal).catch((problem: unknown) => {
+      if (!controller.signal.aborted) setError(errorMessage(problem));
+    });
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     if (!login || busy) return;
@@ -61,44 +84,61 @@ export function CliProxySignIn() {
     async function poll() {
       if (!login) return;
       try {
-        const { status } = await signInRequest(
-          { action: "status", key, state: login.state },
+        const { status } = await request(
+          oauth,
+          { action: "status", state: login.state },
           cliProxyLoginStatusSchema,
           controller.signal,
         );
         if (controller.signal.aborted) return;
         if (status === "wait") {
           timer = window.setTimeout(poll, 1500);
-        } else {
-          setLogin(null);
-          if (status === "ok") setConnected(login.provider);
-          else setError(t("cliproxyapi.signInFailed"));
+          return;
         }
-      } catch {
-        if (controller.signal.aborted) return;
-        setError(t("cliproxyapi.statusFailed"));
-        setLogin(null);
+        if (status === "ok") {
+          setConnected(login.provider);
+          await syncModels(controller.signal);
+        } else {
+          setError(t("cliproxyapi.signInFailed"));
+        }
+      } catch (problem) {
+        if (!controller.signal.aborted) setError(errorMessage(problem));
       }
+      if (!controller.signal.aborted) setLogin(null);
     }
 
     return () => {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [login, busy, key, t]);
+  }, [login, busy, t]);
 
   async function start(provider: CliProxySignInProvider) {
     setBusy(true);
     setError("");
     setConnected(null);
+    const popup = desktopBridge() ? null : window.open("about:blank", "_blank");
+    popupRef.current = popup;
     try {
-      const { state, url } = await signInRequest(
-        { action: "start", key, provider },
+      const { state, url, opened } = await request(
+        oauth,
+        { action: "start", provider },
         cliProxyLoginSchema,
       );
-      setLogin({ state, url, provider });
+      let browserOpened = opened ?? false;
+      if (popup && !popup.closed) {
+        try {
+          popup.opener = null;
+          popup.location.href = url;
+          browserOpened = true;
+        } catch {
+          popup.close();
+        }
+      }
+      setLogin({ state, url, provider, opened: browserOpened });
     } catch (problem) {
-      setError(problem instanceof Error ? problem.message : t("cliproxyapi.signInFailed"));
+      popup?.close();
+      setError(errorMessage(problem));
     } finally {
       setBusy(false);
     }
@@ -109,87 +149,96 @@ export function CliProxySignIn() {
     setBusy(true);
     setError("");
     try {
-      await signInRequest({ action: "cancel", key, state: login.state }, cliProxyLoginStatusSchema);
+      await request(oauth, { action: "cancel", state: login.state }, cliProxyLoginStatusSchema);
+      popupRef.current?.close();
       setLogin(null);
-    } catch {
-      setError(t("cliproxyapi.cancelFailed"));
+    } catch (problem) {
+      setError(errorMessage(problem));
     } finally {
       setBusy(false);
     }
   }
 
+  async function refresh() {
+    setRefreshing(true);
+    setError("");
+    try {
+      await syncModels();
+    } catch (problem) {
+      setError(errorMessage(problem));
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   return (
-    <section className="flex flex-col gap-3 rounded-2xl bg-muted/60 p-4">
-      <h3 className="text-sm font-medium">{t("cliproxyapi.signIn")}</h3>
-      <p className="text-sm text-muted-foreground">{t("cliproxyapi.signInHint")}</p>
-      <Field
-        label={t("cliproxyapi.managementKey")}
-        htmlFor={keyId}
-        action={
-          <a
-            href="https://help.router-for.me/introduction/quick-start"
-            target="_blank"
-            rel="noreferrer"
+    <>
+      <Sheet.Header title={t("cliproxyapi.title")} description={t("cliproxyapi.description")} />
+      <Sheet.Body>
+        <div className="flex flex-col gap-4">
+          {login ? (
+            <div className="flex flex-wrap gap-2">
+              <a
+                href={login.url}
+                target="_blank"
+                rel="noreferrer"
+                className={buttonVariants({ variant: login.opened ? "secondary" : "default" })}
+              >
+                {t(login.opened ? "cliproxyapi.reopenSignIn" : "cliproxyapi.openSignIn", {
+                  provider: names[login.provider],
+                })}
+              </a>
+              <Button type="button" variant="ghost" disabled={busy} onClick={() => void cancel()}>
+                {t("cliproxyapi.cancel")}
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col items-start gap-2">
+              {cliProxySignInProviders.map((provider) => (
+                <Button
+                  key={provider}
+                  type="button"
+                  variant="secondary"
+                  disabled={busy || refreshing}
+                  onClick={() => void start(provider)}
+                >
+                  {t("cliproxyapi.connect", { provider: names[provider] })}
+                </Button>
+              ))}
+            </div>
+          )}
+          <p role="status" className="text-sm text-muted-foreground">
+            {busy
+              ? t(login ? "cliproxyapi.cancelling" : "cliproxyapi.starting")
+              : login
+                ? t(login.opened ? "cliproxyapi.waiting" : "cliproxyapi.openPrompt")
+                : connected
+                  ? t("cliproxyapi.connected", { provider: names[connected] })
+                  : saved.models.length > 0
+                    ? t("providers.modelsLoaded", { count: saved.models.length })
+                    : t("cliproxyapi.modelsEmpty")}
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="self-start"
+            disabled={busy || refreshing || login !== null}
+            onClick={() => void refresh()}
           >
-            {t("cliproxyapi.setup")}
-          </a>
-        }
-      >
-        <Input
-          id={keyId}
-          aria-label={t("cliproxyapi.managementKey")}
-          type="password"
-          autoComplete="off"
-          spellCheck={false}
-          value={key}
-          onChange={(event) => setKey(event.target.value)}
-          disabled={busy || login !== null}
-        />
-      </Field>
-      {login ? (
-        <div className="flex flex-wrap gap-2">
-          <a
-            href={login.url}
-            target="_blank"
-            rel="noreferrer"
-            className={buttonVariants({ size: "sm" })}
-          >
-            {t("cliproxyapi.openSignIn", { provider: names[login.provider] })}
-          </a>
-          <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={cancel}>
-            {t("cliproxyapi.cancel")}
+            {refreshing ? t("providers.refreshing") : t("cliproxyapi.refreshModels")}
           </Button>
+          {error ? (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          ) : null}
         </div>
-      ) : (
-        <div className="flex flex-wrap gap-2">
-          {cliProxySignInProviders.map((provider) => (
-            <Button
-              key={provider}
-              type="button"
-              size="sm"
-              variant="secondary"
-              disabled={busy || !key.trim()}
-              onClick={() => void start(provider)}
-            >
-              {names[provider]}
-            </Button>
-          ))}
-        </div>
-      )}
-      <div role="status" className="text-sm text-muted-foreground empty:hidden">
-        {busy
-          ? t(login ? "cliproxyapi.cancelling" : "cliproxyapi.starting")
-          : login
-            ? t("cliproxyapi.waiting")
-            : connected
-              ? t("cliproxyapi.connected", { provider: names[connected] })
-              : null}
-      </div>
-      {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
-    </section>
+      </Sheet.Body>
+    </>
   );
+}
+
+function errorMessage(problem: unknown): string {
+  return problem instanceof Error ? problem.message : String(problem);
 }

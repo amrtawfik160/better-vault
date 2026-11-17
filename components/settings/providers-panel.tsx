@@ -38,7 +38,7 @@ import {
   type ProviderSettings,
 } from "@/lib/db/settings";
 import { cn } from "@/lib/utils";
-import { CliProxySignIn } from "./cliproxyapi-sign-in";
+import { CliProxyPanel } from "./cliproxyapi-sign-in";
 import { SettingsRow } from "./settings-row";
 
 type Status = "ready" | "needsKey" | "off";
@@ -71,7 +71,10 @@ export function ProvidersPanel({ onChatGPTSignIn }: ProvidersPanelProps) {
       <Sheet.Body>
         {/* Better Vault AI is managed by the account service. */}
         <ProviderList
-          ids={chatProviderIds.filter((id) => id !== "bettervault")}
+          ids={[
+            "cliproxyapi",
+            ...chatProviderIds.filter((id) => id !== "bettervault" && id !== "cliproxyapi"),
+          ]}
           settings={settings}
         />
         <h3 className="mt-5 mb-1 px-0.5 text-xs font-medium text-muted-foreground">
@@ -129,6 +132,7 @@ function ProviderList({
 function ProviderDetail({ id, onChatGPTSignIn }: { id: ProviderId; onChatGPTSignIn: () => void }) {
   const settings = useSettings();
   if (!settings) return null;
+  if (id === "cliproxyapi") return <CliProxyPanel saved={settings.providers[id]} />;
   return <ProviderForm id={id} saved={settings.providers[id]} onChatGPTSignIn={onChatGPTSignIn} />;
 }
 
@@ -208,13 +212,7 @@ function ProviderForm({
     <>
       <Sheet.Header
         title={info.name}
-        description={
-          id === "cliproxyapi"
-            ? t("cliproxyapi.description")
-            : info.local
-              ? t("providers.localHint")
-              : undefined
-        }
+        description={info.local ? t("providers.localHint") : undefined}
       />
       <Sheet.Body>
         <div className="flex flex-col gap-5 pb-4">
@@ -262,9 +260,8 @@ function ProviderForm({
 
           {info.needsKey ? (
             <Field
-              label={id === "cliproxyapi" ? t("cliproxyapi.clientKey") : t("providers.apiKey")}
+              label={t("providers.apiKey")}
               htmlFor={keyId}
-              hint={id === "cliproxyapi" ? t("cliproxyapi.clientKeyHint") : undefined}
               action={
                 info.keyUrl ? (
                   <a href={info.keyUrl} target="_blank" rel="noreferrer">
@@ -321,8 +318,6 @@ function ProviderForm({
             </Field>
           )}
 
-          {id === "cliproxyapi" ? <CliProxySignIn /> : null}
-
           {info.kind === "audio" ? null : (
             <>
               <p className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -355,11 +350,9 @@ function ProviderForm({
                     ? t("providers.loadFailed", { error: loadError })
                     : saved.models.length > 0
                       ? t("providers.modelsLoaded", { count: saved.models.length })
-                      : id === "cliproxyapi"
-                        ? t("cliproxyapi.modelsEmpty")
-                        : info.local
-                          ? t("providers.modelsEmptyLocal", { name: info.name })
-                          : t("providers.modelsSuggested", { name: info.name })
+                      : info.local
+                        ? t("providers.modelsEmptyLocal", { name: info.name })
+                        : t("providers.modelsSuggested", { name: info.name })
                 }
               >
                 {models.length > 0 ? (
