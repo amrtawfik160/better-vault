@@ -4,6 +4,7 @@ import { POST as bot } from "./routes/bot";
 import { POST as calendarFetch } from "./routes/calendar-fetch";
 import { POST as chat } from "./routes/chat";
 import { POST as chatgpt } from "./routes/chatgpt";
+import { POST as cliproxyapi } from "./routes/cliproxyapi";
 import { POST as models } from "./routes/models";
 import { POST as opencode } from "./routes/opencode";
 import { POST as sourcesParse } from "./routes/sources-parse";
@@ -26,6 +27,7 @@ export function createApi({ desktop = false }: { desktop?: boolean } = {}) {
   api.post("/calendar/fetch", (c) => calendarFetch(c.req.raw));
   api.post("/chat", (c) => chat(c.req.raw));
   api.post("/chatgpt", (c) => chatgpt(c.req.raw));
+  api.post("/cliproxyapi/oauth", (c) => cliproxyapi(c.req.raw));
   api.post("/models", (c) => models(c.req.raw));
   api.post("/opencode/detect", () => opencode());
   api.post("/sources/parse", (c) => sourcesParse(c.req.raw));

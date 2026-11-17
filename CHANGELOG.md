@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- CLIProxyAPI provider for ChatGPT (Codex), Claude, Antigravity and other accounts connected to your proxy. Sign in through Settings, load your models and use them for chat and text generation in Studio.
+
 ## [0.8.0] - 2026-11-17
 
 ### Added

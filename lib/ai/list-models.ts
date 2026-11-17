@@ -1,5 +1,6 @@
 import { listChatGPTModels } from "@/lib/chatgpt/model";
 import { providers, type ProviderCredentials, type ProviderId } from "./catalog";
+import { listCliProxyModels } from "./cliproxyapi";
 import { listOpenCodeModels } from "./opencode";
 import { chatGPTAllowed, localProvidersAllowed, parseBaseURL } from "./server-config";
 
@@ -118,6 +119,8 @@ async function listModelIds(
     }
     case "opencode":
       return listOpenCodeModels(credentials.baseURL);
+    case "cliproxyapi":
+      return listCliProxyModels(credentials.apiKey);
     case "bettervault":
       return [...info.suggestedModels];
     case "elevenlabs": {

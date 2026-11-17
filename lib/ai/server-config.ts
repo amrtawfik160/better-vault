@@ -2,9 +2,8 @@
  * Server-side switches, set with environment variables when hosting
  * better-vault for others.
  *
- * BETTER_VAULT_ALLOW_LOCAL_PROVIDERS=false turns off Ollama and LM Studio.
- * Their address comes from the user, so on a public server they would let
- * anyone make the server fetch addresses on its own network.
+ * BETTER_VAULT_ALLOW_LOCAL_PROVIDERS=false turns off Ollama, LM Studio and
+ * CLIProxyAPI. Ollama and LM Studio accept addresses supplied by the user.
  */
 export function localProvidersAllowed(): boolean {
   return process.env.BETTER_VAULT_ALLOW_LOCAL_PROVIDERS !== "false";

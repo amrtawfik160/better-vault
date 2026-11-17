@@ -38,6 +38,7 @@ import {
   type ProviderSettings,
 } from "@/lib/db/settings";
 import { cn } from "@/lib/utils";
+import { CliProxySignIn } from "./cliproxyapi-sign-in";
 import { SettingsRow } from "./settings-row";
 
 type Status = "ready" | "needsKey" | "off";
@@ -207,7 +208,13 @@ function ProviderForm({
     <>
       <Sheet.Header
         title={info.name}
-        description={info.local ? t("providers.localHint") : undefined}
+        description={
+          id === "cliproxyapi"
+            ? t("cliproxyapi.description")
+            : info.local
+              ? t("providers.localHint")
+              : undefined
+        }
       />
       <Sheet.Body>
         <div className="flex flex-col gap-5 pb-4">
@@ -255,8 +262,9 @@ function ProviderForm({
 
           {info.needsKey ? (
             <Field
-              label={t("providers.apiKey")}
+              label={id === "cliproxyapi" ? t("cliproxyapi.clientKey") : t("providers.apiKey")}
               htmlFor={keyId}
+              hint={id === "cliproxyapi" ? t("cliproxyapi.clientKeyHint") : undefined}
               action={
                 info.keyUrl ? (
                   <a href={info.keyUrl} target="_blank" rel="noreferrer">
@@ -313,6 +321,8 @@ function ProviderForm({
             </Field>
           )}
 
+          {id === "cliproxyapi" ? <CliProxySignIn /> : null}
+
           {info.kind === "audio" ? null : (
             <>
               <p className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -329,6 +339,7 @@ function ProviderForm({
                 action={
                   <button
                     type="button"
+                    aria-label={loading ? t("providers.refreshing") : t("providers.refresh")}
                     disabled={!canLoad || loading}
                     onClick={loadModels}
                     className="inline-flex cursor-pointer items-center gap-1 text-foreground underline-offset-4 hover:underline disabled:cursor-default disabled:no-underline disabled:opacity-50"
@@ -344,9 +355,11 @@ function ProviderForm({
                     ? t("providers.loadFailed", { error: loadError })
                     : saved.models.length > 0
                       ? t("providers.modelsLoaded", { count: saved.models.length })
-                      : info.local
-                        ? t("providers.modelsEmptyLocal", { name: info.name })
-                        : t("providers.modelsSuggested", { name: info.name })
+                      : id === "cliproxyapi"
+                        ? t("cliproxyapi.modelsEmpty")
+                        : info.local
+                          ? t("providers.modelsEmptyLocal", { name: info.name })
+                          : t("providers.modelsSuggested", { name: info.name })
                 }
               >
                 {models.length > 0 ? (

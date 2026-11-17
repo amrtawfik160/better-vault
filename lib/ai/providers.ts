@@ -14,6 +14,7 @@ import {
 } from "ai";
 import { chatGPTLanguageModel } from "@/lib/chatgpt/model";
 import { providers, type Effort, type ModelRef, type ProviderCredentials } from "./catalog";
+import { cliProxyLanguageModel } from "./cliproxyapi";
 import { createOpenCodeModel } from "./opencode";
 import { chatGPTAllowed, localProvidersAllowed, parseBaseURL } from "./server-config";
 
@@ -67,6 +68,8 @@ async function baseLanguageModel(
       return createDeepSeek({ apiKey: credentials.apiKey })(ref.modelId);
     case "opencode":
       return createOpenCodeModel(ref.modelId, credentials.apiKey ?? "", credentials.baseURL);
+    case "cliproxyapi":
+      return cliProxyLanguageModel(ref.modelId, credentials.apiKey);
     case "ollama":
     case "lmstudio": {
       const base = parseBaseURL(credentials.baseURL, info.defaultBaseURL ?? "");

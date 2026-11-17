@@ -32,7 +32,7 @@
   },
   "providers": {
     "title": "AI providers",
-    "description": "Add a key, sign in with ChatGPT or use a local model. Keys stay in this browser and are only sent to reach the provider.",
+    "description": "Add a key, connect a subscription or use a local model. Saved keys stay on this device and are sent with provider requests.",
     "ready": "Ready",
     "off": "Off",
     "needsKey": "Needs a key",
@@ -73,6 +73,25 @@
     "opencodeMissing": "OpenCode isn't installed",
     "opencodeMissingBody": "better-vault couldn't find OpenCode on this computer. Install it, then check again. A Zen or Go key works without it.",
     "opencodeDownload": "Download OpenCode"
+  },
+  "cliproxyapi": {
+    "description": "Use models from the AI accounts connected to your CLIProxyAPI server.",
+    "clientKey": "Proxy client API key",
+    "clientKeyHint": "Use a key from access.api-keys in your proxy configuration.",
+    "modelsEmpty": "Connect an account in CLIProxyAPI, then load its models.",
+    "signIn": "Connect a subscription",
+    "signInHint": "Run CLIProxyAPI v8 on this computer. CLIProxyAPI stores the account tokens. The management key is used only in this sign-in panel.",
+    "managementKey": "Proxy management key",
+    "setup": "Proxy setup guide",
+    "openSignIn": "Open {{provider}} sign-in",
+    "starting": "Starting sign-in…",
+    "waiting": "Finish signing in in your browser, then return here.",
+    "connected": "{{provider}} sign-in completed. Load models below.",
+    "signInFailed": "CLIProxyAPI could not complete this sign-in. Check the proxy logs and try again.",
+    "statusFailed": "Could not check sign-in. Check the proxy connection and load models to see if the account was added.",
+    "cancel": "Cancel sign-in",
+    "cancelling": "Cancelling sign-in…",
+    "cancelFailed": "Could not cancel sign-in. Check that CLIProxyAPI is running and try again."
   },
   "appearance": {
     "title": "Appearance",

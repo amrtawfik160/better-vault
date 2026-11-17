@@ -89,6 +89,33 @@ npm start
 
 Local models work when better-vault runs on the same machine as the model server. Web search is only available with providers that have it built in (OpenAI, Anthropic, Google).
 
+### Use AI subscriptions through CLIProxyAPI
+
+Run [CLIProxyAPI v8](https://github.com/router-for-me/CLIProxyAPI/releases) alongside better-vault. On macOS you can install it with `brew install cliproxyapi`. Use this configuration for a personal proxy, replacing both placeholders with different, randomly generated keys.
+
+```yaml
+config-version: 8
+server:
+  host: "127.0.0.1"
+  port: 8317
+access:
+  api-keys:
+    - "replace-with-your-client-key"
+management:
+  allow-remote: false
+  secret-key: "replace-with-your-management-key"
+```
+
+Save the configuration as `config.yaml` outside this repository. Start the proxy with `cliproxyapi --config /path/to/config.yaml` (the release binary is named `cli-proxy-api`). For the browser app, run `bun install --frozen-lockfile` and `bun run dev` from this checkout.
+
+1. Open **Settings → AI providers → CLIProxyAPI**. Paste your **Proxy client API key** to enable the provider.
+2. In **Connect a subscription**, enter the **Proxy management key** and pick **ChatGPT (Codex)**, **Claude**, or **Antigravity**. Open the sign-in link, authorize the account in your browser, then return to better-vault.
+3. Choose **Load models** and pick one in the prompt bar. The same models are available for Studio's text generation. Repeat the sign-in and reload the list to add another account.
+
+CLIProxyAPI stores the provider account tokens. Use its [management console](https://help.router-for.me/management/webui) or CLI for other supported accounts and to remove accounts. The models available to you depend on the accounts and configuration in your proxy. Notebook text included in a request goes through the proxy to the selected provider.
+
+If you run the proxy at another address, set `BETTER_VAULT_CLIPROXYAPI_URL` when starting better-vault. Remote proxy addresses require HTTPS. Connect accounts on the proxy itself for a remote deployment.
+
 ## 🔐 Where your data lives
 
 Notebooks, sources, chats, Studio outputs and API keys stay on your device: in your browser's IndexedDB in the web app, or in `better-vault.sqlite` in the app's data folder in the desktop app. **Settings → Data** exports and imports notebooks as a JSON file, which also moves them between the two.
@@ -97,12 +124,13 @@ Each request sends your key to the app's own API route, which passes it to the p
 
 ### Hosting for others
 
-Two optional environment variables tighten a public deployment:
+These environment variables control how a self-hosted app reaches other services.
 
-| Variable                             | Default | Effect                                                                                                                  |
-| ------------------------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `BETTER_VAULT_ALLOW_LOCAL_PROVIDERS` | `true`  | Set to `false` to turn off Ollama and LM Studio, whose address comes from the user and would make the server fetch it.  |
-| `BETTER_VAULT_ALLOW_PRIVATE_URLS`    | `false` | Set to `true` to let web-page sources point at private or local network addresses (only for trusted, private installs). |
+| Variable                             | Default                 | Effect                                                                                                                  |
+| ------------------------------------ | ----------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `BETTER_VAULT_ALLOW_LOCAL_PROVIDERS` | `true`                  | Set to `false` to turn off Ollama, LM Studio and CLIProxyAPI on a public server.                                        |
+| `BETTER_VAULT_CLIPROXYAPI_URL`       | `http://127.0.0.1:8317` | Address of the trusted CLIProxyAPI instance used by the better-vault server.                                            |
+| `BETTER_VAULT_ALLOW_PRIVATE_URLS`    | `false`                 | Set to `true` to let web-page sources point at private or local network addresses (only for trusted, private installs). |
 
 ## 🧱 Tech stack
 
