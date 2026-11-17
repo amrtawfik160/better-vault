@@ -17,7 +17,7 @@
   "menu": "More",
   "addSource": "Add a source",
   "setup": {
-    "banner": "Add an API key or a local model to start.",
+    "banner": "Connect an AI subscription, add an API key, or use a local model.",
     "action": "Set up"
   },
   "noSources": "Select a source, or switch to Web.",
@@ -36,7 +36,8 @@
       "questions": "What questions do these sources answer?",
       "terms": "Explain the most important terms",
       "plan": "Make a study plan from these sources"
-    }
+    },
+    "noSourcesLocal": "Add or select a source to begin."
   },
   "sources": {
     "title": "References",
@@ -132,5 +133,6 @@
     "attached_one": "{{count}} skill",
     "attached_other": "{{count}} skills",
     "clear": "Remove skills from this chat"
-  }
+  },
+  "noSourcesLocal": "Select or add a source to ask a question."
 }

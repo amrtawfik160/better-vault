@@ -1,15 +1,17 @@
 ---
 title: "Desktop app"
-description: "Install the better-vault desktop app for macOS, Windows or Linux. It has the same interface as the web app, keeps notebooks in a local file and updates itself."
+description: "Install the better-vault desktop app for macOS, Windows or Linux. It has the same interface as the web app and keeps notebooks in a local file."
 ---
 
-The desktop app is better-vault for macOS, Windows and Linux, with the same interface as the web app and no setup.
+The desktop app is deepLe for macOS, Windows and Linux, with the same interface as the web app and no setup.
 
-It runs the whole app on your computer, including the server that talks to your AI provider. Your notebooks are kept in a file on your disk instead of in a browser, and the app updates itself when a new version is released.
+It runs the whole app on your computer, including the server that talks to your AI provider. Your notebooks are kept in a file on your disk instead of in a browser.
+
+Open **Settings → AI providers → AI subscriptions** and choose an account to connect. The installer includes the local connection service, and the provider handles sign-in in your browser.
 
 ## Download
 
-The [download page](/download) offers the installer for your computer and lists every file. The same files are attached to each [release on GitHub](https://github.com/better-vault/better-vault/releases/latest).
+The [download page](/download) lists published deepLe installers when available. You can also build the app from your checkout.
 
 | System  | File                                                                           |
 | ------- | ------------------------------------------------------------------------------ |
@@ -24,7 +26,7 @@ The [download page](/download) offers the installer for your computer and lists 
 
 ### macOS
 
-Open the `.dmg` and drag **better-vault** onto **Applications**. Then open it from Applications or Launchpad.
+Open the `.dmg` and drag **deepLe** onto **Applications**. Then open it from Applications or Launchpad.
 
 </Step>
 <Step>
@@ -73,3 +75,7 @@ The web app and the desktop app keep separate data. To bring your browser notebo
 ## Local models
 
 The desktop app works well with Ollama and LM Studio. Start the model server, turn the provider on in **Settings → AI providers**, and your sources never leave your computer. [Providers and models](/docs/providers) has the steps.
+
+## Build from source
+
+From the project root, run `bun run setup`, then `bun run desktop:pack` to build an unpacked app or `bun run desktop:dist` to build an installer. The build fetches and verifies the bundled subscription proxy.

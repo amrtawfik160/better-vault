@@ -72,6 +72,6 @@ export function securityHeaders(scriptHashes: readonly string[]): Record<string,
     "content-security-policy": contentSecurityPolicy(scriptHashes),
     "x-content-type-options": "nosniff",
     "referrer-policy": "strict-origin-when-cross-origin",
-    "permissions-policy": "camera=(), geolocation=(), microphone=(), payment=(), usb=()",
+    "permissions-policy": "camera=(), geolocation=(), microphone=(self), payment=(), usb=()",
   };
 }

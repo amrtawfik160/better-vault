@@ -23,6 +23,8 @@ import { toast } from "sonner";
 import { Avatar } from "@/components/account/avatar";
 import { Logo } from "@/components/brand/logo";
 import { Field } from "@/components/common/field";
+import { SettingsSheet } from "@/components/settings/settings-sheet";
+import { subscriptionConnectionsAllowed } from "@/lib/ai/cliproxyapi-client";
 import { Icon } from "@/components/icon";
 import { Button } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
@@ -48,13 +50,25 @@ export function OnboardingGate() {
     [],
     ["settings"],
   );
-  if (done !== false) return null;
-  return <Onboarding />;
+  const [connectOpen, setConnectOpen] = useState(false);
+  return (
+    <>
+      {done === false ? <Onboarding onConnect={() => setConnectOpen(true)} /> : null}
+      {connectOpen ? (
+        <SettingsSheet
+          open
+          onOpenChange={setConnectOpen}
+          page="subscriptions"
+          trigger={<button type="button" hidden />}
+        />
+      ) : null}
+    </>
+  );
 }
 
 const finish = () => store().putSetting(KEY, { done: true, at: Date.now() });
 
-function Onboarding() {
+function Onboarding({ onConnect }: { onConnect: () => void }) {
   const { t } = useTranslation("common");
   const account = useAccount();
   const profile = useProfile();
@@ -120,7 +134,7 @@ function Onboarding() {
         <div className="flex min-h-[34rem] flex-col p-6 sm:p-10">
           <header className="flex items-center gap-3">
             <Logo size={28} />
-            <span className="text-sm font-semibold">better-vault</span>
+            <span className="text-sm font-semibold">deepLe</span>
             <span className="ms-auto text-xs text-muted-foreground tabular-nums">
               {t("onboarding.stepOf", { step: at + 1, total: steps.length })}
             </span>
@@ -147,6 +161,16 @@ function Onboarding() {
                   body={t("onboarding.account.body")}
                 />
                 <div className="flex flex-col gap-2">
+                  {subscriptionConnectionsAllowed() ? (
+                    <Button
+                      size="lg"
+                      disabled={busy}
+                      onClick={() => void complete().then(onConnect)}
+                    >
+                      <Icon icon={AiBrain01Icon} size={18} />
+                      {t("onboarding.account.connectAI")}
+                    </Button>
+                  ) : null}
                   {account ? (
                     <div className="flex items-center gap-3 rounded-2xl bg-muted/50 p-3 text-sm">
                       <Icon icon={Tick02Icon} size={18} className="text-success" />

@@ -23,3 +23,41 @@ export const cliProxyLoginSchema = z.object({
 export const cliProxyLoginStatusSchema = z.object({
   status: z.enum(["wait", "ok", "error"]),
 });
+
+export const cliProxyBrands: Record<CliProxySignInProvider, string> = {
+  codex: "ChatGPT",
+  claude: "Claude",
+  antigravity: "Antigravity",
+  xai: "Grok",
+  kimi: "Kimi (kimi.com)",
+  "kimi-ai": "Kimi (kimi.ai)",
+  devin: "Devin",
+  meta: "Muse Code",
+};
+
+export const cliProxyAccountSchema = z.object({
+  id: z.string(),
+  provider: z.enum(cliProxySignInProviders),
+  email: z.string().optional(),
+  status: z.enum(["connected", "reconnect"]),
+});
+
+export type CliProxyAccount = z.infer<typeof cliProxyAccountSchema>;
+
+export const cliProxySnapshotSchema = z.object({
+  accounts: z.array(cliProxyAccountSchema),
+  models: z.array(z.string()),
+  modelLabels: z.record(z.string(), z.string()),
+});
+
+export const subscriptionRoute = /^dpl-([0-9a-f]{20})\/(.+)$/;
+
+export const cliProxyErrorSchema = z.enum([
+  "proxyUnavailable",
+  "proxySetup",
+  "proxyOffline",
+  "proxyRequestFailed",
+  "proxyRateLimited",
+  "accountMissing",
+]);
+export type CliProxyError = z.infer<typeof cliProxyErrorSchema>;

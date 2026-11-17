@@ -67,16 +67,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            desktop/package-lock.json
-      - run: npm ci
-      - run: npm ci
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun install --frozen-lockfile
+        working-directory: desktop
+      - run: bun node_modules/electron/install.js
         working-directory: desktop
       - name: Build the installers
         working-directory: desktop
-        run: npm run build && npx electron-builder --config electron-builder.config.mjs ${{ matrix.platform }} --publish never
+        run: bun run build && bun run electron-builder --config electron-builder.config.mjs ${{ matrix.platform }} --publish never
         # The Apple certificate and notarization secrets reach the macOS job
         # only. electron-builder signs Windows builds with CSC_LINK when it is
         # set, and a Windows app signed with an Apple certificate refuses every

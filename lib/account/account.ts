@@ -194,3 +194,25 @@ export async function setUsername(username: string): Promise<void> {
   });
   await refreshAccount();
 }
+
+/** Opens the payment processor's portal for an existing paid account. */
+export async function manageExistingPlan(): Promise<void> {
+  const saved = await getAccount();
+  if (!saved?.account.plan) throw new Error("No active plan.");
+  const portal = window.open("about:blank", "_blank");
+  try {
+    const { url } = await api<{ url: string }>("/v1/billing/portal", saved.token, {
+      method: "POST",
+      body: "{}",
+    });
+    const destination = new URL(url);
+    if (destination.protocol !== "https:") throw new Error("Invalid billing portal.");
+    if (portal && !portal.closed) {
+      portal.opener = null;
+      portal.location.href = destination.href;
+    } else window.open(destination.href, "_blank", "noopener");
+  } catch (error) {
+    portal?.close();
+    throw error;
+  }
+}

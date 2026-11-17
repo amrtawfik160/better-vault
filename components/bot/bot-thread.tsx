@@ -24,7 +24,14 @@ import { chatProviderIds, modelKey, parseModelKey, providers } from "@/lib/ai/ca
 import { botWriteTools, isBotTool } from "@/lib/bot/tools";
 import type { ChatMessage } from "@/lib/chat/types";
 import { updateBot } from "@/lib/db/bots";
-import { activeModel, availableModels, updateSettings, useSettings } from "@/lib/db/settings";
+import {
+  activeModel,
+  modelDisplayLabel,
+  resolveModel,
+  availableModels,
+  updateSettings,
+  useSettings,
+} from "@/lib/db/settings";
 import type { Bot } from "@/lib/db/types";
 import { cn } from "@/lib/utils";
 import { BotAvatar } from "./bot-avatar";
@@ -187,11 +194,7 @@ function ThreadBody({
 
   const models = settings ? availableModels(settings) : [];
   const appModel = settings ? activeModel(settings) : null;
-  const model =
-    bot.model &&
-    models.some((ref) => ref.provider === bot.model?.provider && ref.modelId === bot.model.modelId)
-      ? bot.model
-      : appModel;
+  const model = bot.model && settings ? resolveModel(settings, bot.model) : appModel;
   const busy = status === "submitted" || status === "streaming";
   const promptStatus: PromptState = status === "ready" || status === "error" ? "idle" : status;
   const local = model ? providers[model.provider].local : false;
@@ -226,7 +229,7 @@ function ThreadBody({
 
   const modelItems = models.map((ref) => ({
     value: modelKey(ref),
-    label: ref.modelId,
+    label: modelDisplayLabel(settings, ref),
     provider: ref.provider,
     contextWindow: settings?.providers[ref.provider].contextTokens[ref.modelId],
     tags: [

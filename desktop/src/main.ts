@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, nativeTheme, shell, type WebFrameMain } from "electron";
 import path from "node:path";
+import { stopCliProxy } from "@/lib/ai/cliproxyapi-runtime";
 import { openDatabase } from "./database";
 import { startMcp } from "./mcp";
 import { startAccount } from "./account";
@@ -23,6 +24,10 @@ let closeDatabase: (() => void) | undefined;
 
 registerScheme();
 
+// Keep the existing profile and SQLite data when upgrading from Better Vault.
+if (!process.argv.some((arg) => arg === "--user-data-dir" || arg.startsWith("--user-data-dir="))) {
+  app.setPath("userData", path.join(app.getPath("appData"), "better-vault"));
+}
 const firstInstance = app.requestSingleInstanceLock();
 if (!firstInstance) app.quit();
 
@@ -85,7 +90,7 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     show: false,
-    title: "better-vault",
+    title: "deepLe",
     // The app's own background (--background in src/styles/tokens.css), so no white flash.
     backgroundColor: nativeTheme.shouldUseDarkColors ? "#0a0a0a" : "#ffffff",
     webPreferences: {
@@ -136,7 +141,7 @@ app.whenReady().then(() => {
     handleScheme(devServer ?? path.join(__dirname, "..", "renderer"));
   } catch (error) {
     dialog.showErrorBox(
-      "better-vault could not start",
+      "deepLe could not start",
       error instanceof Error ? error.message : String(error),
     );
     app.quit();
@@ -157,5 +162,6 @@ app.on("window-all-closed", () => {
 });
 
 app.on("will-quit", () => {
+  stopCliProxy();
   closeDatabase?.();
 });

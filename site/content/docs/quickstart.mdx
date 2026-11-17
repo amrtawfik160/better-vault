@@ -16,7 +16,7 @@ You can also run the web app yourself. It opens in your browser and keeps your n
 
 ### Download the code
 
-You need [Node.js](https://nodejs.org) 22.12 or newer, which includes npm, and [Git](https://git-scm.com). Clone the repository and move into it:
+You need [Node.js](https://nodejs.org) 22.12 or newer, [Bun](https://bun.sh), and [Git](https://git-scm.com). Clone the repository and move into it:
 
 ```bash
 git clone https://github.com/better-vault/better-vault.git
@@ -31,8 +31,8 @@ cd better-vault
 Install the dependencies and start the app:
 
 ```bash
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
 The app now runs at [http://localhost:3000](http://localhost:3000). It needs no account and no `.env` file.
@@ -40,11 +40,11 @@ The app now runs at [http://localhost:3000](http://localhost:3000). It needs no 
 </Step>
 </Steps>
 
-For a faster production server, run `npm run build` and then `npm start`. To run it for other people, read [Self-hosting](/docs/self-hosting).
+For a faster production server, run `bun run build` and then `bun run start`. To run it for other people, read [Self-hosting](/docs/self-hosting).
 
 ## Connect a model
 
-Open **Settings → AI providers** and choose a provider. With an API key from OpenAI, Anthropic (Claude) or Google (Gemini), paste the key and the model list loads from the provider. With Ollama or LM Studio running on the same computer, turn the provider on and nothing leaves your machine.
+Open **Settings → AI providers → AI subscriptions** and choose an account to connect. Follow the browser sign-in, then select one of its models. You can also use an API key or a local model in **Settings → AI providers**. With an API key from OpenAI, Anthropic (Claude) or Google (Gemini), paste the key and the model list loads from the provider. With Ollama or LM Studio running on the same computer, turn the provider on and nothing leaves your machine.
 
 [Providers and models](/docs/providers) explains where to get keys and which models suit which tools.
 

@@ -1,3 +1,4 @@
+import type { StudyRecord } from "@/lib/study/records";
 import type { Backend, StoreContent, TableName } from "../backend";
 import type {
   Chunk,
@@ -49,6 +50,7 @@ type DocTable = Exclude<TableName, "settings" | "blobs">;
 
 /** The columns of each table, besides `id` and `doc`, and the fields they copy. */
 const columns: Record<DocTable, Record<string, string>> = {
+  study: { notebook_id: "notebookId" },
   calendar: { start: "start" },
   vaults: { updated_at: "updatedAt" },
   notes: { vault_id: "vaultId", updated_at: "updatedAt" },
@@ -134,6 +136,8 @@ const migrations: string[] = [
   CREATE TABLE botMessages (id TEXT PRIMARY KEY, bot_id TEXT NOT NULL, created_at REAL NOT NULL, doc TEXT NOT NULL);
   CREATE INDEX bot_messages_bot ON botMessages (bot_id, created_at);
   `,
+  `CREATE TABLE study (id TEXT PRIMARY KEY, notebook_id TEXT, doc TEXT NOT NULL);
+  CREATE INDEX study_notebook ON study (notebook_id);`,
 ];
 
 /** The schema version a database has once migrated. */
@@ -176,7 +180,7 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
   function write(table: DocTable, row: { id: string }, mode: "INSERT" | "INSERT OR REPLACE") {
     const names = Object.keys(columns[table]);
     const record = row as unknown as Record<string, unknown>;
-    const values = names.map((name) => record[columns[table][name]] as SqlValue);
+    const values = names.map((name) => (record[columns[table][name]] ?? null) as SqlValue);
     db.prepare(
       `${mode} INTO ${table} (id, ${names.join(", ")}, doc) VALUES (?, ${names.map(() => "?").join(", ")}, ?)`,
     ).run(row.id, ...values, JSON.stringify(row));
@@ -210,6 +214,7 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
     db.prepare(`DELETE FROM ${table} WHERE ${column} = ?`).run(value);
 
   const content: Exclude<TableName, "settings">[] = [
+    "study",
     "calendar",
     "vaults",
     "notes",
@@ -275,6 +280,7 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
         for (const table of ["sources", "chunks", "messages", "conversations", "outputs"] as const)
           deleteWhere(table, "notebook_id", id);
         db.prepare("DELETE FROM blobs WHERE notebook_id = ?").run(id);
+        deleteWhere("study", "notebook_id", id);
         deleteWhere("notebooks", "id", id);
       }),
     countSources: () => {
@@ -502,7 +508,33 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
       db.exec("DELETE FROM settings");
     },
 
+    listStudy: () => docs<StudyRecord>(db.prepare("SELECT doc FROM study").all()),
+    getStudy: (id) => get<StudyRecord>("study", id),
+    putStudy: (rows) =>
+      transaction(db, () => {
+        for (const row of rows) put("study", row);
+      }),
+    replaceStudyText: (book, source, chunks) =>
+      transaction(db, () => {
+        if (
+          !get<StudyRecord>("study", book.id) ||
+          !get<Notebook>("notebooks", book.notebookId) ||
+          !get<Source>("sources", source.id)
+        ) {
+          throw new Error("The document or its source was deleted.");
+        }
+        put("study", book);
+        put("sources", source);
+        deleteWhere("chunks", "source_id", source.id);
+        for (const chunk of chunks) put("chunks", chunk);
+        touch(book.notebookId, book.updatedAt);
+      }),
+    deleteStudy: (id) => {
+      deleteWhere("study", "id", id);
+    },
+
     exportAll: (): StoreContent => ({
+      study: docs(db.prepare("SELECT doc FROM study").all()),
       calendar: docs(db.prepare("SELECT doc FROM calendar").all()),
       vaults: docs(db.prepare("SELECT doc FROM vaults").all()),
       notes: docs(db.prepare("SELECT doc FROM notes").all()),
@@ -519,6 +551,7 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
     }),
     importAll: (data, chunks) =>
       transaction(db, () => {
+        for (const row of data.study) put("study", row);
         for (const row of data.calendar) put("calendar", row);
         for (const row of data.vaults) put("vaults", row);
         for (const row of data.notes) put("notes", row);

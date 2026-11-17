@@ -9,7 +9,8 @@ import {
   localProvidersAllowed,
 } from "./server-config";
 
-const defaultAddress = "http://127.0.0.1:8317";
+import { subscriptionRoute } from "./cliproxyapi-oauth";
+import { cliProxyConnection, ensureCliProxy, usesManagedCliProxy } from "./cliproxyapi-runtime";
 
 export function rejectCliProxyRequest(request: Request, provider: ProviderId = "cliproxyapi") {
   if (provider !== "cliproxyapi") return;
@@ -38,11 +39,8 @@ export function rejectCliProxyRequest(request: Request, provider: ProviderId = "
 }
 
 export function cliProxyKey(kind: "client" | "management"): string {
-  const key =
-    kind === "client"
-      ? process.env.BETTER_VAULT_CLIPROXYAPI_CLIENT_KEY
-      : process.env.BETTER_VAULT_CLIPROXYAPI_MANAGEMENT_KEY;
-  if (!key?.trim()) throw new Error("Start Better Vault with its local subscription proxy.");
+  const key = cliProxyConnection()[kind];
+  if (!key?.trim()) throw new Error("proxySetup");
   return key.trim();
 }
 
@@ -50,7 +48,7 @@ export function cliProxyURL({ management = false } = {}): URL {
   if (!localProvidersAllowed()) throw new Error("CLIProxyAPI is turned off on this server.");
 
   // Only the person running better-vault can choose where requests and keys go.
-  const url = URL.parse(process.env.BETTER_VAULT_CLIPROXYAPI_URL?.trim() || defaultAddress);
+  const url = URL.parse(cliProxyConnection().url.trim());
   if (!url || url.username || url.password || url.search || url.hash) {
     throw new Error("Set BETTER_VAULT_CLIPROXYAPI_URL to the CLIProxyAPI server address.");
   }
@@ -70,7 +68,7 @@ export const cliProxyFetch: typeof fetch = async (input, init) => {
     return await fetch(input, { ...init, cache: "no-store", redirect: "error" });
   } catch {
     if (init?.signal?.aborted) throw init.signal.reason;
-    throw new Error("Could not reach CLIProxyAPI. Check that the proxy is running.");
+    throw new Error("proxyOffline");
   }
 };
 
@@ -92,7 +90,7 @@ const modelListSchema = z.object({
 const nonTextModel =
   /(^|[-_/])(image|realtime|tts|transcribe|audio|embeddings?|moderation|whisper|dall-e|imagen|veo|computer-use)(?=$|[-_/])/i;
 
-export async function listCliProxyModels(): Promise<string[]> {
+export async function listRawCliProxyModels(): Promise<string[]> {
   const response = await cliProxyFetch(new URL("v1/models", cliProxyURL()), {
     headers: { authorization: `Bearer ${cliProxyKey("client")}` },
     signal: AbortSignal.timeout(10_000),
@@ -107,7 +105,13 @@ export async function listCliProxyModels(): Promise<string[]> {
   return [...new Set(list.data.data.map(({ id }) => id).filter((id) => !nonTextModel.test(id)))];
 }
 
-export function cliProxyLanguageModel(modelId: string) {
+export async function cliProxyLanguageModel(modelId: string) {
+  await ensureCliProxy();
+  if (cliProxyConnection().management && !subscriptionRoute.test(modelId)) {
+    const { proxyCredentials } = await import("./cliproxyapi-accounts");
+    if (usesManagedCliProxy() || (await proxyCredentials()).length > 0)
+      throw new Error("Choose a model from a connected AI subscription.");
+  }
   const proxy = createOpenAICompatible({
     name: "cliproxyapi",
     baseURL: new URL("v1", cliProxyURL()).href,

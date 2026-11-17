@@ -11,8 +11,7 @@ import { latestRelease, releasesUrl } from "@/lib/site/releases";
 
 export const metadata: Metadata = {
   title: "Download",
-  description:
-    "Download the better-vault desktop app for macOS, Windows and Linux: the open-source NotebookLM alternative, with notebooks on your computer and auto-updates.",
+  description: "Build or download the deepLe desktop app for macOS, Windows and Linux.",
   alternates: { canonical: absoluteUrl("/download") },
 };
 
@@ -69,8 +68,8 @@ const PERKS = [
     body: "Kept in one file in the app's data folder, not in a browser.",
   },
   {
-    title: "Updates itself",
-    body: "New versions download in the background and install on restart.",
+    title: "Bundled AI connections",
+    body: "Connect AI subscriptions from Settings on your computer.",
   },
 ];
 
@@ -116,7 +115,7 @@ export default async function DownloadPage() {
           </h1>
           <p className="max-w-2xl text-lg text-balance text-muted-foreground">
             The desktop app for macOS, Windows and Linux. It is the same app as on the web, keeps
-            your notebooks on your computer and updates itself.
+            your notebooks on your computer.
           </p>
           {release && installers.length > 0 ? (
             <DownloadButton installers={installers} version={release.version} />

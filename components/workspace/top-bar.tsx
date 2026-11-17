@@ -26,7 +26,7 @@ export function TopBar() {
   const { t } = useTranslation("workspace");
   const { t: tSettings } = useTranslation("settings");
   const { t: tChat } = useTranslation("chat");
-  const { notebook, tab, studioOpen, setStudioOpen, settingsOpen, setSettingsOpen } =
+  const { notebook, tab, studioOpen, setStudioOpen, settingsOpen, settingsPage, setSettingsOpen } =
     useWorkspace();
   const sources = useSources(notebook.id);
   const selected = sources?.filter((source) => source.selected).length ?? 0;
@@ -45,6 +45,7 @@ export function TopBar() {
           <ButtonGroup aria-label={t("toolbar")}>
             <SettingsSheet
               open={settingsOpen}
+              page={settingsPage}
               onOpenChange={setSettingsOpen}
               trigger={
                 <Button variant="outline" size="sm" title={tSettings("title")}>

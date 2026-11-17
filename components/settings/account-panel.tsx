@@ -17,7 +17,12 @@ import { ProviderIcon } from "@/components/provider-icon";
 import { Button } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
 import { Sheet } from "@/components/panelui/sheet";
-import { signIn, signOut, useAccount } from "@/lib/account/account";
+import { manageExistingPlan, signIn, signOut, useAccount } from "@/lib/account/account";
+import {
+  subscriptionConnectionsAllowed,
+  useSubscriptionConnections,
+} from "@/lib/ai/cliproxyapi-client";
+import { cliProxyBrands } from "@/lib/ai/cliproxyapi-oauth";
 import { providerIds, providers } from "@/lib/ai/catalog";
 import { desktopBridge } from "@/lib/desktop/bridge";
 import { useFolders } from "@/lib/db/folders";
@@ -39,6 +44,7 @@ export function AccountPanel() {
   const account = useAccount();
   const [busy, setBusy] = useState<string | null>(null);
   const settings = useSettings();
+  const { accounts } = useSubscriptionConnections();
   const notebooks = useNotebooks();
   const folders = useFolders();
   const counts = useNotebookCounts();
@@ -175,6 +181,19 @@ export function AccountPanel() {
                   label={t("account.username")}
                   value={user.username ? `@${user.username}` : t("account.noUsername")}
                 />
+                {account?.account.plan ? (
+                  <Button
+                    className="self-start"
+                    variant="outline"
+                    onClick={() => {
+                      void manageExistingPlan().catch(() =>
+                        toast.error(t("account.billingUnavailable")),
+                      );
+                    }}
+                  >
+                    {t("account.managePlan")}
+                  </Button>
+                ) : null}
               </div>
             ) : (
               <div className="flex flex-col gap-3 rounded-2xl bg-muted/50 p-4">
@@ -211,23 +230,37 @@ export function AccountPanel() {
               {t("account.connected")}
             </h3>
             <div className="-mx-2 flex flex-col gap-0.5">
-              <SettingsRow
-                to="providers"
-                icon={<ProviderIcon provider="openai" />}
-                label={t("account.chatgpt")}
-                hint={
-                  !desktop
-                    ? t("account.desktopOnly")
-                    : chatgpt
-                      ? chatgpt.email || chatgpt.name || t("account.signedIn")
+              {subscriptionConnectionsAllowed() ? (
+                <SettingsRow
+                  to="subscriptions"
+                  icon={AiBrain01Icon}
+                  label={t("cliproxyapi.title")}
+                  hint={
+                    accounts.length
+                      ? [...new Set(accounts.map(({ provider }) => cliProxyBrands[provider]))].join(
+                          ", ",
+                        )
                       : t("account.notConnected")
-                }
-                end={
-                  chatgpt ? (
-                    <span aria-hidden className="size-2 rounded-full bg-success" />
-                  ) : undefined
-                }
-              />
+                  }
+                />
+              ) : null}
+              {desktop ? (
+                <SettingsRow
+                  to="providers"
+                  icon={<ProviderIcon provider="openai" />}
+                  label={t("account.chatgpt")}
+                  hint={
+                    chatgpt?.email ||
+                    chatgpt?.name ||
+                    t(chatgpt ? "account.signedIn" : "account.notConnected")
+                  }
+                  end={
+                    chatgpt ? (
+                      <span aria-hidden className="size-2 rounded-full bg-success" />
+                    ) : undefined
+                  }
+                />
+              ) : null}
               <SettingsRow
                 to="providers"
                 icon={AiBrain01Icon}

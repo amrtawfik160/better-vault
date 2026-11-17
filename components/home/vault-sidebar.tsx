@@ -1,6 +1,7 @@
 import {
   Add01Icon,
   BotIcon,
+  Book02Icon,
   Calendar03Icon,
   Clock01Icon,
   Note01Icon,
@@ -114,6 +115,10 @@ export function VaultSidebar({
               <Icon icon={GridViewIcon} size={18} className="text-muted-foreground" />
               {t("vaults.all")}
             </button>
+            <Link to={routes.study} className={row}>
+              <Icon icon={Book02Icon} size={18} className="text-muted-foreground" />
+              {t("vaults.study")}
+            </Link>
             <button
               type="button"
               aria-current={section === "notes" ? "page" : undefined}

@@ -7,6 +7,8 @@ import { useChatSession } from "@/components/chat/chat-provider";
 import { Icon } from "@/components/icon";
 import { Message } from "@/components/panelui/message";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { providers } from "@/lib/ai/catalog";
+import { activeModel, useSettings } from "@/lib/db/settings";
 import { useSources } from "@/lib/db/sources";
 import { useWorkspace } from "./workspace-context";
 
@@ -97,6 +99,9 @@ function EmptyChat() {
   const chat = useChatSession();
   const { notebook, setAddSourceOpen } = useWorkspace();
   const sources = useSources(notebook.id);
+  const settings = useSettings();
+  const model = settings && activeModel(settings);
+  const webAvailable = model && providers[model.provider].webSearch;
   const selected = sources?.filter((source) => source.selected).length ?? 0;
 
   return (
@@ -105,7 +110,9 @@ function EmptyChat() {
         <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">{t("empty.title")}</h2>
         {sources && selected === 0 ? (
           <>
-            <p className="mt-2 max-w-md text-muted-foreground">{t("empty.noSources")}</p>
+            <p className="mt-2 max-w-md text-muted-foreground">
+              {t(webAvailable ? "empty.noSources" : "empty.noSourcesLocal")}
+            </p>
             <button
               type="button"
               onClick={() => setAddSourceOpen(true)}

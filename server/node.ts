@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
+import { stopCliProxy } from "@/lib/ai/cliproxyapi-runtime";
 import { isLoopbackHost } from "@/lib/ai/server-config";
 import { inlineScriptHashes, securityHeaders } from "@/lib/security/csp";
 import { createApi } from "./app";
@@ -30,6 +31,14 @@ app.use("/*", serveStatic({ root: path.relative(process.cwd(), client) }));
 // Every other path is a page of the single-page app.
 app.get("*", (c) => c.html(index));
 
-serve({ fetch: app.fetch, port, hostname }, (info) => {
-  console.log(`better-vault is running on http://${hostname}:${info.port}`);
+const listener = serve({ fetch: app.fetch, port, hostname }, (info) => {
+  console.log(`deepLe is running on http://${hostname}:${info.port}`);
 });
+
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.once(signal, () => {
+    stopCliProxy();
+    listener.close();
+    if ("closeAllConnections" in listener) listener.closeAllConnections();
+  });
+}

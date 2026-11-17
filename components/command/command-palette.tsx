@@ -131,6 +131,22 @@ export function CommandPalette() {
         run: () => go(routes.home),
       },
       {
+        id: "study",
+        label: tHome("vaults.study"),
+        icon: Notebook01Icon,
+        keywords: [
+          "review",
+          "flashcards",
+          "library",
+          "vocabulary",
+          "tutor",
+          "reading",
+          "epub",
+          "pdf",
+        ],
+        run: () => go(routes.study),
+      },
+      {
         id: "calendar",
         label: t("command.calendar"),
         icon: Calendar03Icon,
@@ -208,6 +224,19 @@ export function CommandPalette() {
   }, [notebookId, t, tHome, tSettings]);
 
   const settingsActions: Action[] = [
+    {
+      page: "subscriptions",
+      icon: AiBrain02Icon,
+      keywords: [
+        "subscription",
+        "connect",
+        "reconnect",
+        "chatgpt",
+        "claude",
+        "antigravity",
+        "grok",
+      ],
+    },
     { page: "providers", icon: AiBrain02Icon, keywords: ["ai", "model", "key", "api", "effort"] },
     { page: "appearance", icon: PaintBoardIcon, keywords: ["theme", "colour", "color", "dark"] },
     { page: "calendar", icon: Calendar03Icon, keywords: ["calendar", "google", "outlook", "ics"] },

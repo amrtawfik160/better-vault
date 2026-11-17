@@ -1,4 +1,5 @@
 import { useContext, useMemo, useState, type ReactNode } from "react";
+import { subscriptionConnectionsAllowed } from "@/lib/ai/cliproxyapi-client";
 import { stableContext } from "@/lib/context";
 import type { Conversation, Notebook, StudioOutput } from "@/lib/db/database";
 import type { StudioToolId } from "@/studio/tools";
@@ -28,6 +29,8 @@ interface WorkspaceState {
   studioOpen: boolean;
   setStudioOpen: (open: boolean) => void;
   settingsOpen: boolean;
+  settingsPage: "subscriptions" | "providers" | null;
+  openModelSetup: () => void;
   setSettingsOpen: (open: boolean) => void;
   addSourceOpen: boolean;
   setAddSourceOpen: (open: boolean) => void;
@@ -69,7 +72,8 @@ export function WorkspaceProvider({
   const [tab, setTab] = useState<WorkspaceTab>("chat");
   const [openOutputId, setOpenOutputId] = useState<string | null>(null);
   const [studioOpen, setStudioOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsOpen, showSettings] = useState(false);
+  const [settingsPage, setSettingsPage] = useState<WorkspaceState["settingsPage"]>(null);
   const [addSourceOpen, setAddSourceOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [conversationAction, setConversationAction] = useState<ConversationAction | null>(null);
@@ -92,7 +96,15 @@ export function WorkspaceProvider({
       studioOpen,
       setStudioOpen,
       settingsOpen,
-      setSettingsOpen,
+      settingsPage,
+      setSettingsOpen: (open) => {
+        if (!open) setSettingsPage(null);
+        showSettings(open);
+      },
+      openModelSetup: () => {
+        setSettingsPage(subscriptionConnectionsAllowed() ? "subscriptions" : "providers");
+        showSettings(true);
+      },
       addSourceOpen,
       setAddSourceOpen,
       historyOpen,
@@ -125,6 +137,7 @@ export function WorkspaceProvider({
       openOutputId,
       studioOpen,
       settingsOpen,
+      settingsPage,
       addSourceOpen,
       historyOpen,
       conversationAction,

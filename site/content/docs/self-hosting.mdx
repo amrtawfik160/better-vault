@@ -10,9 +10,9 @@ better-vault is a single-page app with a small stateless API and no database, so
 Install the dependencies, build the app and start the server:
 
 ```bash
-npm install
-npm run build
-npm start
+bun install
+bun run build
+bun run start
 ```
 
 The app is then served at the root of its address, for example `http://localhost:3000`. Set `PORT` and `HOSTNAME` to change where it listens. This website is a separate project and is not part of the app.
@@ -32,4 +32,4 @@ All of them are optional.
 
 ## Public deployments
 
-For an install that strangers can reach, set `BETTER_VAULT_ALLOW_LOCAL_PROVIDERS=false` and leave private URLs off. Sign in with ChatGPT is never offered by the web app; it works only in the desktop app. Each user still brings their own key, which stays in their browser.
+For an install that strangers can reach, set `BETTER_VAULT_ALLOW_LOCAL_PROVIDERS=false` and leave private URLs off. AI subscription sign-in is enabled in the desktop app and loopback-only web sessions. A publicly bound server cannot use the host’s subscription accounts. Web users on a shared server can use their own API keys from their browser.

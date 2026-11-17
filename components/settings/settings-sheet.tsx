@@ -42,6 +42,7 @@ import { CalendarSubscribeDialog } from "./calendar-subscribe-dialog";
 import { ChatGPTDialog } from "./chatgpt-dialog";
 import { DataPanel } from "./data-panel";
 import { LanguagePanel } from "./language-panel";
+import { CliProxyPanel } from "./cliproxyapi-sign-in";
 import { ProvidersPanel } from "./providers-panel";
 import { SettingsRow } from "./settings-row";
 import { routes } from "@/lib/routes";
@@ -58,6 +59,7 @@ interface SettingsSheetProps {
 export const settingsPages = [
   "account",
   "providers",
+  "subscriptions",
   "storage",
   "appearance",
   "studio",
@@ -241,6 +243,9 @@ export function SettingsSheet({ open: openProp, onOpenChange, trigger, page }: S
                 setChatGPTOpen(true);
               }}
             />
+          </Sheet.Next>
+          <Sheet.Next name="subscriptions" closeLabel={tCommon("actions.close")}>
+            <CliProxyPanel saved={settings?.providers.cliproxyapi} />
           </Sheet.Next>
           <Sheet.Next name="storage" closeLabel={tCommon("actions.close")}>
             <StoragePanel />

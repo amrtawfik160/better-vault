@@ -23,7 +23,7 @@ describe("i18n config", () => {
 
   it("translates synchronously after creation", () => {
     const i18n = createI18n();
-    expect(i18n.t("appName")).toBe("better-vault");
+    expect(i18n.t("appName")).toBe("deepLe");
     expect(i18n.t("sourceCount", { count: 2 })).toBe("2 sources");
   });
 });

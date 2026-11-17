@@ -5,7 +5,7 @@
  * show them whole.
  */
 export const site = {
-  name: "better-vault",
+  name: "deepLe",
   /** Override to point a preview deploy at its own host. */
   url: process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.better-vault.dev",
   /** For the <title> of the home page (with the name: 52 characters). */
@@ -16,7 +16,7 @@ export const site = {
     "Chat with your PDFs, notes and web pages with cited answers, and turn them into reports, flashcards, quizzes and mind maps. Use your own API key or local models.",
   /** One plain sentence that says what better-vault is, for answer engines. */
   definition:
-    "better-vault is a free, open-source alternative to Google NotebookLM (now Gemini Notebook): you add your sources, chat with them with cited answers, and turn them into study and work material, using your own OpenAI, Anthropic or Google API key or local models through Ollama and LM Studio. Everything stays on your device, in your browser or the desktop app.",
+    "deepLe is a local workspace for notebook research, reading, and spaced repetition. Chat with your sources using a connected AI subscription, an API key, or a local model.",
   repo: "https://github.com/better-vault/better-vault",
   license: "MIT",
   author: "Khalid Abdi",

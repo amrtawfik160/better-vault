@@ -85,24 +85,24 @@ export const notesFeatures: { title: string; body: string }[] = [
 
 export const faq: { question: string; answer: string }[] = [
   {
-    question: "What is better-vault?",
+    question: "What is deepLe?",
     answer:
-      "better-vault is a free, open-source alternative to Google NotebookLM. You add PDFs, web pages, notes and text files to a notebook, chat with them with cited answers, and turn them into reports, flashcards, quizzes, mind maps, slide decks and infographics, using the AI model you choose.",
+      "deepLe is a free, open-source alternative to Google NotebookLM. You add PDFs, web pages, notes and text files to a notebook, chat with them with cited answers, and turn them into reports, flashcards, quizzes, mind maps, slide decks and infographics, using the AI model you choose.",
   },
   {
-    question: "Is better-vault free?",
+    question: "Is deepLe free?",
     answer:
       "Yes. It is MIT-licensed and free to use and host. You pay your AI provider for what you use with your own API key, or nothing at all with a local model through Ollama or LM Studio.",
   },
   {
     question: "Can I use it with Claude, ChatGPT or Gemini models?",
     answer:
-      "Yes. better-vault works with Anthropic's Claude, OpenAI's GPT and Google's Gemini models with your own API key, and you can switch models for each question.",
+      "Yes. Connect an AI subscription such as ChatGPT or Claude, use an API key for OpenAI, Anthropic or Gemini, or choose a local model. You can switch models for each question.",
   },
   {
     question: "Does it work with local models?",
     answer:
-      "Yes. Run better-vault on your computer and connect Ollama or LM Studio. Your sources then never leave your machine.",
+      "Yes. Run deepLe on your computer and connect Ollama or LM Studio. Your sources then never leave your machine.",
   },
   {
     question: "Where is my data stored?",
@@ -112,16 +112,16 @@ export const faq: { question: string; answer: string }[] = [
   {
     question: "Can I self-host it?",
     answer:
-      "Yes. better-vault is a Next.js app with no database. Run npm run build and npm start on any Node.js 20.9+ host, or deploy it to Vercel.",
+      "Yes. Build the app with bun run build and serve it with bun run start. Each browser keeps its own notebooks and study data.",
   },
   {
     question: "Does it make audio overviews like NotebookLM?",
     answer:
-      "No. Audio and video overviews are out of scope. better-vault focuses on cited chat and written and visual outputs.",
+      "Studio can generate Audio Overviews with a supported speech provider. It also creates reports, flashcards, quizzes, slides and visual outputs.",
   },
   {
     question: "Is there a desktop app?",
     answer:
-      "Yes. better-vault runs as a desktop app on macOS, Windows and Linux, with the same interface as the web app. It keeps notebooks in a file on your computer and updates itself.",
+      "Yes. deepLe runs as a desktop app on macOS, Windows and Linux, with the same interface as the web app. It keeps notebooks in a file on your computer on the same device.",
   },
 ];

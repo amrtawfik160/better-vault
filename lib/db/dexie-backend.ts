@@ -7,6 +7,7 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
   db: BetterVaultDatabase;
 } {
   const content = [
+    db.study,
     db.calendar,
     db.vaults,
     db.notes,
@@ -42,6 +43,7 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
         await db.conversations.where("notebookId").equals(id).delete();
         await db.outputs.where("notebookId").equals(id).delete();
         await db.blobs.where("notebookId").equals(id).delete();
+        await db.study.where("notebookId").equals(id).delete();
         await db.notebooks.delete(id);
       }),
     countSources: async () => {
@@ -227,8 +229,31 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
     },
     clearSettings: () => db.settings.clear(),
 
+    listStudy: () => db.study.toArray(),
+    getStudy: (id) => db.study.get(id),
+    putStudy: async (rows) => {
+      await db.study.bulkPut(rows);
+    },
+    replaceStudyText: (book, source, chunks) =>
+      db.transaction("rw", [db.study, db.sources, db.chunks, db.notebooks], async () => {
+        if (
+          !(await db.study.get(book.id)) ||
+          !(await db.notebooks.get(book.notebookId)) ||
+          !(await db.sources.get(source.id))
+        ) {
+          throw new Error("The document or its source was deleted.");
+        }
+        await db.study.put(book);
+        await db.sources.put(source);
+        await db.chunks.where("sourceId").equals(source.id).delete();
+        await db.chunks.bulkPut(chunks);
+        await db.notebooks.update(book.notebookId, { updatedAt: book.updatedAt });
+      }),
+    deleteStudy: (id) => db.study.delete(id),
+
     exportAll: async () => {
       const [
+        study,
         calendar,
         vaults,
         notes,
@@ -243,6 +268,7 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
         outputs,
         blobs,
       ] = await Promise.all([
+        db.study.toArray(),
         db.calendar.toArray(),
         db.vaults.toArray(),
         db.notes.toArray(),
@@ -258,6 +284,7 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
         db.blobs.toArray(),
       ]);
       return {
+        study,
         calendar,
         vaults,
         notes,
@@ -275,6 +302,7 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
     },
     importAll: (data, chunks) =>
       db.transaction("rw", content, async () => {
+        await db.study.bulkPut(data.study);
         await db.calendar.bulkPut(data.calendar);
         await db.vaults.bulkPut(data.vaults);
         await db.notes.bulkPut(data.notes);

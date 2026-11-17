@@ -2,10 +2,10 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="public/brand/logo-dark-transparent.png">
-  <img src="public/brand/logo-light-transparent.png" alt="better-vault logo" width="112">
+  <img src="public/brand/logo-light-transparent.png" alt="deepLe logo" width="112">
 </picture>
 
-# better-vault
+# deepLe
 
 **An open-source, bring-your-own-model alternative to NotebookLM.**
 Chat with your sources, and turn them into reports, flashcards, quizzes, tables and diagrams, using the AI model you choose.
@@ -63,13 +63,12 @@ Download the installer for macOS, Windows or Linux from [better-vault.dev/downlo
 
 ### Run from source
 
-**Requirements:** [Node.js](https://nodejs.org) 22.12 or newer, with npm 10 (included with Node.js).
+**Requirements:** [Node.js](https://nodejs.org) 22.12 or newer and [Bun](https://bun.sh).
 
 ```bash
-git clone https://github.com/better-vault/better-vault.git
-cd better-vault
-npm install
-npm run dev
+cd deepLe
+bun install
+bun run dev
 ```
 
 Open <http://localhost:3000>, then **Settings → AI providers** and paste an API key, or point it at a local model. No `.env` file is needed.
@@ -77,8 +76,8 @@ Open <http://localhost:3000>, then **Settings → AI providers** and paste an AP
 ### Production build
 
 ```bash
-npm run build
-npm start
+bun run build
+bun run start
 ```
 
 ### Local models (Ollama, LM Studio)
@@ -89,21 +88,19 @@ npm start
 
 Local models work when better-vault runs on the same machine as the model server. Web search is only available with providers that have it built in (OpenAI, Anthropic, Google).
 
-### Use AI subscriptions through CLIProxyAPI
+### Study
 
-Install [CLIProxyAPI v8](https://github.com/router-for-me/CLIProxyAPI/releases). On macOS, use `brew install cliproxyapi`. If you downloaded the release binary, point `BETTER_VAULT_CLIPROXYAPI_BIN` at its executable.
+Open **Study** from the sidebar to import PDF, EPUB, Markdown, and text documents. Study documents have a linked notebook for standard Chat and Studio tools. The Study area saves your place, bookmarks, highlights, vocabulary, flashcards, review schedule, and activity locally. Use Tutor for selected passages, a chapter or page, a whole book, notes, or general practice. It uses the AI model selected in deepLe. Where your browser supports speech recognition, you can dictate turns and have replies read aloud.
 
-Build and start the browser app from this checkout.
+deepLe builds on [Better Vault](https://github.com/better-vault/better-vault). The study workflows were adapted from [MemoFlash](https://github.com/amrtawfik160/memoflash).
 
-```bash
-bun install --frozen-lockfile
-bun run build
-bun run start:subscriptions
-```
+### Connect an AI subscription
 
-Open **Settings → AI providers → AI subscriptions** and choose your provider. The app supports ChatGPT, Claude, Antigravity, Grok, Kimi on kimi.com and kimi.ai, Devin, and Meta's Muse Code. Sign in and authorize access in your browser. If the panel shows a one-time code, enter it on the provider's page when asked. Your models load in the model picker for Chat and Studio.
+Open **Settings → AI providers → AI subscriptions**, choose a provider, and approve the sign-in in your browser. ChatGPT, Claude, Antigravity, Grok, both Kimi portals, Devin, and Muse Code are available. When a provider shows a one-time code, enter it in the provider's sign-in page. Connected models appear in the Chat, Bots, and Studio model pickers.
 
-The launcher creates a private proxy configuration on your computer and starts both services on loopback. The proxy stores provider tokens under `~/.better-vault/cliproxyapi` by default. Notebook text included in a request goes through the proxy to the selected provider. For the desktop app, build it in `desktop/` first, then start it from the checkout root with `bun run start:subscriptions --desktop`.
+The desktop installer includes CLIProxyAPI. A web app started on loopback with `bun run dev` or `bun run start` installs the pinned, checksum-verified proxy on first use. The app starts and restarts it automatically. The proxy keeps credentials under `~/.better-vault/cliproxyapi` by default. The app sends relevant notebook context through the proxy to the provider you select.
+
+Use **Reconnect** or **Disconnect** beside an account to manage it.
 
 ## 🔐 Where your data lives
 
@@ -133,7 +130,7 @@ Contributions are welcome, from typo fixes to new Studio tools. Please read [CON
 2. Make your change. Use [Conventional Commits](https://www.conventionalcommits.org) for messages.
 3. Run the checks:
    ```bash
-   npm run lint && npm run typecheck && npm test && npm run i18n:check && npm run build
+   npm run lint && npm run typecheck && npm test && npm run i18n:check && bun run build
    ```
    If your change touches the server, storage or anything else the desktop app depends on, run the checks in `desktop/` too (see [CONTRIBUTING.md](CONTRIBUTING.md#the-desktop-app)).
 4. Open a pull request and fill in the template.

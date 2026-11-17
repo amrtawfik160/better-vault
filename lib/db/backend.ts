@@ -1,3 +1,4 @@
+import type { StudyBook, StudyRecord } from "@/lib/study/records";
 import type {
   Chunk,
   Conversation,
@@ -126,6 +127,12 @@ export interface Backend {
   putBlob(blob: StoredBlob): Promise<void>;
   getBlob(id: string): Promise<StoredBlob | undefined>;
 
+  listStudy(): Promise<StudyRecord[]>;
+  getStudy(id: string): Promise<StudyRecord | undefined>;
+  putStudy(rows: StudyRecord[]): Promise<void>;
+  replaceStudyText(book: StudyBook, source: Source, chunks: Chunk[]): Promise<void>;
+  deleteStudy(id: string): Promise<void>;
+
   getSetting(key: string): Promise<unknown>;
   putSetting(key: string, value: unknown): Promise<void>;
   clearSettings(): Promise<void>;
@@ -141,6 +148,7 @@ export interface Backend {
 }
 
 export interface StoreContent {
+  study: StudyRecord[];
   calendar: CalendarEntry[];
   vaults: Vault[];
   notes: Note[];
@@ -172,6 +180,7 @@ export const tableNames = [
   "outputs",
   "blobs",
   "settings",
+  "study",
 ] as const;
 
 export type TableName = (typeof tableNames)[number];
@@ -186,6 +195,7 @@ export const writes = {
   addNotebook: ["notebooks"],
   patchNotebook: ["notebooks"],
   deleteNotebook: [
+    "study",
     "notebooks",
     "sources",
     "chunks",
@@ -221,9 +231,13 @@ export const writes = {
   interruptOutputs: ["outputs"],
   deleteOutput: ["outputs", "blobs"],
   putBlob: ["blobs"],
+  putStudy: ["study"],
+  replaceStudyText: ["study", "sources", "chunks", "notebooks"],
+  deleteStudy: ["study"],
   putSetting: ["settings"],
   clearSettings: ["settings"],
   importAll: [
+    "study",
     "calendar",
     "vaults",
     "notes",
@@ -240,6 +254,7 @@ export const writes = {
     "blobs",
   ],
   clearAll: [
+    "study",
     "calendar",
     "vaults",
     "notes",
@@ -314,6 +329,11 @@ export const backendMethods = [
   "deleteOutput",
   "putBlob",
   "getBlob",
+  "listStudy",
+  "getStudy",
+  "putStudy",
+  "replaceStudyText",
+  "deleteStudy",
   "getSetting",
   "putSetting",
   "clearSettings",

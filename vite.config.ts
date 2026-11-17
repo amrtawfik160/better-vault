@@ -1,5 +1,6 @@
 import { getRequestListener } from "@hono/node-server";
 import { defineConfig, mergeConfig, type Plugin } from "vite";
+import { stopCliProxy } from "./lib/ai/cliproxyapi-runtime.ts";
 import { isLoopbackHost } from "./lib/ai/server-config.ts";
 import { appConfig } from "./vite.shared.ts";
 
@@ -12,6 +13,7 @@ function devApi(): Plugin {
     name: "better-vault:dev-api",
     apply: "serve",
     configureServer(server) {
+      server.httpServer?.once("close", stopCliProxy);
       const host = server.config.server.host;
       const loopback = !host || (typeof host === "string" && isLoopbackHost(host));
       server.middlewares.use(async (req, res, next) => {

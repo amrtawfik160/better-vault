@@ -11,7 +11,13 @@ import { runBotTool, type ToolContext } from "@/lib/bot/run-tool";
 import { botWriteTools, isBotTool, type BotToolName } from "@/lib/bot/tools";
 import type { ChatMessage } from "@/lib/chat/types";
 import { getBot, listBots, loadBotThread, saveBotThread } from "@/lib/db/bots";
-import { activeModel, credentialsFor, effortFor, getSettings } from "@/lib/db/settings";
+import {
+  activeModel,
+  resolveModel,
+  credentialsFor,
+  effortFor,
+  getSettings,
+} from "@/lib/db/settings";
 import { store } from "@/lib/db/store";
 import type { Vault } from "@/lib/db/types";
 import { currentVaultId, DEFAULT_VAULT } from "@/lib/db/vaults";
@@ -149,7 +155,7 @@ async function requestBody(botId: string, messages: ChatMessage[]) {
     vaultList(),
   ]);
   if (!bot) throw new Error("This bot was deleted.");
-  const model = bot.model ?? activeModel(settings);
+  const model = bot.model ? resolveModel(settings, bot.model) : activeModel(settings);
   if (!model) throw new NoModelError();
   const delegatorId = delegatorOf(messages);
   const delegator = delegatorId ? bots.find((each) => each.id === delegatorId) : undefined;

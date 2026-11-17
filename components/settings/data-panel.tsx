@@ -41,7 +41,7 @@ export function DataPanel({ onDeleteAll }: { onDeleteAll: () => void }) {
       const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-");
       await storageClient(id, storage[id]).upload(
         "backups",
-        `better-vault-backup-${stamp}.json`,
+        `deepLe-backup-${stamp}.json`,
         new Blob([JSON.stringify(backup)], { type: "application/json" }),
       );
       toast.success(t("data.backedUp", { name: storages[id].name }));
@@ -55,11 +55,7 @@ export function DataPanel({ onDeleteAll }: { onDeleteAll: () => void }) {
   async function exportData() {
     const backup = await exportBackup();
     const date = new Date().toISOString().slice(0, 10);
-    downloadText(
-      JSON.stringify(backup, null, 2),
-      `better-vault-backup-${date}.json`,
-      "application/json",
-    );
+    downloadText(JSON.stringify(backup, null, 2), `deepLe-backup-${date}.json`, "application/json");
   }
 
   async function importData(file: File) {

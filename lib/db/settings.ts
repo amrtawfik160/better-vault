@@ -7,6 +7,7 @@ import {
   type ProviderCredentials,
   type ProviderId,
 } from "@/lib/ai/catalog";
+import { subscriptionRoute } from "@/lib/ai/cliproxyapi-oauth";
 import { useStoreQuery } from "./live";
 import { store } from "./store";
 
@@ -27,6 +28,7 @@ export interface ProviderSettings {
   effort: Effort;
   /** Each model's context window in tokens, where the provider's list said. */
   contextTokens: Record<string, number>;
+  modelLabels?: Record<string, string>;
 }
 
 export interface ChatGPTAccountLabel {
@@ -43,6 +45,7 @@ export interface AppSettings {
 }
 
 const SETTINGS_KEY = "app";
+let settingsWrite = Promise.resolve();
 
 export function defaultSettings(): AppSettings {
   const entries = providerIds.map((id) => [
@@ -85,9 +88,16 @@ export async function getSettings(): Promise<AppSettings> {
 
 /** Applies a change to the saved settings. */
 export async function updateSettings(change: (settings: AppSettings) => void): Promise<void> {
-  const settings = await getSettings();
-  change(settings);
-  await store().putSetting(SETTINGS_KEY, settings);
+  const backend = store();
+  const next = settingsWrite.then(async () => {
+    const saved = (await backend.getSetting(SETTINGS_KEY)) as Partial<AppSettings> | undefined;
+    const settings = withDefaults(saved);
+    const before = JSON.stringify(settings);
+    change(settings);
+    if (JSON.stringify(settings) !== before) await backend.putSetting(SETTINGS_KEY, settings);
+  });
+  settingsWrite = next.catch(() => {});
+  await next;
 }
 
 export async function updateProvider(id: ProviderId, patch: Partial<ProviderSettings>) {
@@ -196,15 +206,32 @@ export function availableImageModels(settings: AppSettings): ModelRef[] {
     .flatMap((id) => providers[id].imageModels.map((modelId) => ({ provider: id, modelId })));
 }
 
-/** The chosen model if it is still available, else the first one that is. */
+/** Resolves a saved choice. Legacy subscription IDs can be upgraded when only one account matches. */
+export function resolveModel(settings: AppSettings, chosen: ModelRef): ModelRef | null {
+  const models = availableModels(settings).filter((model) => model.provider === chosen.provider);
+  const exact = models.find((model) => model.modelId === chosen.modelId);
+  if (exact) return exact;
+  if (chosen.provider !== "cliproxyapi" || subscriptionRoute.test(chosen.modelId)) return null;
+  const matches = models.filter(
+    (model) => subscriptionRoute.exec(model.modelId)?.[2] === chosen.modelId,
+  );
+  return matches.length === 1 ? matches[0] : null;
+}
+
+export function modelDisplayLabel(settings: AppSettings | undefined, model: ModelRef): string {
+  return (
+    settings?.providers[model.provider].modelLabels?.[model.modelId] ??
+    (model.provider === "cliproxyapi" ? subscriptionRoute.exec(model.modelId)?.[2] : undefined) ??
+    model.modelId
+  );
+}
+
+/** Keeps a chosen subscription unavailable until its account returns or the user chooses another. */
 export function activeModel(settings: AppSettings): ModelRef | null {
-  const models = availableModels(settings);
   const chosen = settings.model;
-  if (
-    chosen &&
-    models.some((m) => m.provider === chosen.provider && m.modelId === chosen.modelId)
-  ) {
-    return chosen;
+  if (chosen) {
+    const available = resolveModel(settings, chosen);
+    if (available || chosen.provider === "cliproxyapi") return available;
   }
-  return models[0] ?? null;
+  return availableModels(settings)[0] ?? null;
 }

@@ -120,12 +120,13 @@
     "emptyBody": "Start a notebook, or drop PDF, Markdown and text files anywhere on this page.",
     "sidebar": "Vault sidebar",
     "switch": "Switch vault",
-    "appTitle": "better-vault",
+    "appTitle": "deepLe",
     "library": "Library",
     "all": "All notebooks",
     "emptyFolder": "Nothing here yet",
     "itemCount_one": "{{count}} item",
-    "itemCount_other": "{{count}} items"
+    "itemCount_other": "{{count}} items",
+    "study": "Study"
   },
   "toolbar": {
     "back": "Back",

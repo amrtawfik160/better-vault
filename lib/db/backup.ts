@@ -1,3 +1,4 @@
+import { studyRecordSchema, type StudyRecord } from "@/lib/study/records";
 import { z } from "zod";
 import { chunkText } from "@/lib/grounding/chunk";
 import { conversationTitle } from "@/lib/chat/title";
@@ -30,12 +31,13 @@ export type BackupBlob = Omit<StoredBlob, "data"> & { data: string };
 export interface Backup {
   app: "better-vault";
   /**
-   * 7 adds bots and their threads; 6 added notes and skills; 5 added calendar entries; 4 added vaults; 3 added folders and files; 2
+   * 8 adds study data. 7 adds bots and their threads; 6 added notes and skills; 5 added calendar entries; 4 added vaults; 3 added folders and files; 2
    * added conversations. Older backups still import: format 1 (one chat per
    * notebook), format 2 (no folders), format 3 (no vaults: everything is in
    * the default vault), format 4 (no calendar), format 5 (no notes or skills) and format 6 (no bots).
    */
-  format: 7;
+  format: 8;
+  study: StudyRecord[];
   exportedAt: number;
   calendar: CalendarEntry[];
   vaults: Vault[];
@@ -62,7 +64,9 @@ const backupSchema = z.object({
     z.literal(5),
     z.literal(6),
     z.literal(7),
+    z.literal(8),
   ]),
+  study: z.array(studyRecordSchema).optional(),
   bots: z.array(z.object({ id: z.string(), name: z.string() }).loose()).optional(),
   botMessages: z
     .array(z.object({ id: z.string(), botId: z.string(), createdAt: z.number() }).loose())
@@ -99,7 +103,7 @@ export async function exportBackup(): Promise<Backup> {
   const { blobs, ...content } = await store().exportAll();
   return {
     app: "better-vault",
-    format: 7,
+    format: 8,
     exportedAt: Date.now(),
     ...content,
     blobs: blobs.map((blob) => ({ ...blob, data: toBase64(blob.data) })),
@@ -122,6 +126,7 @@ export async function importBackup(raw: unknown): Promise<number> {
   );
   await store().importAll(
     {
+      study: backup.study,
       calendar: backup.calendar,
       vaults: backup.vaults,
       notes: backup.notes,
@@ -144,6 +149,7 @@ export async function importBackup(raw: unknown): Promise<number> {
 type OldBackup = Omit<
   Backup,
   | "format"
+  | "study"
   | "conversations"
   | "folders"
   | "blobs"
@@ -154,7 +160,8 @@ type OldBackup = Omit<
   | "bots"
   | "botMessages"
 > & {
-  format: 1 | 2 | 3 | 4 | 5 | 6 | 7;
+  format: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
+  study?: StudyRecord[];
   bots?: Bot[];
   botMessages?: BotMessage[];
   notes?: Note[];
@@ -195,7 +202,8 @@ function upgradeBackup(backup: OldBackup): Backup {
   }
   return {
     ...backup,
-    format: 7,
+    format: 8,
+    study: backup.study ?? [],
     calendar: backup.calendar ?? [],
     bots: backup.bots ?? [],
     botMessages: backup.botMessages ?? [],

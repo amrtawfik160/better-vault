@@ -25,7 +25,8 @@
     "studioHintAll": "All tools on",
     "mcp": "MCP",
     "mcpOn": "Agents can connect",
-    "mcpOff": "Let AI agents use your notes and skills"
+    "mcpOff": "Let AI agents use your notes and skills",
+    "subscriptions": "AI subscriptions"
   },
   "providers": {
     "title": "AI providers",
@@ -55,7 +56,7 @@
     "noWebSearch": "No web search",
     "context": "Context size",
     "contextHint": "How much source text is sent with each request, in characters. Lower it if your local model has a small context window.",
-    "localHint": "Local models work when better-vault runs on the same machine.",
+    "localHint": "Local models work when deepLe runs on the same machine.",
     "speech": "Speech",
     "opencodePlan": "Plan",
     "opencodePlanHint": {
@@ -66,14 +67,14 @@
     "opencodeCheck": "Check for OpenCode on this computer",
     "opencodeChecking": "Looking for OpenCode…",
     "opencodeFound": "OpenCode {{version}} is installed",
-    "opencodeFoundBody": "better-vault uses OpenCode's models with your Zen or Go key below.",
+    "opencodeFoundBody": "deepLe uses OpenCode's models with your Zen or Go key below.",
     "opencodeMissing": "OpenCode isn't installed",
-    "opencodeMissingBody": "better-vault couldn't find OpenCode on this computer. Install it, then check again. A Zen or Go key works without it.",
+    "opencodeMissingBody": "deepLe couldn't find OpenCode on this computer. Install it, then check again. A Zen or Go key works without it.",
     "opencodeDownload": "Download OpenCode"
   },
   "cliproxyapi": {
     "title": "AI subscriptions",
-    "description": "Sign in to a provider to use its models in chat and Studio.",
+    "description": "Connect ChatGPT, Claude, or another account to use its models in chat and Studio.",
     "connect": "Connect {{provider}}",
     "modelsEmpty": "Connected models will appear in the model picker.",
     "refreshModels": "Refresh models",
@@ -87,10 +88,22 @@
     "starting": "Starting sign-in…",
     "waiting": "Finish signing in in your browser, then return here.",
     "connected": "{{provider}} sign-in complete.",
-    "signInFailed": "CLIProxyAPI could not complete this sign-in. Check the proxy logs and try again.",
+    "signInFailed": "Sign-in did not finish. Connect the account again to retry.",
     "cancel": "Cancel sign-in",
     "cancelling": "Cancelling sign-in…",
-    "cancelFailed": "Could not cancel sign-in. Check that CLIProxyAPI is running and try again."
+    "cancelFailed": "Could not cancel sign-in. Check that CLIProxyAPI is running and try again.",
+    "reconnect": "Reconnect",
+    "disconnect": "Disconnect",
+    "accountStatus": {
+      "connected": "Connected",
+      "reconnect": "Sign-in needed"
+    },
+    "proxyUnavailable": "AI subscriptions are available in the desktop app or a web app running on this computer.",
+    "proxySetup": "Could not set up the local connection service. Check your internet connection and try again.",
+    "proxyOffline": "The local connection service is offline. Try again to restart it.",
+    "proxyRequestFailed": "Could not complete the request. Try again.",
+    "proxyRateLimited": "Too many requests. Wait a moment and try again.",
+    "accountMissing": "That account is no longer connected. Connect it again."
   },
   "appearance": {
     "title": "Appearance",
@@ -114,7 +127,7 @@
   "language": {
     "title": "Language",
     "description": "The language of the interface. Answers follow the language you write in, and each Studio tool lets you pick its output language.",
-    "helpTranslate": "Help translate better-vault"
+    "helpTranslate": "Help translate deepLe"
   },
   "data": {
     "title": "Data",
@@ -125,7 +138,7 @@
     "importHint": "Adds the notebooks from a backup file.",
     "imported_one": "Imported {{count}} notebook",
     "imported_other": "Imported {{count}} notebooks",
-    "importFailed": "That file is not a better-vault backup.",
+    "importFailed": "That file is not a deepLe backup.",
     "deleteAll": "Delete all notebooks",
     "deleteAllHint": "Removes every notebook from this browser. Settings and keys are kept.",
     "deleteAllConfirm": {
@@ -157,16 +170,16 @@
     "continue": "Continue with ChatGPT",
     "signedInAs": "Signed in as {{account}}",
     "inUse": "Chat and Studio use your ChatGPT plan. Pictures still need an API key.",
-    "noPlanUsage": "better-vault isn't allowed to use your ChatGPT plan. Continue with ChatGPT again and allow it.",
+    "noPlanUsage": "deepLe isn't allowed to use your ChatGPT plan. Continue with ChatGPT again and allow it.",
     "manageUsage": "Manage usage",
     "signOut": "Sign out",
     "signedOut": "Signed out of ChatGPT.",
-    "signedOutUnconfirmed": "Signed out here, but ChatGPT didn't confirm it. You can disconnect better-vault in ChatGPT settings.",
+    "signedOutUnconfirmed": "Signed out here, but ChatGPT didn't confirm it. You can disconnect deepLe in ChatGPT settings.",
     "planLabel": "ChatGPT plan",
     "dialog": {
       "title": "Continue with ChatGPT",
-      "description": "Use your ChatGPT plan in better-vault.",
-      "steps": "Your browser opens ChatGPT. Sign in, allow better-vault to use your plan, then come back here.",
+      "description": "Use your ChatGPT plan in deepLe.",
+      "steps": "Your browser opens ChatGPT. Sign in, allow deepLe to use your plan, then come back here.",
       "open": "Open ChatGPT",
       "waiting": "Waiting for you to finish in your browser…",
       "openAgain": "Open the page again",
@@ -174,17 +187,17 @@
       "tryAgain": "Try again",
       "failed": "Sign-in didn't finish: {{error}}",
       "welcomeTitle": "You're using your ChatGPT plan",
-      "welcome": "Chat and Studio requests in better-vault now use your ChatGPT plan. You can review and limit this usage in ChatGPT settings.",
+      "welcome": "Chat and Studio requests in deepLe now use your ChatGPT plan. You can review and limit this usage in ChatGPT settings.",
       "gotIt": "Got it",
       "signedIn": "Signed in to ChatGPT as {{account}}."
     },
     "callbackDoneTitle": "You're signed in",
-    "callbackDone": "You can close this tab and go back to better-vault.",
+    "callbackDone": "You can close this tab and go back to deepLe.",
     "callbackFailedTitle": "Sign-in didn't finish",
-    "declined": "You didn't allow better-vault to use your ChatGPT plan.",
-    "invalidCallback": "ChatGPT sent back an answer better-vault couldn't use. Try again.",
+    "declined": "You didn't allow deepLe to use your ChatGPT plan.",
+    "invalidCallback": "ChatGPT sent back an answer deepLe couldn't use. Try again.",
     "otherAccount": "That's a different ChatGPT account. Choose “Use a different account” to add it.",
-    "desktopOnly": "Not supported in the web app. Sign in with ChatGPT works in the better-vault desktop app, which keeps your ChatGPT sign-in on your computer.",
+    "desktopOnly": "Not supported in the web app. Sign in with ChatGPT works in the deepLe desktop app, which keeps your ChatGPT sign-in on your computer.",
     "getDesktop": "Get the desktop app"
   },
   "updates": {
@@ -203,13 +216,13 @@
     "whatsNew": "What's new",
     "check": "Check now",
     "tryAgain": "Try again",
-    "toast": "better-vault {{version}} is available",
+    "toast": "deepLe {{version}} is available",
     "view": "View",
     "readyTitle": "Update ready",
-    "readyBody": "better-vault {{version}} has downloaded. Restart the app to finish installing it; it opens again on its own.",
+    "readyBody": "deepLe {{version}} has downloaded. Restart the app to finish installing it; it opens again on its own.",
     "later": "Later",
     "restartNow": "Restart",
-    "updatedTitle": "better-vault was updated to {{version}}",
+    "updatedTitle": "deepLe was updated to {{version}}",
     "updatedBody": "You're now on the newest version. Read the",
     "releaseNotes": "release notes on GitHub",
     "gotIt": "Got it",
@@ -218,7 +231,7 @@
   },
   "account": {
     "title": "Account",
-    "description": "Your name and picture, your better-vault account and what is stored here. Notebooks stay on this device.",
+    "description": "Your name and picture, your deepLe account and what is stored here. Notebooks stay on this device.",
     "noName": "Your name",
     "inThisBrowser": "Saved in this browser",
     "onThisComputer": "Saved on this computer",
@@ -240,17 +253,19 @@
     "notebooks": "Notebooks",
     "folders": "Folders",
     "sources": "Sources",
-    "space": "{{size}} used by better-vault in this browser.",
-    "betterVault": "better-vault account",
+    "space": "{{size}} used by deepLe in this browser.",
+    "betterVault": "deepLe account",
     "email": "Email",
     "username": "Username",
     "noUsername": "Not set",
-    "signInTitle": "Sign in to better-vault",
+    "signInTitle": "Sign in to deepLe",
     "signInBody": "Sign in or create an account to set up your username. Your notebooks stay on this device.",
     "signOut": "Sign out",
     "signIn": "Sign in",
     "createAccount": "Create account",
-    "popupBlocked": "Allow pop-ups for this page to sign in."
+    "popupBlocked": "Allow pop-ups for this page to sign in.",
+    "managePlan": "Manage existing plan",
+    "billingUnavailable": "Could not open billing. Try again."
   },
   "storage": {
     "title": "Storage",
@@ -258,8 +273,8 @@
     "connected": "Connected",
     "notConnected": "Not connected",
     "services": {
-      "google-drive": "Pick files from your Drive as sources, and save backups and exports to a better-vault folder.",
-      "onedrive": "Browse your OneDrive for sources, and save backups and exports to a better-vault folder.",
+      "google-drive": "Pick files from your Drive as sources, and save backups and exports to a deepLe folder.",
+      "onedrive": "Browse your OneDrive for sources, and save backups and exports to a deepLe folder.",
       "s3": "Use an S3 bucket, or any S3-compatible service, for sources, backups and exports.",
       "r2": "Use a Cloudflare R2 bucket for sources, backups and exports."
     },
@@ -275,7 +290,7 @@
     "optional": "{{label}} (optional)",
     "hints": {
       "endpoint": "For S3-compatible services other than AWS, such as MinIO or Wasabi.",
-      "prefix": "better-vault keeps to this folder; leave empty for the whole bucket."
+      "prefix": "deepLe keeps to this folder; leave empty for the whole bucket."
     },
     "getKeys": "Get keys",
     "test": "Test connection",
@@ -284,13 +299,13 @@
     "signedIn": "Connected to {{name}}",
     "signOut": "Disconnect",
     "manage": "Manage access",
-    "notSetUp": "This copy of better-vault isn't set up to sign in to this service yet.",
-    "driveAccess": "better-vault sees only the files you pick and the ones it makes.",
-    "driveDesktop": "better-vault asks only for the files you pick and the ones it makes. In the desktop app you can save backups and exports, and add files better-vault has opened before; picking new files needs the web app.",
-    "onedriveAccess": "better-vault reads the files you choose and writes only to its better-vault folder.",
+    "notSetUp": "This copy of deepLe isn't set up to sign in to this service yet.",
+    "driveAccess": "deepLe sees only the files you pick and the ones it makes.",
+    "driveDesktop": "deepLe asks only for the files you pick and the ones it makes. In the desktop app you can save backups and exports, and add files deepLe has opened before; picking new files needs the web app.",
+    "onedriveAccess": "deepLe reads the files you choose and writes only to its deepLe folder.",
     "browser": {
       "none": "No storage connected. Connect one in Settings → Storage.",
-      "pickerHint": "Choose files in Google's own picker. better-vault can open only the files you pick.",
+      "pickerHint": "Choose files in Google's own picker. deepLe can open only the files you pick.",
       "pick": "Choose from {{name}}",
       "up": "Up one folder",
       "loading": "Loading files…",
@@ -299,8 +314,8 @@
       "restore": "Restore this backup",
       "add_one": "Add {{count}} file",
       "add_other": "Add {{count}} files",
-      "skipped_one": "Not added, because better-vault can't read this kind of file: {{names}}",
-      "skipped_other": "Not added, because better-vault can't read these kinds of files: {{names}}"
+      "skipped_one": "Not added, because deepLe can't read this kind of file: {{names}}",
+      "skipped_other": "Not added, because deepLe can't read these kinds of files: {{names}}"
     },
     "soon": "Soon",
     "soonHint": "Coming in a later version",
@@ -436,7 +451,7 @@
     "regenerate": "New token (agents must be set up again)",
     "setup": "Set up an agent",
     "hints": {
-      "claude-code": "Run this in a terminal. Claude Code then lists better-vault's tools in /mcp.",
+      "claude-code": "Run this in a terminal. Claude Code then lists deepLe's tools in /mcp.",
       "cursor": "Add this to .cursor/mcp.json in a project, or to your global Cursor settings.",
       "codex": "Add this to ~/.codex/config.toml.",
       "claude-desktop": "Add this to claude_desktop_config.json; mcp-remote bridges Claude Desktop to the local server."

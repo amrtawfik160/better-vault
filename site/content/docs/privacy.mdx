@@ -7,7 +7,7 @@ better-vault keeps everything on your device, and nothing is stored on a server.
 
 In the web app, notebooks, sources, chats, Studio outputs and API keys live in your browser's IndexedDB. In the [desktop app](/docs/desktop) they live in one SQLite file in the app's data folder on your computer. Either way there is no account and no server database.
 
-If you [use your ChatGPT plan](/docs/providers#use-your-chatgpt-plan), OpenAI's sign-in tokens are the one thing the server keeps: a file only you can read, in the desktop app's data folder, so the tokens never sit in the browser. Signing out ends the session at OpenAI and deletes them.
+When you [connect an AI subscription](/docs/providers#connect-an-ai-subscription), the local proxy keeps sign-in tokens in its private directory on your computer. Provider tokens stay out of the renderer and notebook backups. The selected provider receives your prompts and any passages included for the answer. Use **Disconnect** to remove the local account credential. The original desktop ChatGPT connection stores its own tokens in the desktop data folder.
 
 ## What leaves your device?
 

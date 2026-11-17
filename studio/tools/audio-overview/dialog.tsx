@@ -13,6 +13,8 @@ import {
   activeModel,
   availableModels,
   speechCredentialsFrom,
+  modelDisplayLabel,
+  resolveModel,
   useSettings,
 } from "@/lib/db/settings";
 import { ChoiceField, OptionCards } from "@/studio/shared/fields";
@@ -315,11 +317,13 @@ function WriterField({
   const settings = useSettings();
   const models = settings ? availableModels(settings) : [];
   const fallback = settings ? activeModel(settings) : null;
-  const chosen =
-    value && models.some((model) => modelKey(model) === modelKey(value)) ? value : fallback;
+  const chosen = value && settings ? resolveModel(settings, value) : fallback;
   const items = models.map((model) => ({
     value: modelKey(model),
-    label: `${providers[model.provider].name} · ${model.modelId}`,
+    label:
+      model.provider === "cliproxyapi"
+        ? modelDisplayLabel(settings, model)
+        : `${providers[model.provider].name} · ${model.modelId}`,
   }));
   return (
     <Field label={t("audio-overview.writer")} htmlFor={id} hint={t("audio-overview.writerHint")}>

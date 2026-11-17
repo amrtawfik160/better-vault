@@ -3,6 +3,7 @@ import {
   ArrowDown01Icon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
+  Book02Icon,
   FileImportIcon,
   FileUploadIcon,
   FolderAddIcon,
@@ -420,7 +421,10 @@ export function NotebookHome() {
           >
             <Icon icon={Search01Icon} size={18} />
           </button>
-          <span className="md:hidden">
+          <span className="flex gap-1 md:hidden">
+            <ToolButton label={t("vaults.study")} onClick={() => navigate(routes.study)}>
+              <Icon icon={Book02Icon} size={18} />
+            </ToolButton>
             <SettingsSheet />
           </span>
           <input

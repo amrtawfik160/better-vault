@@ -1,7 +1,7 @@
 import type { Effort, ModelRef, ProviderCredentials } from "@/lib/ai/catalog";
 import {
   activeModel,
-  availableModels,
+  resolveModel,
   contextCharsFor,
   credentialsFor,
   effortFor,
@@ -49,16 +49,11 @@ export async function modelRequestFor(
   sourceIds: readonly string[],
   query: string,
   budget?: number,
-  /** A model chosen for this output; the prompt bar's when it is gone or not given. */
+  /** A model chosen for this output; the prompt bar's when no model was chosen. */
   preferred?: ModelRef | null,
 ): Promise<ModelRequest> {
   const settings = await getSettings();
-  const usable = preferred
-    ? availableModels(settings).find(
-        (model) => model.provider === preferred.provider && model.modelId === preferred.modelId,
-      )
-    : undefined;
-  const model = usable ?? activeModel(settings);
+  const model = preferred ? resolveModel(settings, preferred) : activeModel(settings);
   if (!model) throw new NoModelError();
   const sources = await getSources(sourceIds);
   const chunks = await getChunks(sources.map((source) => source.id));

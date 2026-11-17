@@ -1,5 +1,5 @@
 {
-  "appName": "better-vault",
+  "appName": "deepLe",
   "tagline": "Your sources, your model.",
   "actions": {
     "add": "Add",
@@ -85,7 +85,7 @@
     "bot": "Open the bots"
   },
   "onboarding": {
-    "label": "Welcome to better-vault",
+    "label": "Welcome to deepLe",
     "next": "Continue",
     "withoutAccount": "Use without an account",
     "skip": "Skip for now",
@@ -95,12 +95,13 @@
       "body": "Sign in or create an account to choose a username.",
       "google": "Continue with Google",
       "email": "Continue with email",
-      "keys": "Your notebooks and your own API keys never leave this device.",
-      "signedIn": "Signed in as {{email}}"
+      "keys": "You can also connect AI later in Settings.",
+      "signedIn": "Signed in as {{email}}",
+      "connectAI": "Connect an AI subscription"
     },
     "username": {
       "title": "Choose a username",
-      "body": "It's how you appear in better-vault.",
+      "body": "It's how you appear in deepLe.",
       "label": "Username",
       "hint": "3 to 30 letters, numbers, dots or underscores.",
       "invalid": "Use 3 to 30 letters, numbers, dots or underscores.",
@@ -110,9 +111,9 @@
     },
     "stepOf": "Step {{step}} of {{total}}",
     "back": "Back",
-    "finish": "Start using better-vault",
+    "finish": "Start using deepLe",
     "profile": {
-      "title": "Welcome to better-vault",
+      "title": "Welcome to deepLe",
       "body": "Your notebooks, sources and notes stay on this device. Start with how you'd like to appear.",
       "picture": "Add a picture",
       "pictureHint": "Optional, kept on this device",
@@ -127,7 +128,7 @@
       "ownKey": "Your own key",
       "caption": {
         "profile": "Your name and picture appear in the app.",
-        "account": "You can use better-vault with a local profile.",
+        "account": "You can use deepLe with a local profile.",
         "username": "Your username, for your account."
       }
     }

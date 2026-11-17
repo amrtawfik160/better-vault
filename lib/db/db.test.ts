@@ -1,4 +1,11 @@
 import "fake-indexeddb/auto";
+import {
+  addStudyBook,
+  freshSchedule,
+  putStudyRecords,
+  rateStudyItem,
+  saveStudyText,
+} from "./study";
 import { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
 import { deleteAllData, exportBackup, importBackup } from "./backup";
@@ -267,7 +274,10 @@ describe.each(backends)("%s store", (name, create) => {
       expect((await store().getBot(helper.id))?.preview).toBe("Second one");
       await saveBotThread(helper.id, [userMessage("c")]);
       expect((await loadBotThread(helper.id)).map((m) => m.id)).toEqual(["c"]);
-      await updateBot(chief.id, { name: "Chief of Staff", model: { provider: "openai", modelId: "x" } });
+      await updateBot(chief.id, {
+        name: "Chief of Staff",
+        model: { provider: "openai", modelId: "x" },
+      });
       await updateBot(chief.id, { model: undefined });
       const saved = await store().getBot(chief.id);
       expect(saved?.name).toBe("Chief of Staff");
@@ -488,6 +498,54 @@ describe.each(backends)("%s store", (name, create) => {
     });
   });
 
+  describe("study", () => {
+    it("stores a study card without a linked notebook", async () => {
+      await putStudyRecords({
+        id: "standalone",
+        kind: "card",
+        front: "Question",
+        back: "Answer",
+        tags: [],
+        schedule: freshSchedule(0),
+        updatedAt: 0,
+      });
+      expect(await store().getStudy("standalone")).toMatchObject({ front: "Question" });
+    });
+
+    it("keeps study documents, reading material and spaced reviews in both backends and backups", async () => {
+      const book = await addStudyBook({
+        title: "A study document",
+        format: "text",
+        sections: [{ title: "Introduction", text: "Original example" }],
+      });
+      await saveStudyText(book.id, "Revised example");
+      expect((await store().getSource(book.sourceId))?.text).toBe("Revised example");
+      expect(await getChunks([book.sourceId])).toMatchObject([{ text: "Revised example" }]);
+      await putStudyRecords({
+        id: "study-card",
+        kind: "card",
+        front: "Prompt",
+        back: "Answer",
+        tags: [],
+        schedule: freshSchedule(0),
+        updatedAt: 0,
+        notebookId: book.notebookId,
+      });
+      await rateStudyItem("study-card", "good", 25);
+      expect(await store().getStudy("study-card")).toMatchObject({ schedule: { repetitions: 1 } });
+      const backup = await exportBackup();
+      expect(backup.study).toHaveLength(3);
+      await deleteAllData();
+      expect(await store().listStudy()).toEqual([]);
+      await importBackup(JSON.parse(JSON.stringify(backup)));
+      expect(await store().getStudy(book.id)).toMatchObject({
+        sections: [{ text: "Revised example" }],
+      });
+      await deleteNotebook(book.notebookId);
+      expect(await store().listStudy()).toEqual([]);
+    });
+  });
+
   describe("backup", () => {
     it("round-trips notebooks and rebuilds passages, without settings", async () => {
       const notebookId = await createNotebook("Kept");
@@ -505,7 +563,7 @@ describe.each(backends)("%s store", (name, create) => {
       const notebookId = await createNotebook("Kept");
       await saveChat({ id: id("backup-c"), notebookId }, [userMessage("a", "Hello there")]);
       const backup = await exportBackup();
-      expect(backup.format).toBe(7);
+      expect(backup.format).toBe(8);
       await deleteAllData();
       await importBackup(JSON.parse(JSON.stringify(backup)));
       expect((await store().getConversation(id("backup-c")))?.title).toBe("Hello there");

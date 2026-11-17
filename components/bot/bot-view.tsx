@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { useVaultName } from "@/components/home/vault-name";
+import { subscriptionConnectionsAllowed } from "@/lib/ai/cliproxyapi-client";
 import { SettingsSheet } from "@/components/settings/settings-sheet";
 import { botAccess, canCreateBots, fullAccess } from "@/lib/bot/access";
 import { starterBots } from "@/lib/bot/starters";
@@ -163,6 +164,7 @@ export default function BotView() {
       {/* Opened by the prompt's "Set up"; the sidebar has the visible button. */}
       <SettingsSheet
         open={settingsOpen}
+        page={subscriptionConnectionsAllowed() ? "subscriptions" : "providers"}
         onOpenChange={setSettingsOpen}
         trigger={<button type="button" hidden aria-hidden tabIndex={-1} />}
       />

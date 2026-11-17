@@ -11,6 +11,15 @@
 //   APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID   notarization
 // Without them the build is unsigned, which is fine for local testing.
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { Arch } from "builder-util";
+import { installCliProxy, proxyVersion } from "../lib/ai/cliproxyapi-install.mjs";
+
+const proxyCache = fileURLToPath(new URL("build/cliproxyapi/", import.meta.url));
+const proxyResource = (platform) => ({
+  from: `build/cliproxyapi/${proxyVersion}-${platform}-\${arch}`,
+  to: "cliproxyapi",
+});
 
 const web = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const notarize = Boolean(process.env.APPLE_ID && process.env.APPLE_TEAM_ID);
@@ -18,7 +27,7 @@ const notarize = Boolean(process.env.APPLE_ID && process.env.APPLE_TEAM_ID);
 /** @type {import("electron-builder").Configuration} */
 const config = {
   appId: "dev.better-vault.app",
-  productName: "better-vault",
+  productName: "deepLe",
   copyright: "Copyright © better-vault contributors",
   extraMetadata: { version: web.version },
   directories: { output: "release", buildResources: "build" },
@@ -26,9 +35,18 @@ const config = {
   files: ["out/**", "build/icon.png", "package.json"],
   icon: "build/icon.png",
   artifactName: "${productName}-${version}-${os}-${arch}.${ext}",
-  publish: [{ provider: "github", owner: "better-vault", repo: "better-vault" }],
+  publish: null,
+
+  beforePack: async ({ packager, arch, electronPlatformName }) => {
+    await installCliProxy(
+      proxyCache,
+      electronPlatformName ?? packager.platform.nodeName,
+      Arch[arch],
+    );
+  },
 
   mac: {
+    extraResources: [proxyResource("darwin")],
     category: "public.app-category.productivity",
     target: [
       { target: "dmg", arch: ["arm64", "x64"] },
@@ -57,6 +75,7 @@ const config = {
   },
 
   win: {
+    extraResources: [proxyResource("win32")],
     target: [{ target: "nsis", arch: ["x64"] }],
     // Windows builds are not code-signed (the Apple certificate is for macOS
     // only), so the updater must not ask for a Windows signature. Set this back
@@ -66,6 +85,7 @@ const config = {
   nsis: { oneClick: true, perMachine: false },
 
   linux: {
+    extraResources: [proxyResource("linux")],
     target: [
       // The AppImage updates itself; the .deb is updated through electron-updater too.
       { target: "AppImage", arch: ["x64", "arm64"] },

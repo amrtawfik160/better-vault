@@ -1,3 +1,4 @@
+import type { StudyRecord } from "@/lib/study/records";
 import Dexie, { type EntityTable } from "dexie";
 import { conversationTitle } from "@/lib/chat/title";
 import { cleanText } from "@/lib/grounding/clean";
@@ -40,6 +41,7 @@ export class BetterVaultDatabase extends Dexie {
   skills!: EntityTable<Skill, "id">;
   bots!: EntityTable<Bot, "id">;
   botMessages!: EntityTable<BotMessage, "id">;
+  study!: EntityTable<StudyRecord, "id">;
   blobs!: EntityTable<StoredBlob, "id">;
 
   constructor(name = "better-vault") {
@@ -146,5 +148,6 @@ export class BetterVaultDatabase extends Dexie {
       bots: "id, order",
       botMessages: "id, botId, [botId+createdAt]",
     });
+    this.version(10).stores({ study: "id, notebookId" });
   }
 }

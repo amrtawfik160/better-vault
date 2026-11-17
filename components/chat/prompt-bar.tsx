@@ -21,6 +21,7 @@ import { chatProviderIds, modelKey, parseModelKey, providers } from "@/lib/ai/ca
 import type { ChatMode } from "@/lib/chat/types";
 import {
   activeModel,
+  modelDisplayLabel,
   availableModels,
   updateSettings,
   usesChatGPT,
@@ -38,7 +39,7 @@ export function PromptBar() {
   const { t } = useTranslation("chat");
   const { t: tCommon } = useTranslation();
   const { t: tSettings } = useTranslation("settings");
-  const { notebook, setTab, setSettingsOpen, setAddSourceOpen } = useWorkspace();
+  const { notebook, setTab, openModelSetup, setAddSourceOpen } = useWorkspace();
   const chat = useChatSession();
   const navigate = useNavigate();
   const allSkills = useSkills();
@@ -67,7 +68,7 @@ export function PromptBar() {
     const listed = settings?.providers[ref.provider].contextTokens[ref.modelId];
     return {
       value: modelKey(ref),
-      label: ref.modelId,
+      label: modelDisplayLabel(settings, ref),
       provider: ref.provider,
       note:
         settings && usesChatGPT(settings, ref.provider)
@@ -106,7 +107,7 @@ export function PromptBar() {
           onSubmit={({ text }) => {
             if (needsSource) {
               keepDraft.current = true;
-              toast(t("noSources"));
+              toast(t(webAvailable ? "noSources" : "noSourcesLocal"));
               return;
             }
             setTab("chat");
@@ -119,9 +120,7 @@ export function PromptBar() {
         >
           <Prompt.Banner open={settings !== undefined && !model}>
             {t("setup.banner")}
-            <Prompt.BannerAction onClick={() => setSettingsOpen(true)}>
-              {t("setup.action")}
-            </Prompt.BannerAction>
+            <Prompt.BannerAction onClick={openModelSetup}>{t("setup.action")}</Prompt.BannerAction>
           </Prompt.Banner>
           <Prompt.Field>
             <Prompt.Textarea

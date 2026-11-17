@@ -5,12 +5,15 @@ import { Sheet } from "@/components/panelui/sheet";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UpdatesHost } from "@/components/updates/updates-host";
+import { monitorSubscriptionConnections } from "@/lib/ai/cliproxyapi-client";
 import { refreshAccount } from "@/lib/account/account";
 import { I18nProvider } from "./i18n-provider";
 import { ThemeProvider } from "./theme-provider";
 
 /** Everything the app needs around every page. */
 export function AppProviders({ children }: { children: ReactNode }) {
+  useEffect(monitorSubscriptionConnections, []);
+
   useEffect(() => {
     const refresh = () => void refreshAccount().catch(() => {});
     refresh();

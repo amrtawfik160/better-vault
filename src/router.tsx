@@ -25,6 +25,13 @@ export const router = createBrowserRouter([
         }),
       },
       {
+        path: routes.study,
+        errorElement: <RouteError />,
+        lazy: async () => ({
+          Component: (await import("@/components/study/study-workspace")).StudyWorkspace,
+        }),
+      },
+      {
         path: routes.notebook(":id"),
         errorElement: <RouteError />,
         lazy: async () => {

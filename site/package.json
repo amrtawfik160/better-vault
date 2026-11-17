@@ -1,7 +1,7 @@
 {
-  "name": "better-vault-site",
+  "name": "deeple-site",
   "version": "0.0.0",
-  "description": "The better-vault website and documentation (better-vault.dev).",
+  "description": "The deepLe website and documentation.",
   "private": true,
   "license": "MIT",
   "scripts": {
