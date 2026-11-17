@@ -25,10 +25,7 @@
     "studioHintAll": "All tools on",
     "mcp": "MCP",
     "mcpOn": "Agents can connect",
-    "mcpOff": "Let AI agents use your notes and skills",
-    "subscription": "Subscription",
-    "subscriptionNone": "Better Vault AI and Cloud",
-    "subscriptionPlan": "{{plan}} plan"
+    "mcpOff": "Let AI agents use your notes and skills"
   },
   "providers": {
     "title": "AI providers",
@@ -246,10 +243,12 @@
     "email": "Email",
     "username": "Username",
     "noUsername": "Not set",
-    "freePlan": "Free, with your own keys",
     "signInTitle": "Sign in to better-vault",
-    "signInBody": "An account is optional. It's only for Better Vault AI and Cloud; your notebooks never leave this device.",
-    "signOut": "Sign out"
+    "signInBody": "Sign in or create an account to set up your username. Your notebooks stay on this device.",
+    "signOut": "Sign out",
+    "signIn": "Sign in",
+    "createAccount": "Create account",
+    "popupBlocked": "Allow pop-ups for this page to sign in."
   },
   "storage": {
     "title": "Storage",
@@ -366,9 +365,9 @@
       "agenda": "Agenda"
     },
     "timeFormats": {
-      "auto": "Automatic",
       "12": "12-hour",
-      "24": "24-hour"
+      "24": "24-hour",
+      "auto": "Automatic"
     },
     "workingFrom": "From",
     "workingTo": "To",
@@ -442,63 +441,5 @@
     },
     "activity": "Recent activity",
     "noActivity": "No agent has connected yet."
-  },
-  "subscription": {
-    "title": "Subscription",
-    "description": "Optional plans for Better Vault AI and Cloud. The app stays free with your own keys.",
-    "plans": {
-      "pro": "Pro",
-      "max": "Max"
-    },
-    "signIn": "Sign in",
-    "createAccount": "Create account",
-    "popupBlocked": "Allow pop-ups for this page to sign in.",
-    "keysStay": "Your own API keys stay on this device and are never sent to Better Vault.",
-    "renews": "Renews on {{date}}",
-    "cancels": "Ends on {{date}}; it won't renew",
-    "credits": "AI credits",
-    "creditsLeft": "{{left}} of {{total}} left until {{date}}",
-    "storage": "Cloud storage",
-    "storageUsed": "{{used}} GB of {{total}} GB used",
-    "overage": "Extra usage",
-    "overageHint": "Keep using AI after your credits run out, at $2 per 1,000 credits, up to a limit you choose.",
-    "cap": "Up to ${{amount}} a month",
-    "capLabel": "Extra usage limit",
-    "manage": "Manage or cancel",
-    "manageHint": "Change plan, see invoices or cancel in Polar's customer portal.",
-    "refresh": "Refresh",
-    "welcome": {
-      "title": "Welcome to {{plan}}",
-      "body": "Thank you for supporting better-vault, {{name}}.",
-      "credits_one": "{{count}} AI credit every month with Better Vault AI",
-      "credits_other": "{{count}} AI credits every month with Better Vault AI",
-      "storage": "{{size}} GB of Better Vault Cloud for backups",
-      "keys": "Your own API keys keep working and stay on this device",
-      "use": "Use Better Vault AI",
-      "later": "Not now"
-    },
-    "choosePlan": "Get {{plan}}",
-    "perMonth": "/month",
-    "amount": {
-      "pro": "$4.99",
-      "max": "$9.99"
-    },
-    "tagline": {
-      "pro": "For everyday studying and research",
-      "max": "For heavy use and big libraries"
-    },
-    "features": {
-      "credits_one": "{{formatted}} AI credit every month",
-      "credits_other": "{{formatted}} AI credits every month",
-      "storage": "{{size}} GB of Better Vault Cloud",
-      "haiku": "Better Vault AI, no API key needed",
-      "keys": "Your own API keys keep working"
-    },
-    "heroTitle": "Better Vault AI and Cloud",
-    "heroBody": "Ask questions without an API key, and keep backups in the cloud.",
-    "soon": "Coming soon",
-    "soonHint": "Pro and Max open soon. You can sign in now, and subscribe here once they do.",
-    "choose": "Choose a plan",
-    "planName": "{{plan}} plan"
   }
 }

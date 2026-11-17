@@ -76,7 +76,7 @@ export function AccountPanel() {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message !== "cancelled")
-        toast.error(message === "popup-blocked" ? t("subscription.popupBlocked") : message);
+        toast.error(message === "popup-blocked" ? t("account.popupBlocked") : message);
     } finally {
       setBusy(null);
     }
@@ -175,18 +175,6 @@ export function AccountPanel() {
                   label={t("account.username")}
                   value={user.username ? `@${user.username}` : t("account.noUsername")}
                 />
-                <SettingsRow
-                  to="subscription"
-                  icon={<Logo size={20} />}
-                  label={t("rows.subscription")}
-                  hint={
-                    account?.account.plan
-                      ? t("rows.subscriptionPlan", {
-                          plan: t(`subscription.plans.${account.account.plan}`),
-                        })
-                      : t("account.freePlan")
-                  }
-                />
               </div>
             ) : (
               <div className="flex flex-col gap-3 rounded-2xl bg-muted/50 p-4">
@@ -203,7 +191,7 @@ export function AccountPanel() {
                     disabled={busy !== null}
                     onClick={() => void run("signin", () => signIn("signin"))}
                   >
-                    {t("subscription.signIn")}
+                    {t("account.signIn")}
                   </Button>
                   <Button
                     className="flex-1"
@@ -211,7 +199,7 @@ export function AccountPanel() {
                     disabled={busy !== null}
                     onClick={() => void run("signup", () => signIn("signup"))}
                   >
-                    {t("subscription.createAccount")}
+                    {t("account.createAccount")}
                   </Button>
                 </div>
               </div>

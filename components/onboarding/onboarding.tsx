@@ -26,14 +26,7 @@ import { Field } from "@/components/common/field";
 import { Icon } from "@/components/icon";
 import { Button } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
-import {
-  setUsername,
-  signIn,
-  startCheckout,
-  subscriptionsOpen,
-  useAccount,
-  usernameAvailable,
-} from "@/lib/account/account";
+import { setUsername, signIn, useAccount, usernameAvailable } from "@/lib/account/account";
 import { useStoreQuery } from "@/lib/db/live";
 import { updateProfile, useProfile } from "@/lib/db/profile";
 import { store } from "@/lib/db/store";
@@ -41,13 +34,12 @@ import { avatarFromFile } from "@/lib/profile/avatar";
 import { cn } from "@/lib/utils";
 
 const KEY = "onboarding";
-type Step = "profile" | "account" | "username" | "plan";
-type Plan = "free" | "pro" | "max";
+type Step = "profile" | "account" | "username";
 
 /**
  * The first screens of the app, two columns like a setup wizard: the step's
  * form on the left, and on the right a small better-vault window that fills
- * in with what is typed (name, picture, username, plan). The account is
+ * in with what is typed (name, picture, username). The account is
  * optional at every step: the app works fully on this device without one.
  */
 export function OnboardingGate() {
@@ -69,17 +61,15 @@ function Onboarding() {
   const [step, setStep] = useState<Step>("profile");
   const [name, setName] = useState<string | null>(null);
   const [username, setUsernameDraft] = useState("");
-  const [plan, setPlan] = useState<Plan>("free");
-  // Paid plans can't be chosen until the backend opens them.
-  const open = subscriptionsOpen(account);
   const [busy, setBusy] = useState(false);
   const shownName = name ?? profile?.name ?? "";
 
-  // The steps that apply: a username only once signed in.
-  const steps: Step[] = account
-    ? ["profile", "account", "username", "plan"]
-    : ["profile", "account", "plan"];
-  const at = Math.max(0, steps.indexOf(step));
+  const needsUsername = account != null && !account.user.username;
+  const steps: Step[] =
+    step === "username" || needsUsername
+      ? ["profile", "account", "username"]
+      : ["profile", "account"];
+  const at = steps.indexOf(step);
   const back = () => setStep(steps[Math.max(0, at - 1)]);
 
   const saveName = async () => {
@@ -87,27 +77,15 @@ function Onboarding() {
       await updateProfile({ name: name.trim() });
   };
 
-  const signInWith = async (mode: "signin" | "signup") => {
-    setBusy(true);
-    try {
-      const state = await signIn(mode);
-      setStep(state.user.username ? "plan" : "username");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (message !== "cancelled")
-        toast.error(message === "popup-blocked" ? t("onboarding.popupBlocked") : message);
-    } finally {
-      setBusy(false);
-    }
+  const complete = async () => {
+    await saveName();
+    await finish();
   };
 
-  const complete = async () => {
+  const finishSetup = async () => {
     setBusy(true);
     try {
-      await saveName();
-      if (open && plan !== "free" && account && account.account.plan !== plan)
-        await startCheckout(plan);
-      await finish();
+      await complete();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     } finally {
@@ -115,9 +93,19 @@ function Onboarding() {
     }
   };
 
-  const skipAccount = async () => {
-    await saveName();
-    await finish();
+  const signInWith = async (mode: "signin" | "signup") => {
+    setBusy(true);
+    try {
+      const state = await signIn(mode);
+      if (state.user.username) await complete();
+      else setStep("username");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message !== "cancelled")
+        toast.error(message === "popup-blocked" ? t("onboarding.popupBlocked") : message);
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -184,62 +172,8 @@ function Onboarding() {
                 </div>
                 <p className="text-xs text-muted-foreground">{t("onboarding.account.keys")}</p>
               </>
-            ) : step === "username" ? (
-              <UsernameStep
-                value={username}
-                onChange={setUsernameDraft}
-                onDone={() => setStep("plan")}
-              />
             ) : (
-              <>
-                <Heading title={t("onboarding.plan.title")} body={t("onboarding.plan.body")} />
-                <div
-                  role="radiogroup"
-                  aria-label={t("onboarding.plan.title")}
-                  className="flex flex-wrap gap-2"
-                >
-                  {(["free", "pro", "max"] as const).map((each) => (
-                    <button
-                      key={each}
-                      type="button"
-                      role="radio"
-                      aria-checked={plan === each}
-                      disabled={each !== "free" && !open}
-                      onClick={() => setPlan(each)}
-                      className={cn(
-                        "flex cursor-pointer items-center gap-2 rounded-full px-4 py-2 text-sm ring-1 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-60",
-                        plan === each
-                          ? "bg-foreground text-background ring-foreground"
-                          : "ring-border hover:bg-accent",
-                      )}
-                    >
-                      <span className="font-medium">{t(`onboarding.plan.${each}.name`)}</span>
-                      <span
-                        className={cn(
-                          "tabular-nums",
-                          plan === each ? "text-background/70" : "text-muted-foreground",
-                        )}
-                      >
-                        {each !== "free" && !open
-                          ? t("onboarding.plan.soon")
-                          : t(`onboarding.plan.${each}.price`)}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {t(`onboarding.plan.${plan}.detail`)}
-                </p>
-                {!open ? (
-                  <p className="rounded-2xl bg-muted/50 p-3 text-xs text-muted-foreground">
-                    {t("onboarding.plan.soonHint")}
-                  </p>
-                ) : plan !== "free" && !account ? (
-                  <p className="rounded-2xl bg-muted/50 p-3 text-xs text-muted-foreground">
-                    {t("onboarding.plan.needsAccount")}
-                  </p>
-                ) : null}
-              </>
+              <UsernameStep value={username} onChange={setUsernameDraft} onDone={complete} />
             )}
           </div>
 
@@ -250,30 +184,42 @@ function Onboarding() {
                 {t("onboarding.back")}
               </Button>
             ) : null}
-            <button
-              type="button"
-              onClick={() => void skipAccount()}
-              className="cursor-pointer px-2 text-sm text-muted-foreground underline-offset-4 outline-none hover:text-foreground hover:underline focus-visible:underline"
-            >
-              {step === "plan" ? t("onboarding.plan.later") : t("onboarding.withoutAccount")}
-            </button>
-            {step === "username" ? null : (
+            {step === "profile" ? (
+              <>
+                {!account ? (
+                  <Button variant="ghost" disabled={busy} onClick={() => void finishSetup()}>
+                    {t("onboarding.withoutAccount")}
+                  </Button>
+                ) : null}
+                <Button
+                  className="ms-auto"
+                  disabled={busy}
+                  onClick={() => {
+                    void saveName().catch((error: unknown) =>
+                      toast.error(error instanceof Error ? error.message : String(error)),
+                    );
+                    setStep("account");
+                  }}
+                >
+                  {t("onboarding.next")}
+                </Button>
+              </>
+            ) : (
               <Button
                 className="ms-auto"
-                disabled={busy || (step === "plan" && plan !== "free" && !account)}
-                onClick={() => {
-                  if (step === "plan") return void complete();
-                  if (step === "profile") void saveName();
-                  setStep(steps[at + 1]);
-                }}
+                variant={step === "username" ? "ghost" : "default"}
+                disabled={busy}
+                onClick={() =>
+                  step === "account" && needsUsername ? setStep("username") : void finishSetup()
+                }
               >
-                {step === "plan"
-                  ? plan === "free" || account?.account.plan === plan
-                    ? t("onboarding.finish")
-                    : t("onboarding.plan.subscribe", { plan: t(`onboarding.plan.${plan}.name`) })
-                  : step === "account" && !account
-                    ? t("onboarding.account.skip")
-                    : t("onboarding.next")}
+                {step === "username"
+                  ? t("onboarding.skip")
+                  : !account
+                    ? t("onboarding.withoutAccount")
+                    : needsUsername
+                      ? t("onboarding.next")
+                      : t("onboarding.finish")}
               </Button>
             )}
           </footer>
@@ -284,7 +230,6 @@ function Onboarding() {
           name={shownName}
           username={account?.user.username ?? (username || null)}
           email={account?.user.email ?? null}
-          plan={plan}
           step={step}
         />
       </div>
@@ -364,7 +309,7 @@ function UsernameStep({
 }: {
   value: string;
   onChange: (value: string) => void;
-  onDone: () => void;
+  onDone: () => Promise<void>;
 }) {
   const { t } = useTranslation("common");
   const id = useId();
@@ -445,21 +390,18 @@ const PAGE_H = 600;
 
 /**
  * The real notebooks page, drawn small, with the Settings sheet open as it
- * really is: its Account row shows the name, picture and username typed,
- * its Subscription row the plan chosen. Same classes as the live
- * components (vault-sidebar, home-cards, settings-row), scaled to fit.
+ * really is. Its Account row shows the name, picture and username typed.
+ * It uses the live components' styles, scaled to fit.
  */
 function Preview({
   name,
   username,
   email,
-  plan,
   step,
 }: {
   name: string;
   username: string | null;
   email: string | null;
-  plan: Plan;
   step: Step;
 }) {
   const { t } = useTranslation("common");
@@ -479,7 +421,6 @@ function Preview({
 
   const row =
     "relative flex h-8 w-full min-w-0 items-center gap-2.5 rounded-xl px-2.5 text-start text-sm";
-  const lit = (on: boolean) => (on ? "ring-2 ring-primary/70" : "");
   const tiles = [
     { title: tHome("untitled"), tint: "bg-chart-2/15 text-chart-2" },
     { title: tNotes("title"), tint: "bg-chart-3/15 text-chart-3" },
@@ -596,7 +537,7 @@ function Preview({
             <p className="pb-4 text-sm text-muted-foreground">{tSettings("description")}</p>
             <div className="-mx-2 flex flex-col gap-0.5">
               <SheetRow
-                className={lit(step === "profile" || step === "username")}
+                className="ring-2 ring-primary/70"
                 icon={<Avatar profile={profile ? { ...profile, name } : undefined} size={36} />}
                 label={name || tSettings("rows.account")}
                 hint={
@@ -607,25 +548,9 @@ function Preview({
                 }
               />
               <SheetRow
-                className={lit(step === "account" || step === "plan")}
-                icon={<Logo size={22} />}
-                label={tSettings("rows.subscription")}
-                hint={
-                  plan === "free"
-                    ? tSettings("rows.subscriptionNone")
-                    : tSettings("rows.subscriptionPlan", {
-                        plan: tSettings(`subscription.plans.${plan}`),
-                      })
-                }
-              />
-              <SheetRow
                 icon={<Icon icon={AiBrain01Icon} />}
                 label={tSettings("rows.providers")}
-                hint={
-                  plan === "free"
-                    ? tSettings("rows.providersNone")
-                    : t("onboarding.preview.betterVault")
-                }
+                hint={tSettings("rows.providersNone")}
               />
               <SheetRow
                 icon={<Icon icon={CloudServerIcon} />}

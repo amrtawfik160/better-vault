@@ -88,14 +88,14 @@
     "label": "Welcome to better-vault",
     "next": "Continue",
     "withoutAccount": "Use without an account",
+    "skip": "Skip for now",
     "popupBlocked": "Allow pop-ups for this page to sign in.",
     "account": {
       "title": "Create an account",
-      "body": "An account is only for Better Vault AI and Cloud. Your notebooks and API keys never leave this device.",
+      "body": "Sign in or create an account to choose a username.",
       "google": "Continue with Google",
       "email": "Continue with email",
       "keys": "Your notebooks and your own API keys never leave this device.",
-      "skip": "Skip for now",
       "signedIn": "Signed in as {{email}}"
     },
     "username": {
@@ -107,30 +107,6 @@
       "taken": "That username is taken.",
       "free": "It's yours.",
       "checking": "Checking…"
-    },
-    "plan": {
-      "title": "Choose a plan",
-      "body": "Better Vault AI answers your questions without an API key. Change or cancel any time.",
-      "free": {
-        "name": "Free",
-        "detail": "Everything, with your own API keys",
-        "price": "$0"
-      },
-      "pro": {
-        "name": "Pro",
-        "detail": "Better Vault AI with 1,250 AI credits a month, and 20 GB of cloud storage",
-        "price": "$4.99/mo"
-      },
-      "max": {
-        "name": "Max",
-        "detail": "Better Vault AI with 3,500 AI credits a month, and 50 GB of cloud storage",
-        "price": "$9.99/mo"
-      },
-      "later": "Maybe later",
-      "subscribe": "Continue to {{plan}}",
-      "needsAccount": "Go back a step and create an account to subscribe. You can also subscribe later in Settings → Subscription.",
-      "soon": "Coming soon",
-      "soonHint": "Pro and Max are coming soon. You can create your account now, and subscribe later in Settings → Subscription."
     },
     "stepOf": "Step {{step}} of {{total}}",
     "back": "Back",
@@ -148,13 +124,11 @@
       "you": "You",
       "thisDevice": "On this device",
       "ask": "Ask your sources…",
-      "betterVault": "Better Vault AI",
       "ownKey": "Your own key",
       "caption": {
         "profile": "Your name and picture appear in the app.",
-        "account": "An account adds Better Vault AI and Cloud.",
-        "username": "Your username, for your account.",
-        "plan": "Pro and Max add Better Vault AI to the model picker."
+        "account": "You can use better-vault with a local profile.",
+        "username": "Your username, for your account."
       }
     }
   }

@@ -69,7 +69,7 @@ export function ProvidersPanel({ onChatGPTSignIn }: ProvidersPanelProps) {
     <>
       <Sheet.Header title={t("providers.title")} description={t("providers.description")} />
       <Sheet.Body>
-        {/* Better Vault AI is set up by subscribing (Settings → Subscription), not with a key. */}
+        {/* Better Vault AI is managed by the account service. */}
         <ProviderList
           ids={chatProviderIds.filter((id) => id !== "bettervault")}
           settings={settings}
