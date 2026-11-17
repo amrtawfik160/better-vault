@@ -7,7 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
-- AI subscription sign-in buttons for ChatGPT, Claude and Antigravity. The local CLIProxyAPI launcher handles proxy authentication and the app loads models after sign-in.
+- AI subscription sign-in buttons with provider logos for ChatGPT, Claude, Antigravity, Grok, Kimi on both sites, Devin and Muse Code. The local CLIProxyAPI launcher handles proxy authentication and the app loads models after sign-in.
 
 ### Removed
 

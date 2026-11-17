@@ -52,12 +52,13 @@ export async function POST(request: Request, openSignIn?: (url: string) => Promi
     if (data.action === "start") {
       const result = cliProxyLoginSchema.safeParse(body);
       if (!result.success) throw new Error("CLIProxyAPI returned an invalid sign-in response.");
-      const opened = openSignIn
-        ? await openSignIn(result.data.url).then(
-            () => true,
-            () => false,
-          )
-        : false;
+      const opened =
+        openSignIn && !result.data.user_code
+          ? await openSignIn(result.data.url).then(
+              () => true,
+              () => false,
+            )
+          : false;
       return Response.json({ ...result.data, opened }, { headers });
     }
 

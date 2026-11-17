@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { POST } from "@/server/routes/cliproxyapi";
 import { rejectCliProxyRequest } from "./cliproxyapi";
 import { setDesktopRuntime, setLoopbackRuntime } from "./server-config";
 
@@ -13,8 +14,51 @@ function request(origin?: string, address = "http://127.0.0.1:3000") {
 }
 
 afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   setDesktopRuntime(false);
   setLoopbackRuntime(false);
+});
+
+describe("subscription sign-in handoff", () => {
+  function signIn(provider: string, upstream: object) {
+    setDesktopRuntime(true);
+    vi.stubEnv("BETTER_VAULT_ALLOW_LOCAL_PROVIDERS", "true");
+    vi.stubEnv("BETTER_VAULT_CLIPROXYAPI_URL", "http://127.0.0.1:8317");
+    vi.stubEnv("BETTER_VAULT_CLIPROXYAPI_CLIENT_KEY", "test-client-key");
+    vi.stubEnv("BETTER_VAULT_CLIPROXYAPI_MANAGEMENT_KEY", "test-management-key");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(upstream)));
+    return new Request("app://better-vault/api/cliproxyapi/oauth", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "app://better-vault" },
+      body: JSON.stringify({ action: "start", provider }),
+    });
+  }
+
+  it("returns the one-time code before opening the provider's page", async () => {
+    const upstream = {
+      status: "ok",
+      state: "xai-fixture",
+      url: "https://accounts.x.ai/device",
+      user_code: "ABCD-1234",
+    };
+    const open = vi.fn().mockResolvedValue(undefined);
+    const response = await POST(signIn("xai", upstream), open);
+    expect(await response.json()).toEqual({ ...upstream, opened: false });
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("opens browser-based sign-in automatically on desktop", async () => {
+    const upstream = {
+      status: "ok",
+      state: "devin-fixture",
+      url: "https://app.devin.ai/auth/authorize",
+    };
+    const open = vi.fn().mockResolvedValue(undefined);
+    const response = await POST(signIn("devin", upstream), open);
+    expect(await response.json()).toEqual({ ...upstream, opened: true });
+    expect(open).toHaveBeenCalledWith(upstream.url);
+  });
 });
 
 describe("managed subscription access", () => {

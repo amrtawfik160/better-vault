@@ -101,7 +101,7 @@ bun run build
 bun run start:subscriptions
 ```
 
-Open **Settings → AI providers → AI subscriptions** and choose **Connect ChatGPT**, **Connect Claude**, or **Connect Antigravity**. Sign in and authorize access in your browser. Your models load in the model picker, where you can use them in Chat and Studio.
+Open **Settings → AI providers → AI subscriptions** and choose your provider. The app supports ChatGPT, Claude, Antigravity, Grok, Kimi on kimi.com and kimi.ai, Devin, and Meta's Muse Code. Sign in and authorize access in your browser. If the panel shows a one-time code, enter it on the provider's page when asked. Your models load in the model picker for Chat and Studio.
 
 The launcher creates a private proxy configuration on your computer and starts both services on loopback. The proxy stores provider tokens under `~/.better-vault/cliproxyapi` by default. Notebook text included in a request goes through the proxy to the selected provider. For the desktop app, build it in `desktop/` first, then start it from the checkout root with `bun run start:subscriptions --desktop`.
 

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { z } from "zod";
 import { Button, buttonVariants } from "@/components/panelui/button";
 import { Sheet } from "@/components/panelui/sheet";
+import { ProviderIcon } from "@/components/provider-icon";
 import {
   cliProxyLoginSchema,
   cliProxyLoginStatusSchema,
@@ -12,11 +13,51 @@ import {
 import { updateProvider, type ProviderSettings } from "@/lib/db/settings";
 import { desktopBridge } from "@/lib/desktop/bridge";
 
-const names: Record<CliProxySignInProvider, string> = {
-  codex: "ChatGPT",
-  claude: "Claude",
-  antigravity: "Antigravity",
+const brands: Record<
+  CliProxySignInProvider,
+  { name: string; logo?: string; darkLogo?: string; deviceCode?: boolean }
+> = {
+  codex: { name: "ChatGPT" },
+  claude: { name: "Claude", logo: "claude" },
+  antigravity: { name: "Antigravity", logo: "antigravity" },
+  xai: { name: "Grok", logo: "grok", darkLogo: "grok-dark", deviceCode: true },
+  kimi: { name: "Kimi (kimi.com)", logo: "kimi-light", darkLogo: "kimi-dark", deviceCode: true },
+  "kimi-ai": {
+    name: "Kimi (kimi.ai)",
+    logo: "kimi-light",
+    darkLogo: "kimi-dark",
+    deviceCode: true,
+  },
+  devin: { name: "Devin", logo: "devin", darkLogo: "devin-dark" },
+  meta: { name: "Muse Code", logo: "meta", deviceCode: true },
 };
+
+function SubscriptionLogo({ provider }: { provider: CliProxySignInProvider }) {
+  const { logo, darkLogo } = brands[provider];
+  if (!logo) return <ProviderIcon provider="openai" className="size-5" />;
+  return (
+    <>
+      <img
+        src={`/providers/subscriptions/${logo}.svg`}
+        alt=""
+        width={20}
+        height={20}
+        className={
+          darkLogo ? "size-5 shrink-0 object-contain dark:hidden" : "size-5 shrink-0 object-contain"
+        }
+      />
+      {darkLogo ? (
+        <img
+          src={`/providers/subscriptions/${darkLogo}.svg`}
+          alt=""
+          width={20}
+          height={20}
+          className="hidden size-5 shrink-0 object-contain dark:block"
+        />
+      ) : null}
+    </>
+  );
+}
 
 const errorSchema = z.object({ error: z.string() });
 const modelsSchema = z.object({
@@ -57,6 +98,7 @@ type PendingLogin = {
   url: string;
   state: string;
   opened: boolean;
+  userCode?: string;
 };
 
 export function CliProxyPanel({ saved }: { saved: ProviderSettings }) {
@@ -66,7 +108,9 @@ export function CliProxyPanel({ saved }: { saved: ProviderSettings }) {
   const [connected, setConnected] = useState<CliProxySignInProvider | null>(null);
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
+  const userCode = login?.userCode;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -117,16 +161,21 @@ export function CliProxyPanel({ saved }: { saved: ProviderSettings }) {
     setBusy(true);
     setError("");
     setConnected(null);
-    const popup = desktopBridge() ? null : window.open("about:blank", "_blank");
+    setCopied(false);
+    const popup =
+      desktopBridge() || brands[provider].deviceCode ? null : window.open("about:blank", "_blank");
     popupRef.current = popup;
     try {
-      const { state, url, opened } = await request(
-        oauth,
-        { action: "start", provider },
-        cliProxyLoginSchema,
-      );
+      const {
+        state,
+        url,
+        opened,
+        user_code: userCode,
+      } = await request(oauth, { action: "start", provider }, cliProxyLoginSchema);
       let browserOpened = opened ?? false;
-      if (popup && !popup.closed) {
+      if (userCode) {
+        popup?.close();
+      } else if (popup && !popup.closed) {
         try {
           popup.opener = null;
           popup.location.href = url;
@@ -135,7 +184,7 @@ export function CliProxyPanel({ saved }: { saved: ProviderSettings }) {
           popup.close();
         }
       }
-      setLogin({ state, url, provider, opened: browserOpened });
+      setLogin({ state, url, provider, opened: browserOpened, userCode });
     } catch (problem) {
       popup?.close();
       setError(errorMessage(problem));
@@ -171,38 +220,70 @@ export function CliProxyPanel({ saved }: { saved: ProviderSettings }) {
     }
   }
 
+  async function copyCode(code: string) {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+    } catch {
+      setError(t("cliproxyapi.copyCodeFailed"));
+    }
+  }
+
   return (
     <>
       <Sheet.Header title={t("cliproxyapi.title")} description={t("cliproxyapi.description")} />
       <Sheet.Body>
         <div className="flex flex-col gap-4">
           {login ? (
-            <div className="flex flex-wrap gap-2">
-              <a
-                href={login.url}
-                target="_blank"
-                rel="noreferrer"
-                className={buttonVariants({ variant: login.opened ? "secondary" : "default" })}
-              >
-                {t(login.opened ? "cliproxyapi.reopenSignIn" : "cliproxyapi.openSignIn", {
-                  provider: names[login.provider],
-                })}
-              </a>
-              <Button type="button" variant="ghost" disabled={busy} onClick={() => void cancel()}>
-                {t("cliproxyapi.cancel")}
-              </Button>
+            <div className="flex flex-col gap-3">
+              {userCode ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <code
+                    dir="ltr"
+                    className="rounded-lg bg-muted px-3 py-2 font-mono text-base font-semibold tracking-wide break-all select-all"
+                  >
+                    {userCode}
+                  </code>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => void copyCode(userCode)}
+                  >
+                    {t(copied ? "cliproxyapi.codeCopied" : "cliproxyapi.copyCode")}
+                  </Button>
+                </div>
+              ) : null}
+              <div className="flex flex-wrap gap-2">
+                <a
+                  href={login.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={buttonVariants({ variant: login.opened ? "secondary" : "default" })}
+                >
+                  {t(login.opened ? "cliproxyapi.reopenSignIn" : "cliproxyapi.openSignIn", {
+                    provider: brands[login.provider].name,
+                  })}
+                </a>
+                <Button type="button" variant="ghost" disabled={busy} onClick={() => void cancel()}>
+                  {t("cliproxyapi.cancel")}
+                </Button>
+              </div>
             </div>
           ) : (
-            <div className="flex flex-col items-start gap-2">
+            <div className="grid gap-2 sm:grid-cols-2">
               {cliProxySignInProviders.map((provider) => (
                 <Button
                   key={provider}
                   type="button"
                   variant="secondary"
+                  className="h-auto min-h-11 min-w-0 justify-start px-3 py-2 text-start whitespace-normal"
+                  aria-label={t("cliproxyapi.connect", { provider: brands[provider].name })}
                   disabled={busy || refreshing}
                   onClick={() => void start(provider)}
                 >
-                  {t("cliproxyapi.connect", { provider: names[provider] })}
+                  <SubscriptionLogo provider={provider} />
+                  {brands[provider].name}
                 </Button>
               ))}
             </div>
@@ -211,9 +292,15 @@ export function CliProxyPanel({ saved }: { saved: ProviderSettings }) {
             {busy
               ? t(login ? "cliproxyapi.cancelling" : "cliproxyapi.starting")
               : login
-                ? t(login.opened ? "cliproxyapi.waiting" : "cliproxyapi.openPrompt")
+                ? t(
+                    login.userCode
+                      ? "cliproxyapi.devicePrompt"
+                      : login.opened
+                        ? "cliproxyapi.waiting"
+                        : "cliproxyapi.openPrompt",
+                  )
                 : connected
-                  ? t("cliproxyapi.connected", { provider: names[connected] })
+                  ? t("cliproxyapi.connected", { provider: brands[connected].name })
                   : saved.models.length > 0
                     ? t("providers.modelsLoaded", { count: saved.models.length })
                     : t("cliproxyapi.modelsEmpty")}
