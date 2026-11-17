@@ -6,7 +6,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { parse, stringify } from "yaml";
 import { installCliProxy, proxyExecutable } from "./cliproxyapi-install.mjs";
-import { isDesktopRuntime, isLoopbackRuntime, localProvidersAllowed } from "./server-config";
+import { isDesktopRuntime, isLoopbackRuntime, localProvidersAllowed } from "./server-config.ts";
 
 const env = process.env;
 const prefix = "BETTER_VAULT_CLIPROXYAPI_";
