@@ -4,6 +4,7 @@ import { Button } from "@/components/panelui/button";
 import { DirectionalText } from "@/components/common/directional-text";
 import { textDirection } from "@/lib/text/direction";
 import type { StudyOrigin, StudyReport } from "@/lib/study/records";
+import { studyReportKey } from "@/lib/study/reports";
 import { StudyOriginLink } from "./study-origin-link";
 import { StudyText } from "./study-text";
 
@@ -58,6 +59,7 @@ export function StudySessionReport({
         <StudyOriginLink
           origin={origin}
           label={t(origin.kind === "word" ? "study.vocabulary.open" : "study.followUps.openCard")}
+          tutorFocus={{ report: { id: studyReportKey(report), suggestion: key } }}
         />
       );
     }
@@ -107,7 +109,8 @@ export function StudySessionReport({
   return (
     <div
       id="study-session-report"
-      className="scroll-mt-32 space-y-4 rounded-2xl border bg-card p-4"
+      tabIndex={-1}
+      className="scroll-mt-32 space-y-4 rounded-2xl border bg-card p-4 outline-none"
     >
       <h3 className="font-semibold">Session report</h3>
       <StudyText text={report.summary} />

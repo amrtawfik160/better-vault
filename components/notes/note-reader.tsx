@@ -3,7 +3,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Root, Element, ElementContent } from "hast";
 import { Link, useLocation } from "react-router";
-import { reviewReturnState } from "@/lib/study/review-session";
+import { studyReturnState } from "@/lib/study/return-links";
 import { useTranslation } from "react-i18next";
 import type { NoteLink } from "@/lib/db/types";
 import { resolveLink, type LinkWorld } from "@/lib/notes/resolve";
@@ -189,7 +189,7 @@ export function NoteReader({
         }
         if (isStudyHref(href))
           return (
-            <Link to={href} state={reviewReturnState(state)}>
+            <Link to={href} state={studyReturnState(state)}>
               {children}
             </Link>
           );

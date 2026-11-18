@@ -9,7 +9,7 @@ import { startStudyFollowUp, updateStudyReport } from "@/lib/db/study";
 import { studyHref } from "@/lib/study/links";
 import type { StudyFollowUp, StudyThread } from "@/lib/study/records";
 import { plannedStudySteps, studyFollowUpId } from "@/lib/study/reports";
-import { reviewReturnState } from "@/lib/study/review-session";
+import { studyReturnState } from "@/lib/study/return-links";
 import { StudyOriginLink } from "./study-origin-link";
 
 export function StudyFollowUpButton({
@@ -42,7 +42,7 @@ export function StudyFollowUpButton({
       const id = await startStudyFollowUp(target, vaultId);
       if (loading.signal.aborted) return;
       if (id)
-        void navigate(studyHref("tutor", { thread: id }), { state: reviewReturnState(state) });
+        void navigate(studyHref("tutor", { thread: id }), { state: studyReturnState(state) });
       else toast.error(t("study.followUps.practiceUnavailable"));
     } catch (error) {
       if (!loading.signal.aborted)

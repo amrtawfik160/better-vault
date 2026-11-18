@@ -13,8 +13,8 @@ import { studyTextRevision } from "@/lib/study/text-edits";
 import { Icon } from "@/components/icon";
 import { Markdown } from "@/components/chat/markdown";
 import { Dialog } from "@/components/panelui/dialog";
-import { ReviewReturn } from "@/components/study/review-return";
-import { reviewReturnState } from "@/lib/study/review-session";
+import { StudyReturnLinks } from "@/components/study/study-return-links";
+import { studyReturnState } from "@/lib/study/return-links";
 import { Sheet } from "@/components/panelui/sheet";
 import { loadBlob } from "@/lib/db/blobs";
 import { useSourceWithChunks } from "@/lib/db/sources";
@@ -38,7 +38,7 @@ export function SourceReader({ notebookId, reading, onClose }: SourceReaderProps
         closeLabel={tCommon("actions.close")}
         className="w-[min(36rem,calc(100vw-2*var(--sheet-gap)))]"
       >
-        <ReviewReturn className="px-3 pt-3" />
+        <StudyReturnLinks className="px-3 pt-3" />
         {reading ? (
           <ReaderBody key={reading.sourceId} notebookId={notebookId} {...reading} />
         ) : null}
@@ -69,7 +69,7 @@ function ReaderBody({
   const { t, i18n } = useTranslation("sources");
   const read = useSourceWithChunks(sourceId);
   const navigate = useNavigate();
-  const returnState = reviewReturnState(useLocation().state);
+  const returnState = studyReturnState(useLocation().state);
   const [opening, setOpening] = useState(false);
   const source = read?.source?.notebookId === notebookId ? read.source : undefined;
   const saved = useSavedStudyBookForSource(notebookId, sourceId, Boolean(read && !source));

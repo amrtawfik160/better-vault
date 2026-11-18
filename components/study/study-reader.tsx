@@ -19,7 +19,7 @@ import { Textarea } from "@/components/panelui/textarea";
 import { Menu } from "@/components/panelui/menu";
 import { loadBlob } from "@/lib/db/blobs";
 import { useSource } from "@/lib/db/sources";
-import { reviewReturnState } from "@/lib/study/review-session";
+import { studyReturnState } from "@/lib/study/return-links";
 import {
   freshSchedule,
   putStudyRecords,
@@ -172,7 +172,7 @@ export function StudyReader({
   const revision = studyTextRevision(book);
   const navigate = useNavigate();
   const location = useLocation();
-  const returnState = reviewReturnState(location.state);
+  const returnState = studyReturnState(location.state);
   const visitingPassage = reference || !!(focusedHighlight || focusedRange || focusedVisual);
   const { t } = useTranslation("home");
   const source = useSource(book.sourceId);

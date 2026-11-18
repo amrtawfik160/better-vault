@@ -20,7 +20,7 @@ import { createNote, renameNote, saveNoteBody } from "@/lib/db/notes";
 import type { Note, NoteLink } from "@/lib/db/types";
 import { startNoteTutor } from "@/lib/db/study";
 import { studyHref } from "@/lib/study/links";
-import { reviewReturnState } from "@/lib/study/review-session";
+import { studyReturnState } from "@/lib/study/return-links";
 import { Button } from "@/components/panelui/button";
 import { useCurrentVault } from "@/lib/db/vaults";
 import { formatRelativeTime } from "@/lib/format";
@@ -123,7 +123,7 @@ export default function NotesWorkspace() {
       if (next.graph) out.graph = "1";
       const keep = next.graph ? (params.get("note") ?? undefined) : (next.note ?? undefined);
       if (keep) out.note = keep;
-      setParams(out, { state: reviewReturnState(state) });
+      setParams(out, { state: studyReturnState(state) });
     },
     [params, setParams, notebookFilter, state],
   );
@@ -201,11 +201,11 @@ export default function NotesWorkspace() {
         pendingReveal.current = link.heading ?? null;
         open(target.note.id);
       } else if (target?.kind === "notebook") {
-        navigate(routes.notebook(target.notebook.id), { state: reviewReturnState(state) });
+        navigate(routes.notebook(target.notebook.id), { state: studyReturnState(state) });
       } else if (target?.kind === "source") {
         navigate(
           `${routes.notebook(target.source.notebookId)}?source=${encodeURIComponent(target.source.id)}`,
-          { state: reviewReturnState(state) },
+          { state: studyReturnState(state) },
         );
       } else if (link.kind === "note" && link.target) {
         // A link to nothing yet creates the note, in the vault it names.
@@ -358,7 +358,7 @@ export default function NotesWorkspace() {
                   onClick={() =>
                     setParams(
                       { view: "notes", ...(activeId ? { note: activeId } : {}) },
-                      { state: reviewReturnState(state) },
+                      { state: studyReturnState(state) },
                     )
                   }
                   className="flex size-5 cursor-pointer items-center justify-center rounded-full outline-none hover:bg-background focus-visible:ring-2 focus-visible:ring-ring"
@@ -528,13 +528,13 @@ export default function NotesWorkspace() {
               else if (kind === "missing")
                 void openLink({ kind: "note", target: node.label, embed: false });
               else if (kind === "notebook")
-                navigate(routes.notebook(id), { state: reviewReturnState(state) });
+                navigate(routes.notebook(id), { state: studyReturnState(state) });
               else if (kind === "source") {
                 const source = world.sources.find((each) => each.id === id);
                 if (source)
                   navigate(
                     `${routes.notebook(source.notebookId)}?source=${encodeURIComponent(id)}`,
-                    { state: reviewReturnState(state) },
+                    { state: studyReturnState(state) },
                   );
               } else if (kind === "tag") {
                 setQuery(node.label);
@@ -562,7 +562,7 @@ export default function NotesWorkspace() {
                     void startNoteTutor(note)
                       .then((thread) =>
                         navigate(studyHref("tutor", { thread: thread.id }), {
-                          state: reviewReturnState(state),
+                          state: studyReturnState(state),
                         }),
                       )
                       .catch((error: Error) => toast.error(error.message));

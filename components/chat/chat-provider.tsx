@@ -26,7 +26,7 @@ import { getChunks, listSources } from "@/lib/db/sources";
 import { selectPassages } from "@/lib/grounding/passages";
 import { listSkills } from "@/lib/db/skills";
 import { getStudioSettings } from "@/lib/studio/settings";
-import { reviewReturnState } from "@/lib/study/review-session";
+import { studyReturnState } from "@/lib/study/return-links";
 
 /** How many earlier messages are sent with each question. */
 const HISTORY = 24;
@@ -148,7 +148,7 @@ export function ChatProvider({
     const remaining = new URLSearchParams(params);
     remaining.delete("answer");
     remaining.delete("conversation");
-    setParams(remaining, { replace: true, state: reviewReturnState(state) });
+    setParams(remaining, { replace: true, state: studyReturnState(state) });
   }, [params, setParams, state]);
 
   const startNew = useCallback(() => {

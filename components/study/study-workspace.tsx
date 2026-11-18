@@ -16,11 +16,11 @@ import {
   pendingReviewLearning,
   reviewCollection,
   reviewQueue,
-  reviewReturnState,
   reviewSelection,
   savedReview,
   studyCardsInScope,
 } from "@/lib/study/review-session";
+import { studyReturnState } from "@/lib/study/return-links";
 import { studyVaultIndex } from "@/lib/study/vault";
 import { studyTextRevision } from "@/lib/study/text-edits";
 import { Button } from "@/components/panelui/button";
@@ -575,7 +575,7 @@ export default function StudyWorkspace({
         state:
           next === "review"
             ? { studyReviewIds: review, studyReviewVault: studyVaultId }
-            : reviewReturnState(location.state),
+            : studyReturnState(location.state),
       },
     );
   }
@@ -596,7 +596,7 @@ export default function StudyWorkspace({
         else next.delete("readerView");
         return next;
       },
-      { replace: Boolean(requestedReaderTutor), state: reviewReturnState(location.state) },
+      { replace: Boolean(requestedReaderTutor), state: studyReturnState(location.state) },
     );
   }
 
@@ -660,7 +660,7 @@ export default function StudyWorkspace({
       originHref(tutorBookOrigin(what, document)).split("?", 2)[1],
     );
     target.set("readerTutor", what.id);
-    setParams(target, { state: reviewReturnState(location.state) });
+    setParams(target, { state: studyReturnState(location.state) });
   }
 
   function conversation(what: StudyThread, inReader = false) {
@@ -693,7 +693,7 @@ export default function StudyWorkspace({
   async function openTutorSelection(
     kind: "card" | "highlight",
     ids: string[],
-    state?: ReturnType<typeof reviewReturnState>,
+    state?: ReturnType<typeof studyReturnState>,
   ) {
     if (openingPractice) return;
     setOpeningPractice(true);
@@ -703,7 +703,7 @@ export default function StudyWorkspace({
         : await startHighlightTutor(ids, studyVaultId, t("study.highlights.tutorTitle"));
       if (thread) {
         setParams({ view: "study", tab: "tutor", vault: studyVaultId, thread: thread.id }, {
-          state: state ?? reviewReturnState(location.state),
+          state: state ?? studyReturnState(location.state),
         });
       } else toast.error(t(kind === "card" ? "study.materials.noCardsSelected" : "study.highlights.unavailable"));
     } catch (error) {

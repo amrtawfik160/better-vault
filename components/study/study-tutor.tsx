@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Link, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { StudySessionReport } from "./study-session-report";
 import { StudyFollowUpButton } from "./study-follow-ups";
@@ -48,6 +48,7 @@ import { askStudyModel } from "@/lib/study/client";
 import { studyConversationMaterial, studyPracticeImages } from "@/lib/study/ai";
 import { passagesFor, tutorBookOrigin } from "@/lib/study/passages";
 import { activeStudyCard, selectedStudyCards } from "@/lib/study/recall";
+import { returnToTutor, studyReturnState } from "@/lib/study/return-links";
 import {
   captureReportPracticeContext,
   matchesStudyReport,
@@ -454,6 +455,7 @@ export function StudyTutor({
 }) {
   const { t, i18n } = useTranslation("home");
   const { t: common } = useTranslation();
+  const location = useLocation();
   const composer = useStudyTutorDraft(thread);
   const input = composer.draft.text;
   const [operation, setOperation] = useState<"answer" | "report" | null>(null);
@@ -555,8 +557,9 @@ export function StudyTutor({
     ...thread.messages.map((entry, index) => ({ entry, index })),
     ...temporaryTurns.map((entry) => ({ entry, index: undefined })),
   ].sort((a, b) => (a.entry.at ?? 0) - (b.entry.at ?? 0));
+  const focusedTurn = focusMessage === undefined ? undefined : thread.messages[focusMessage];
   const currentTurns =
-    cardPractice && focusMessage === undefined
+    cardPractice && (!focusedTurn || focusedTurn.practiceCardId === practiceCard?.id)
       ? conversation.filter(({ entry }) => practiceCard && entry.practiceCardId === practiceCard.id)
       : conversation;
   const hasSavedAnswer = thread.messages.some(({ role, text }) => role === "assistant" && text.trim());
@@ -598,7 +601,11 @@ export function StudyTutor({
       if (suggestion) {
         suggestion.scrollIntoView({ block: "center" });
         suggestion.focus({ preventScroll: true });
-      } else document.getElementById("study-session-report")?.scrollIntoView({ block: "start" });
+      } else {
+        const report = document.getElementById("study-session-report");
+        report?.scrollIntoView({ block: "start" });
+        report?.focus({ preventScroll: true });
+      }
     }
   }, [focusMessage, focusSuggestion, reportId, requestedReportId, showReport]);
 
@@ -611,11 +618,22 @@ export function StudyTutor({
     setAnswerImageCardId(cardId);
   }
 
+  function clearMessageLink() {
+    if (focusMessage === undefined) return;
+    const params = new URLSearchParams(location.search);
+    params.delete("message");
+    void navigate(
+      { pathname: location.pathname, search: params.toString() },
+      { replace: true, state: studyReturnState(location.state) },
+    );
+  }
+
   async function choosePracticeCard(id: string) {
     setChangingCard(true);
     try {
       await save({ practiceCardId: id });
       revealAnswerImage(undefined);
+      clearMessageLink();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     } finally {
@@ -1020,7 +1038,7 @@ export function StudyTutor({
           </h2>
         )}
         <div className="flex flex-wrap gap-2">
-          {book && <StudyOriginLink origin={tutorBookOrigin(thread, book)} />}
+          {book && <StudyOriginLink origin={tutorBookOrigin(thread, book)} tutorFocus={{}} />}
           {openBesideReader ? (
             <Button variant="outline" size="sm" onClick={openBesideReader}>
               {t("study.reader.besideReader")}
@@ -1073,6 +1091,7 @@ export function StudyTutor({
               <>
                 <StudyOriginLink
                   origin={{ kind: "report", threadId: followUp.threadId, reportId: followUp.reportId }}
+                  tutorFocus={{}}
                 />
                 {followUpComplete ? <span role="status">{t("study.followUps.done")}</span> : null}
                 <Button
@@ -1191,6 +1210,7 @@ export function StudyTutor({
                 if (!next.cardIds.includes(revealedImageCardId.current ?? "")) {
                   revealAnswerImage(undefined);
                 }
+                if (practiceCard && !next.cardIds.includes(practiceCard.id)) clearMessageLink();
               }}
             />
             {!contextReady ? (
@@ -1259,7 +1279,7 @@ export function StudyTutor({
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-xs text-muted-foreground">{t("study.visualCard.tutorUsesImages")}</p>
                   {practiceCard.origin?.kind === "book" && practiceCard.origin.visual ? (
-                    <StudyOriginLink origin={practiceCard.origin} />
+                    <StudyOriginLink origin={practiceCard.origin} tutorFocus={{}} />
                   ) : null}
                 </div>
               ) : null}
@@ -1294,6 +1314,7 @@ export function StudyTutor({
                     key={citation.index}
                     origin={studyCitationOrigin(citation)}
                     label={`[${citation.index}] ${citation.title}`}
+                    tutorFocus={{ message: index }}
                   />
                 ))}
                 {entry.role === "assistant" ? (
@@ -1669,12 +1690,14 @@ export function StudyTutor({
                     <Link
                       className={buttonVariants({ variant: "outline", size: "sm" })}
                       to={studyHref("cards", { thread: thread.id, fromReport: reportId })}
+                      state={returnToTutor(location.pathname + location.search, location.state, { report: { id: reportId } })}
                     >
                       {t("study.followUps.viewCards", { count: reportCardCount })}
                     </Link>
                     <Link
                       className={buttonVariants({ variant: "outline", size: "sm" })}
                       to={studyHref("review", { thread: thread.id, fromReport: reportId })}
+                      state={returnToTutor(location.pathname + location.search, location.state, { report: { id: reportId } })}
                     >
                       {t("study.followUps.reviewCards")}
                     </Link>

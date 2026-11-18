@@ -3,7 +3,7 @@ import { useCallback, useContext, useMemo, useState, type ReactNode } from "reac
 import { subscriptionConnectionsAllowed } from "@/lib/ai/cliproxyapi-client";
 import { stableContext } from "@/lib/context";
 import type { Conversation, Notebook, StudioOutput } from "@/lib/db/database";
-import { reviewReturnState } from "@/lib/study/review-session";
+import { studyReturnState } from "@/lib/study/return-links";
 import type { StudioToolId } from "@/studio/tools";
 
 export type WorkspaceTab = "chat" | "sources" | "studio";
@@ -88,7 +88,7 @@ export function WorkspaceProvider({
             updated.delete("output");
             return updated;
           },
-          { state: reviewReturnState(state) },
+          { state: studyReturnState(state) },
         );
     },
     [openOutputId, setParams, state],
@@ -112,7 +112,7 @@ export function WorkspaceProvider({
       openOutput: (id) => {
         setStudioOpen(false);
         setWorkspaceTab("studio");
-        setParams({ output: id }, { state: reviewReturnState(state) });
+        setParams({ output: id }, { state: studyReturnState(state) });
       },
       closeOutput: () => {
         setWorkspaceTab("studio");
@@ -122,7 +122,7 @@ export function WorkspaceProvider({
             updated.delete("output");
             return updated;
           },
-          { state: reviewReturnState(state) },
+          { state: studyReturnState(state) },
         );
       },
       studioOpen,

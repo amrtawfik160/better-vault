@@ -11,9 +11,9 @@ import { StudioRunnerProvider } from "@/components/studio/studio-runner";
 import { ToolDialog } from "@/components/studio/tool-dialog";
 import { AddSourceDialog } from "@/components/sources/add-source-dialog";
 import { SourceReader } from "@/components/sources/source-reader";
-import { ReviewReturn } from "@/components/study/review-return";
+import { StudyReturnLinks } from "@/components/study/study-return-links";
 import { useNotebook } from "@/lib/db/notebooks";
-import { reviewReturnState } from "@/lib/study/review-session";
+import { studyReturnState } from "@/lib/study/return-links";
 import { ChatView } from "./chat-view";
 import { SourcesView } from "./sources-view";
 import { StudioView } from "./studio-view";
@@ -77,7 +77,7 @@ function WorkspaceLayout() {
     const rest = new URLSearchParams(params);
     for (const param of ["source", "passage", "add", "tab"]) rest.delete(param);
     if (source || view === "chat" || view === "sources") rest.delete("output");
-    setParams(rest, { replace: true, state: reviewReturnState(state) });
+    setParams(rest, { replace: true, state: studyReturnState(state) });
   }, [key, params, state, setParams, setTab, readSource, setAddSourceOpen]);
 
   useEffect(() => {
@@ -91,7 +91,7 @@ function WorkspaceLayout() {
       className="h-full gap-0"
     >
       <TopBar />
-      <ReviewReturn className="shrink-0 px-3 sm:px-5" />
+      <StudyReturnLinks className="shrink-0 px-3 sm:px-5" />
       <div className="relative min-h-0 flex-1">
         {/* The prompt belongs to the chat; kept mounted so a draft survives a tab switch. */}
         <Tabs.Content value="chat" keepMounted className="relative h-full">
@@ -125,7 +125,7 @@ function NotebookNotFound() {
       <div className="max-w-sm text-center">
         <h1 className="text-xl font-semibold">{t("notFound.title")}</h1>
         <p className="mt-2 text-muted-foreground">{t("notFound.body")}</p>
-        <ReviewReturn className="mt-4" />
+        <StudyReturnLinks className="mt-4" />
         <Link to={routes.home} className={buttonVariants({ className: "mt-6" })}>
           {t("notFound.action")}
         </Link>

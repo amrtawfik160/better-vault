@@ -31,7 +31,7 @@ import { ContextMenu, ContextMenuTrigger } from "@/components/common/context-men
 import { Icon } from "@/components/icon";
 import { Menu } from "@/components/panelui/menu";
 import { SettingsSheet } from "@/components/settings/settings-sheet";
-import { ReviewReturn } from "@/components/study/review-return";
+import { StudyReturnLinks } from "@/components/study/study-return-links";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { openCommandPalette } from "@/lib/command";
 import type { Folder } from "@/lib/db/database";
@@ -466,7 +466,7 @@ export function NotebookHome() {
           />
         </header>
 
-        <ReviewReturn className="shrink-0 px-3 sm:px-5" />
+        <StudyReturnLinks className="shrink-0 px-3 sm:px-5" />
 
         {panelPage ? (
           <main className="min-h-0 flex-1 px-2 pb-2 md:p-2 md:ps-2">

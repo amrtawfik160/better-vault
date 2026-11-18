@@ -1,7 +1,7 @@
 import { Link, useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
 import { originHref, originLabel } from "@/lib/study/links";
-import { reviewReturnState } from "@/lib/study/review-session";
+import { returnToTutor, studyReturnState, type TutorReturnFocus } from "@/lib/study/return-links";
 import type { StudyOrigin } from "@/lib/study/records";
 
 export function StudyOriginLink({
@@ -9,23 +9,28 @@ export function StudyOriginLink({
   label,
   state,
   onClick,
+  tutorFocus,
 }: {
   origin: StudyOrigin;
   label?: string;
-  state?: ReturnType<typeof reviewReturnState>;
+  state?: ReturnType<typeof studyReturnState>;
   onClick?: () => void;
+  tutorFocus?: TutorReturnFocus;
 }) {
   const { t } = useTranslation("home");
   const location = useLocation();
-  const current = reviewReturnState(location.state);
   const params = new URLSearchParams(location.search);
   const readerTutor = params.get("readerTutor");
   const href = originHref(origin);
-  const destination =
-    readerTutor && origin.kind === "book" && origin.bookId === params.get("book")
-      ? `${href}&${new URLSearchParams({ readerTutor, readerView: "book" })}`
-      : href;
-  const returnState = state ?? current;
+  const sameReader = readerTutor && origin.kind === "book" && origin.bookId === params.get("book");
+  const destination = sameReader
+    ? `${href}&${new URLSearchParams({ readerTutor, readerView: "book" })}`
+    : href;
+  const current = state ?? location.state;
+  const returnState =
+    tutorFocus && !sameReader
+      ? returnToTutor(location.pathname + location.search, current, tutorFocus)
+      : studyReturnState(current);
   return (
     <Link
       to={destination}
