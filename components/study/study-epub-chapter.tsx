@@ -164,6 +164,7 @@ export function StudyEpubChapter({
   font,
   theme,
   onSelect,
+  onReadingSurface,
   go,
 }: {
   fileId: string;
@@ -174,6 +175,7 @@ export function StudyEpubChapter({
   font: number;
   theme: StudyEpubTheme;
   onSelect: (root: HTMLElement) => void;
+  onReadingSurface: (surface: { section: number; root: HTMLElement | null }) => void;
   go: (index: number) => void;
 }) {
   const [loaded, setLoaded] = useState<{
@@ -183,6 +185,9 @@ export function StudyEpubChapter({
   } | null>();
   const content = useRef<HTMLDivElement>(null);
   useRenderedStudyMarks(content, Boolean(loaded), section.text, marks);
+  useEffect(() => {
+    if (loaded !== undefined) onReadingSurface({ section: index, root: content.current });
+  }, [index, loaded, onReadingSurface]);
 
   useEffect(() => {
     let live = true;

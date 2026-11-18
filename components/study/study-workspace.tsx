@@ -361,6 +361,7 @@ export default function StudyWorkspace({
   const { t } = useTranslation("home");
   const { t: tCommon } = useTranslation();
   const location = useLocation();
+  const [readerViewport, setReaderViewport] = useState<HTMLDivElement | null>(null);
   const [params, setParams] = useSearchParams();
   const [settings, setSettings] = useState(false);
   const [openingPractice, setOpeningPractice] = useState(false);
@@ -553,13 +554,16 @@ export default function StudyWorkspace({
           <StudyReader
             key={book.id}
             book={book}
+            viewport={readerViewport}
             vaultId={studyVaultId}
             requestedPage={page}
+            reference={params.get("reference") === "1"}
             focusedHighlight={params.get("highlight") ?? undefined}
             focusedRange={focusedRange}
             highlights={highlights.filter((highlight) => highlight.bookId === book.id)}
             back={() => go("library", libraryScope)}
             openPage={(section) => locate(book.id, section)}
+            resume={() => locate(book.id, book.section)}
             openPassage={(section, range) =>
               go("library", {
                 ...libraryScope,
@@ -729,6 +733,7 @@ export default function StudyWorkspace({
             <ScrollArea
               key={`${studyVaultId}:${book?.id ?? ""}:${thread?.id ?? ""}`}
               className="min-h-0 flex-1"
+              viewportRef={entry === "library" && book ? setReaderViewport : undefined}
             >
               <div className="mx-auto max-w-6xl px-4 pt-5 pb-8 sm:px-6">{content}</div>
             </ScrollArea>

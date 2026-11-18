@@ -1,4 +1,6 @@
 .study-pdf-text {
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
   position: absolute;
   inset-block-start: 0;
   inset-inline-start: 0;

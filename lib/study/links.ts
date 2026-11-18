@@ -44,6 +44,7 @@ export function originHref(origin: StudyOrigin) {
         at: origin.offset,
         length: origin.length,
         rev: origin.revision,
+        reference: origin.section === undefined ? undefined : "1",
       });
     case "note":
       return withQuery(routes.home, {

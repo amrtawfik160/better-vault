@@ -11,6 +11,7 @@ export function StudyPdfPage({
   marks,
   zoom,
   onSelect,
+  onReadingSurface,
 }: {
   fileId: string;
   page: number;
@@ -18,6 +19,7 @@ export function StudyPdfPage({
   marks: StudyRecordOf<"highlight">[];
   zoom: number;
   onSelect: (root: HTMLElement) => void;
+  onReadingSurface: (surface: { section: number; root: HTMLElement | null }) => void;
 }) {
   const paper = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -25,6 +27,9 @@ export function StudyPdfPage({
   const [drawFailed, setDrawFailed] = useState(false);
   const [ready, setReady] = useState(false);
   useRenderedStudyMarks(text, ready, sectionText, marks);
+  useEffect(() => {
+    if (ready || drawFailed) onReadingSurface({ section: page, root: text.current });
+  }, [drawFailed, onReadingSurface, page, ready]);
 
   useEffect(() => {
     const frame = paper.current;

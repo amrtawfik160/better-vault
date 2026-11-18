@@ -252,6 +252,7 @@
       "noReadableSelection": "Choose material with readable text to continue."
     },
     "reader": {
+      "resume": "Resume reading",
       "editConflict": "This document changed while you were editing it. Copy your draft, then reopen the editor to see the latest text.",
       "passageChanged": "This link no longer points to an exact passage.",
       "search": "Search this document",

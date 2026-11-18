@@ -27,6 +27,13 @@ function textBook(...versions: string[]): StudyBook {
 }
 
 describe("Study passages after editing", () => {
+  it("opens a section-only reference independently of the saved reading place", () => {
+    const href = originHref({ kind: "book", bookId: "study-book", section: 0 });
+    const reference = new URL(href, "https://deeple.test").searchParams;
+    expect(reference.get("reference")).toBe("1");
+    expect(reference.get("page")).toBe("0");
+  });
+
   it("keeps existing URLs and citations from different revisions on the same passage", () => {
     const original = `Original opening\n\n${quote}\n\nOriginal ending`;
     const intermediate = `بداية جديدة 📚\n\n${quote}\n\nOriginal ending`;

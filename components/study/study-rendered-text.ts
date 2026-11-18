@@ -11,7 +11,11 @@ export function renderedSelection(root: HTMLElement, canonical: string) {
   if (!selection?.rangeCount || selection.isCollapsed) return;
   const range = selection.getRangeAt(0);
   if (!root.contains(range.commonAncestorContainer)) return;
-  const quote = compact(range.toString().trim().slice(0, 3000));
+  return canonicalRenderedRange(root, range, canonical, 3_000);
+}
+
+export function canonicalRenderedRange(root: HTMLElement, range: Range, canonical: string, limit: number) {
+  const quote = compact(range.toString().trim().slice(0, limit));
   if (!quote) return;
   const prefix = range.cloneRange();
   prefix.selectNodeContents(root);
@@ -34,6 +38,44 @@ export function renderedSelection(root: HTMLElement, canonical: string) {
   return { offset, text: canonical.slice(offset, end + 1) };
 }
 
+function renderedTextIndex(root: HTMLElement) {
+  const pieces: { node: Text; offset: number }[] = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let text = "";
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (!(node instanceof Text)) continue;
+    for (let offset = 0; offset < node.length; offset++) {
+      const char = node.data[offset];
+      if (/\s/u.test(char)) continue;
+      text += char;
+      pieces.push({ node, offset });
+    }
+  }
+  return { text, pieces };
+}
+
+function locateRenderedRange(
+  { text, pieces }: ReturnType<typeof renderedTextIndex>,
+  canonical: string,
+  mark: Pick<Mark, "quote" | "offset">,
+) {
+  const quote = compact(mark.quote);
+  if (!quote) return;
+  const expected = compact(canonical.slice(0, mark.offset)).length;
+  const start = locateStudyQuote(text, quote, expected);
+  const first = pieces[start];
+  const last = pieces[start + quote.length - 1];
+  if (!first || !last) return;
+  const range = new Range();
+  range.setStart(first.node, first.offset);
+  range.setEnd(last.node, last.offset + 1);
+  return range;
+}
+
+export function renderedStudyRange(root: HTMLElement, canonical: string, mark: Pick<Mark, "quote" | "offset">) {
+  return locateRenderedRange(renderedTextIndex(root), canonical, mark);
+}
+
 export function useRenderedStudyMarks(
   root: RefObject<HTMLDivElement | null>,
   ready: boolean,
@@ -43,31 +85,11 @@ export function useRenderedStudyMarks(
   useEffect(() => {
     const region = root.current;
     if (!ready || !region || !globalThis.CSS?.highlights || !marks.length) return;
-    const pieces: { node: Text; offset: number }[] = [];
-    const walker = document.createTreeWalker(region, NodeFilter.SHOW_TEXT);
-    let rendered = "";
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      if (!(node instanceof Text)) continue;
-      for (let offset = 0; offset < node.length; offset++) {
-        const char = node.data[offset];
-        if (/\s/u.test(char)) continue;
-        rendered += char;
-        pieces.push({ node, offset });
-      }
-    }
+    const indexed = renderedTextIndex(region);
     const colored = new Map(markColors.map((color) => [color, new Highlight()]));
     for (const mark of marks) {
-      const quote = compact(mark.quote);
-      if (!quote) continue;
-      const offset = compact(canonical.slice(0, mark.offset)).length;
-      const start = locateStudyQuote(rendered, quote, offset);
-      if (start < 0) continue;
-      const first = pieces[start];
-      const last = pieces[start + quote.length - 1];
-      const range = new Range();
-      range.setStart(first.node, first.offset);
-      range.setEnd(last.node, last.offset + 1);
-      colored.get(mark.color)?.add(range);
+      const range = locateRenderedRange(indexed, canonical, mark);
+      if (range) colored.get(mark.color)?.add(range);
     }
     for (const [color, highlighting] of colored) {
       if (highlighting.size) CSS.highlights.set(`study-${color}`, highlighting);

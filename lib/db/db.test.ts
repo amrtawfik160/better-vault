@@ -11,6 +11,7 @@ import {
   readStudyThread,
   readStudyTutorSources,
   saveStudyCard,
+  saveStudyReadingPlace,
   saveStudyText,
   startSourceTutor,
   startBookTutor,
@@ -1017,6 +1018,30 @@ describe.each(backends)("%s store", (name, create) => {
       ).toBeUndefined();
       await store().deleteStudy(thread.id);
       expect(await updateStudyReport(thread.id, { kind: "save", report: newReport })).toBe(false);
+    });
+
+    it("keeps the latest reading place when older scroll writes arrive after changing sections", async () => {
+      const quote = "Quorum intersection";
+      const book = await addStudyBook({
+        title: "Reader position",
+        format: "text",
+        sections: [{ title: "Introduction", text: "First page" }, { title: "Quorums", text: quote }],
+      });
+      const openedAt = Date.now();
+      const previous = { section: 0, surface: "text" as const, progress: 0.3 };
+      const current = { section: 1, surface: "text" as const, progress: 0.2, anchor: { offset: 0, quote, revision: 0 } };
+      await saveStudyReadingPlace(book.id, previous, openedAt);
+      await store().patchStudyBook({ id: book.id, change: { section: 1 }, updatedAt: openedAt + 20 });
+      await saveStudyReadingPlace(book.id, current, openedAt + 30);
+      await saveStudyReadingPlace(book.id, previous, openedAt + 10);
+      await store().patchStudyBook({ id: book.id, change: { section: 0 }, updatedAt: openedAt + 15 });
+      await store().patchStudyBook({ id: book.id, change: { bookmarks: [0] }, updatedAt: openedAt + 40 });
+      const backup = JSON.parse(JSON.stringify(await exportBackup()));
+      await deleteAllData();
+      await importBackup(backup);
+      expect(await store().getStudy(book.id)).toMatchObject({
+        section: 1, readingPlace: current, lastReadAt: openedAt + 30, bookmarks: [0],
+      });
     });
 
     it("saves passage positions and notebook chunks atomically with a text edit", async () => {

@@ -20,6 +20,7 @@ import type {
   StudyRecord,
   StudySection,
   StudyReportChange,
+  StudyReadingPlace,
 } from "@/lib/study/records";
 import { createNote } from "./notes";
 import type { Note, Source, StudioOutput } from "./types";
@@ -523,6 +524,10 @@ export async function renameStudyBook(book: StudyBook, title: string) {
 
 export function updateStudyBook(id: string, change: Omit<StudyBookWrite["change"], "title">) {
   return store().patchStudyBook({ id, change, updatedAt: Date.now() });
+}
+
+export function saveStudyReadingPlace(id: string, readingPlace: StudyReadingPlace, capturedAt: number) {
+  return store().patchStudyBook({ id, change: { readingPlace }, updatedAt: capturedAt });
 }
 
 export async function rateStudyItem(id: string, rating: StudyRating, seconds: number) {

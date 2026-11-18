@@ -136,12 +136,19 @@ export function patchedStudyBook(
   book: StudyBook,
   { change, updatedAt }: StudyBookWrite,
 ): StudyBook {
+  const { section: requestedSection, readingPlace, ...properties } = change;
+  const fresh = updatedAt >= (book.lastReadAt ?? 0);
+  const section = fresh && requestedSection !== undefined && book.sections[requestedSection]
+    ? requestedSection : book.section;
+  const position = fresh && readingPlace?.section === section ? readingPlace : undefined;
+  const read = fresh && (requestedSection === section || position);
   return {
     ...book,
-    ...change,
+    ...properties,
+    section,
+    readingPlace: position ?? (section === book.section ? book.readingPlace : undefined),
     updatedAt: Math.max(book.updatedAt, updatedAt),
-    lastReadAt:
-      change.section === undefined ? book.lastReadAt : Math.max(book.lastReadAt ?? 0, updatedAt),
+    lastReadAt: read ? updatedAt : book.lastReadAt,
   };
 }
 

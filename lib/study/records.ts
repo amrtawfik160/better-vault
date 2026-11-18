@@ -17,6 +17,12 @@ const schedule = z.object({
   lapses: z.number().int().nonnegative().optional(),
 });
 const index = z.number().int().nonnegative();
+const readingPlace = z.object({
+  section: index,
+  surface: z.enum(["text", "layout"]),
+  progress: z.number().min(0).max(1),
+  anchor: z.object({ offset: index, quote: z.string().min(1).max(96), revision: index }).optional(),
+});
 const textEdit = z.object({
   section: index,
   ranges: z.array(z.object({ before: index, after: index, length: z.number().int().positive() })),
@@ -114,6 +120,7 @@ export const studyRecordSchema = z.discriminatedUnion("kind", [
       .optional(),
     attachedToNotebook: z.literal(true).optional(),
     lastReadAt: z.number().optional(),
+    readingPlace: readingPlace.optional(),
   }),
   base.extend({
     kind: z.literal("card"),
@@ -195,10 +202,11 @@ export type StudyCitation = z.infer<typeof citation>;
 export type StudyRecord = z.infer<typeof studyRecordSchema>;
 export type StudyRecordOf<K extends StudyRecord["kind"]> = Extract<StudyRecord, { kind: K }>;
 export type StudyBook = StudyRecordOf<"book">;
+export type StudyReadingPlace = z.infer<typeof readingPlace>;
 export type StudyTextEdit = z.infer<typeof textEdit>;
 export type StudyBookWrite = {
   id: string;
-  change: Partial<Pick<StudyBook, "title" | "section" | "bookmarks" | "bookmarkPlaces">>;
+  change: Partial<Pick<StudyBook, "title" | "section" | "bookmarks" | "bookmarkPlaces" | "readingPlace">>;
   updatedAt: number;
 };
 export type StudyBookTextWrite = {

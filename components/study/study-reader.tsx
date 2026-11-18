@@ -8,6 +8,7 @@ import { StudyEpubChapter, type StudyEpubTheme } from "./study-epub-chapter";
 import { StudyPdfPage } from "./study-pdf-page";
 import { StudyFlashcardDraftDialog, type FlashcardSource } from "./study-flashcard-generator";
 import { renderedSelection } from "./study-rendered-text";
+import { useStudyReadingPlace } from "./study-reading-place";
 import { Input } from "@/components/panelui/input";
 import { Menu } from "@/components/panelui/menu";
 import { loadBlob } from "@/lib/db/blobs";
@@ -91,23 +92,29 @@ function highlighted(
 
 export function StudyReader({
   book,
+  viewport,
   vaultId,
   requestedPage,
+  reference,
   focusedHighlight,
   focusedRange,
   highlights,
   openPage,
+  resume,
   openPassage,
   startChat,
   back,
 }: {
   book: StudyBook;
+  viewport: HTMLDivElement | null;
   vaultId: string;
   requestedPage?: number;
+  reference: boolean;
   focusedHighlight?: string;
   focusedRange?: { offset: number; length: number; revision?: number };
   highlights: StudyRecordOf<"highlight">[];
   openPage: (section: number) => void;
+  resume: () => void;
   openPassage: (section: number, range: { offset: number; length: number }) => void;
   startChat: (
     scope: "passage" | "chapter" | "book",
@@ -117,11 +124,14 @@ export function StudyReader({
   ) => void;
   back: () => void;
 }) {
-  const index = Math.min(Math.max(0, requestedPage ?? book.section), book.sections.length - 1);
+  const [openedSection] = useState(book.section);
+  const index = Math.min(Math.max(0, requestedPage ?? openedSection), book.sections.length - 1);
   const section = book.sections[index];
   const revision = studyTextRevision(book);
   const navigate = useNavigate();
-  const returnState = reviewReturnState(useLocation().state);
+  const location = useLocation();
+  const returnState = reviewReturnState(location.state);
+  const visitingPassage = reference || !!(focusedHighlight || focusedRange);
   const { t } = useTranslation("home");
   const source = useSource(book.sourceId);
   const fileId = source === null ? undefined : book.fileId;
@@ -136,7 +146,6 @@ export function StudyReader({
   const focusLength = focus?.length;
   const missingPassage = Boolean((focusedRange || focusedHighlight) && !focus);
   const textBody = useRef<HTMLElement>(null);
-  const readerTop = useRef<HTMLElement>(null);
   const passageNotice = useRef<HTMLParagraphElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -153,14 +162,32 @@ export function StudyReader({
   const [font, setFont] = useState(18);
   const [zoom, setZoom] = useState(100);
   const [epubTheme, setEpubTheme] = useState<StudyEpubTheme>("system");
-  const [viewPdf, setViewPdf] = useState(false);
-  const [viewEpub, setViewEpub] = useState(false);
+  const [showLayout, setShowLayout] = useState(
+    !visitingPassage && book.readingPlace?.section === index && book.readingPlace.surface === "layout",
+  );
+  const [readingSurface, setReadingSurface] = useState<{ section: number; root: HTMLElement | null }>();
+  const viewPdf = showLayout && book.format === "pdf";
+  const viewEpub = showLayout && book.format === "epub";
+  const layout = showLayout && fileId && readingSurface?.section === index
+    ? readingSurface.root : undefined;
   const [result, setResult] = useState<AssistResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [fileUrl, setFileUrl] = useState<string>();
   const pendingAssist = useRef<AbortController | null>(null);
   const started = useRef(0);
   const latestInteraction = useRef(0);
+  useStudyReadingPlace({
+    book,
+    section: index,
+    revision,
+    visit: location.key,
+    viewport,
+    article: textBody,
+    layout,
+    loadingLayout: Boolean(showLayout && fileId && layout === undefined),
+    enabled: !visitingPassage && !edit,
+    activity: latestInteraction,
+  });
   const pageHighlights = highlights.flatMap((item) => {
     if (item.section !== index) return [];
     const offset = locateStudyMark(book, item);
@@ -169,7 +196,10 @@ export function StudyReader({
   const bookmarkPlaces = book.bookmarkPlaces ?? [];
 
   useEffect(() => {
-    void updateStudyBook(book.id, { section: index });
+    if (!visitingPassage) void updateStudyBook(book.id, { section: index });
+  }, [book.id, index, visitingPassage]);
+
+  useEffect(() => {
     started.current = Date.now();
     latestInteraction.current = started.current;
     const checkpoint = () => {
@@ -243,7 +273,11 @@ export function StudyReader({
     setResult(null);
     setSearch("");
     openPage(page);
-    readerTop.current?.scrollIntoView({ block: "start" });
+  }
+
+  function toggleLayout(visible: boolean) {
+    if (visible && !showLayout) setReadingSurface(undefined);
+    setShowLayout(visible);
   }
 
   function capture() {
@@ -436,7 +470,7 @@ export function StudyReader({
     : [];
 
   return (
-    <section className="space-y-5" ref={readerTop}>
+    <section className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <Button size="sm" variant="ghost" onClick={back}>
@@ -447,6 +481,14 @@ export function StudyReader({
           </h2>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {visitingPassage ? (
+            <Button variant="outline" onClick={() => {
+              toggleLayout(book.readingPlace?.surface === "layout");
+              resume();
+            }}>
+              {t("study.reader.resume")}
+            </Button>
+          ) : null}
           <Link
             to={routes.notebook(book.notebookId)}
             state={returnState}
@@ -485,12 +527,12 @@ export function StudyReader({
             </a>
           ) : null}
           {book.format === "pdf" && fileId ? (
-            <Button variant="outline" onClick={() => setViewPdf(!viewPdf)}>
+            <Button variant="outline" onClick={() => toggleLayout(!viewPdf)}>
               {viewPdf ? "Hide original page" : "Show original page"}
             </Button>
           ) : null}
           {book.format === "epub" && fileId ? (
-            <Button variant="outline" onClick={() => setViewEpub(!viewEpub)}>
+            <Button variant="outline" onClick={() => toggleLayout(!viewEpub)}>
               {viewEpub ? "Hide book layout" : "Show book layout"}
             </Button>
           ) : null}
@@ -757,6 +799,7 @@ export function StudyReader({
               marks={pageHighlights}
               zoom={zoom}
               onSelect={captureRendered}
+              onReadingSurface={setReadingSurface}
             />
           </>
         ) : null}
@@ -786,6 +829,7 @@ export function StudyReader({
               theme={epubTheme}
               go={go}
               onSelect={captureRendered}
+              onReadingSurface={setReadingSurface}
             />
           </>
         ) : null}
