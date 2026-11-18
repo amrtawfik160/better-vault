@@ -141,6 +141,17 @@ export const studyGoal = z.enum([
 export const studyScopes = ["passage", "chapter", "book", "notes", "materials", "cards", "image", "general"] as const;
 export const studyCorrections = ["live", "report", "off"] as const;
 export const studyRatings = ["again", "hard", "good", "easy"] as const;
+export const maxReviewAttemptAnswer = 10_000;
+export const maxReviewAttemptCue = 500;
+export const maxReviewAttemptReference = 3_000;
+const reviewAttempt = z.object({
+  answer: z.string().min(1).max(maxReviewAttemptAnswer),
+  choice: index.optional(),
+  cue: z.string().max(maxReviewAttemptCue),
+  reference: z.string().max(maxReviewAttemptReference),
+  threadId: z.string().min(1),
+});
+export type StudyReviewAttempt = z.infer<typeof reviewAttempt>;
 export const studyHighlightColor = z.enum(["yellow", "green", "blue", "pink", "purple"]);
 
 const documentDraftBody = z.object({ text: z.string(), markdown: z.boolean() });
@@ -203,9 +214,10 @@ export const studyReportReplySchema = z.object({
   vocabulary: z.array(reportVocabulary).optional(),
 });
 const feedback = z.record(z.string(), z.boolean());
+export const maxStudyTutorDraftLength = 12_000;
 export const studyTutorDraftSchema = z.object({
   id: z.string(),
-  text: z.string().max(12_000),
+  text: z.string().max(maxStudyTutorDraftLength),
   at: z.number(),
   speech: z.enum(["dictated", "spoken"]).optional(),
 });
@@ -295,6 +307,7 @@ export const studyRecordSchema = z.discriminatedUnion("kind", [
     rating: z.enum(studyRatings).optional(),
     itemId: z.string().optional(),
     reviewSessionId: z.string().optional(),
+    reviewAttempt: reviewAttempt.optional(),
     activitySessionId: z.string().optional(),
     origin: studyOriginSchema.optional(),
   }),

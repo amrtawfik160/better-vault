@@ -25,8 +25,13 @@ import {
   studyHighlightOrigin,
   studyHref,
 } from "@/lib/study/links";
-import { difficultStudyItems, studyHighlightPreview } from "@/lib/study/recall";
-import { quizChoiceLabel, quizChoicesText } from "@/lib/study/quiz-cards";
+import {
+  difficultStudyItems,
+  studyHighlightPreview,
+  studyReviewFeedback,
+  studyReviewMaterial,
+} from "@/lib/study/recall";
+import { quizChoicesText } from "@/lib/study/quiz-cards";
 import {
   loadReviewSession,
   maxReviewResponseLength,
@@ -58,6 +63,7 @@ import {
 import { scheduleState, studyIntervalLabel } from "@/lib/study/schedule";
 import { vocabularyOrigin } from "@/lib/study/vocabulary";
 import {
+  maxReviewAttemptAnswer,
   studyHighlightColor,
   studyRatings,
   type StudyBook,
@@ -181,9 +187,13 @@ export function StudyReview({
   const awaitingHistory =
     finished?.committed &&
     items.some(({ id, schedule }) => id === finished.id && schedule.dueAt === finished.dueAt);
-  const difficult = !item && rated && !practiced && !nextRetry && !busy && !awaitingHistory
+  const difficult = !item && rated && !practiced && !busy && !awaitingHistory
     ? difficultStudyItems(items, history, sessionId)
     : [];
+  const followThrough = difficult
+    .toSorted((a, b) => b.reviewedAt - a.reviewedAt)
+    .find(({ attempt }) => attempt !== undefined);
+  const followThroughAttempt = followThrough?.attempt;
   const remaining = items.toSorted((a, b) => a.schedule.dueAt - b.schedule.dueAt)[0];
   const isRevealed = Boolean(item && revealed === item.id && (!position || pinned));
   const choices = item?.kind === "card" && item.quizChoices?.length ? item.quizChoices : undefined;
@@ -194,6 +204,14 @@ export function StudyReview({
   const attemptedAnswer = response?.kind === "choice" ? choices?.[response.index] : response?.value.trim();
   const feedbackId = item && isRevealed && attemptedAnswer
     ? (session.feedbackId ?? `review-feedback:${JSON.stringify([vaultId, sessionId, item.id, item.schedule.dueAt])}`)
+    : undefined;
+  const attempt = item && attemptedAnswer && feedbackId
+    ? {
+        ...studyReviewMaterial(item),
+        answer: attemptedAnswer.slice(0, maxReviewAttemptAnswer),
+        choice: response?.kind === "choice" ? response.index : undefined,
+        threadId: feedbackId,
+      }
     : undefined;
   const hasFeedback = feedbackId !== undefined && threads.some((thread) => thread.id === feedbackId);
   const question = item?.kind === "card" ? item.front : item?.cue || t("study.recall.highlightPrompt");
@@ -235,6 +253,7 @@ export function StudyReview({
       const committed = await rateStudyItem(item.id, rating, (gradedAt - started) / 1000, {
         sessionId,
         dueAt,
+        attempt,
       });
       setFinished({ id: item.id, dueAt, committed });
       setSession((value) => ({
@@ -313,16 +332,7 @@ export function StudyReview({
 
   function openTutor() {
     if (!item) return;
-    const responseText = attemptedAnswer?.slice(0, 10_000);
-    const draftText = feedbackId && attemptedAnswer
-      ? t(item.kind === "card" ? "study.recall.cardFeedbackPrompt" : "study.recall.highlightFeedbackPrompt", {
-          cue: question.slice(0, 500),
-          response: response?.kind === "choice"
-            ? t("study.recall.feedbackChoice", { choice: quizChoiceLabel(response.index), response: responseText })
-            : responseText,
-        })
-      : undefined;
-    practice(item, returnState, draftText && feedbackId ? { threadId: feedbackId, text: draftText } : undefined);
+    practice(item, returnState, attempt ? studyReviewFeedback(t, item, attempt) : undefined);
   }
 
   return (
@@ -500,8 +510,30 @@ export function StudyReview({
             )}
           </p>
           {nextRetry ? <RetryCountdown dueAt={nextRetry.schedule.dueAt} /> : null}
+          {followThrough && followThroughAttempt ? (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-3">
+              <DirectionalText
+                as="span"
+                text={studyHighlightPreview(followThroughAttempt.cue || t("study.recall.highlightPrompt"))}
+                className="min-w-0 wrap-break-word"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={openingPractice}
+                onClick={() => practice(
+                  followThrough.item,
+                  returnState,
+                  studyReviewFeedback(t, followThrough.item, followThroughAttempt),
+                )}
+              >
+                {t(threads.some(({ id }) => id === followThroughAttempt.threadId)
+                  ? "study.recall.continueTutorFeedback" : "study.recall.tutorFeedback")}
+              </Button>
+            </div>
+          ) : null}
           <div className="flex flex-wrap items-center gap-3">
-            {difficult.length ? (
+            {difficult.length && !nextRetry ? (
               <Button onClick={() => practiceDifficult(difficult.map(({ item }) => item.id))}>
                 {t(useHighlights ? "study.recall.practiceWeakHighlights" : "study.recall.practiceWeakCards", {
                   count: difficult.length,
@@ -525,7 +557,7 @@ export function StudyReview({
                 {t("study.recall.practiceNow")}
               </Button>
             ) : null}
-            {nextRetry ? (
+            {nextRetry || difficult.length ? (
               <Link
                 to={studyHref("today", { vault: vaultId })}
                 className="underline underline-offset-4"

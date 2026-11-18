@@ -8,7 +8,7 @@ import { StudyActivity } from "./study-activity";
 import { isFocusedStudyReader, originHref, queryIndex, studyHighlightOrigin, studyHref, studyVisualFromReader } from "@/lib/study/links";
 import { tutorBookOrigin } from "@/lib/study/passages";
 import { captureStudyImage, type StudyImageCapture } from "@/lib/study/visual-card";
-import { difficultStudyItems, studyHighlightPreview } from "@/lib/study/recall";
+import { difficultStudyItems, studyHighlightPreview, studyReviewFeedback } from "@/lib/study/recall";
 import { studyReadingProgress } from "@/lib/study/reading-progress";
 import { studyActivityGroups } from "@/lib/study/activity";
 import { studyReportKey } from "@/lib/study/reports";
@@ -27,7 +27,7 @@ import { studyReturnState, tutorReturnState } from "@/lib/study/return-links";
 import { studyVaultIndex } from "@/lib/study/vault";
 import { studyTextRevision } from "@/lib/study/text-edits";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/panelui/button";
+import { Button, buttonVariants } from "@/components/panelui/button";
 import { Card } from "@/components/panelui/card";
 import { Tabs } from "@/components/panelui/tabs";
 import { SettingsSheet } from "@/components/settings/settings-sheet";
@@ -86,17 +86,19 @@ function DailyStudy({
   go: (tab: Tab, params?: Record<string, string>) => void;
   read: (book: StudyBook) => void;
   teachBack: (book: StudyBook) => void;
-  practice: (kind: "card" | "highlight", ids: string[]) => void;
+  practice: (kind: "card" | "highlight", ids: string[], feedback?: ReviewTutorFeedback) => void;
   openingPractice: boolean;
 }) {
   const { t } = useTranslation("home");
   const navigate = useNavigate();
+  const [expanded, setExpanded] = useState({ card: false, highlight: false });
   const reviewable = rows.filter((row) => row.kind === "card" || row.kind === "highlight");
   const now = useStudyClock(reviewable);
   const today = new Date(now);
   today.setHours(0, 0, 0, 0);
   const sessions = rows.filter((item) => item.kind === "session");
   const threads = rows.filter((item) => item.kind === "thread");
+  const threadIds = new Set(threads.map(({ id }) => id));
   const recentReport = threads
     .flatMap((thread) => (thread.report ? [{ thread, report: thread.report }] : []))
     .sort(
@@ -259,25 +261,50 @@ function DailyStudy({
                     </Button>
                   </div>
                   <ul className="divide-y">
-                    {entries.slice(0, 3).map(({ item, rating }) => {
+                    {(expanded[kind] ? entries : entries.slice(0, 3)).map(({ item, rating, attempt }) => {
                       const origin = item.kind === "highlight" ? studyHighlightOrigin(item) : item.origin;
                       const prompt = item.kind === "highlight"
                         ? item.cue || studyHighlightPreview(item.quote)
                         : item.front;
+                      const feedbackLabel = attempt && t(threadIds.has(attempt.threadId)
+                        ? "study.recall.continueTutorFeedback" : "study.recall.tutorFeedback");
                       return (
                         <li
                           key={item.id}
-                          className="flex min-w-0 flex-wrap items-center gap-x-3 py-2 text-sm"
+                          className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm"
                         >
                           <span dir="auto" className="min-w-0 flex-1 wrap-break-word">
                             {prompt}
                           </span>
                           <span className="text-muted-foreground">{t(`study.recall.rating.${rating}`)}</span>
                           {origin ? <StudyOriginLink origin={origin} /> : null}
+                          {attempt && feedbackLabel ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={openingPractice}
+                              aria-label={t("study.recall.feedbackFor", { action: feedbackLabel, prompt })}
+                              onClick={() => practice(kind, [item.id], studyReviewFeedback(t, item, attempt))}
+                            >
+                              {feedbackLabel}
+                            </Button>
+                          ) : null}
                         </li>
                       );
                     })}
                   </ul>
+                  {entries.length > 3 ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-expanded={expanded[kind]}
+                      onClick={() => setExpanded((value) => ({ ...value, [kind]: !value[kind] }))}
+                    >
+                      {t(expanded[kind] ? "study.recall.showFewerDifficult" : "study.recall.showMoreDifficult", {
+                        count: entries.length - 3,
+                      })}
+                    </Button>
+                  ) : null}
                 </div>
               );
             })}
@@ -746,9 +773,16 @@ export default function StudyWorkspace({
         : await startHighlightTutor(ids, studyVaultId, t("study.highlights.tutorTitle"), draft, feedback?.threadId);
       if (thread) {
         const returnState = state ?? studyReturnState(location.state);
-        setParams({ view: "study", tab: "tutor", vault: studyVaultId, thread: thread.id }, {
-          state: feedback ? { ...returnState, studyReviewFeedback: true } : returnState,
-        });
+        setParams(
+          {
+            view: "study",
+            tab: "tutor",
+            vault: studyVaultId,
+            thread: thread.id,
+            ...(feedback && tab === "today" ? { fromToday: "1" } : {}),
+          },
+          { state: feedback ? { ...returnState, studyReviewFeedback: true } : returnState },
+        );
       } else toast.error(t(kind === "card" ? "study.materials.noCardsSelected" : "study.highlights.unavailable"));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
@@ -795,7 +829,7 @@ export default function StudyWorkspace({
           teachBack={(item) =>
             void createThread(item, "chapter", item.section, undefined, "teach-back")
           }
-          practice={(kind, ids) => void openTutorSelection(kind, ids)}
+          practice={(kind, ids, feedback) => void openTutorSelection(kind, ids, undefined, feedback)}
           openingPractice={openingPractice}
         />
       ) : null}
@@ -989,7 +1023,17 @@ export default function StudyWorkspace({
       ) : null}
       {ready && tab === "tutor" ? (
         thread ? (
-          conversation(thread)
+          <>
+            {params.get("fromToday") === "1" ? (
+              <Link
+                to={studyHref("today", { vault: studyVaultId })}
+                className={buttonVariants({ variant: "ghost", size: "sm", className: "mb-2" })}
+              >
+                {t("study.recall.backToToday")}
+              </Link>
+            ) : null}
+            {conversation(thread)}
+          </>
         ) : (
           <TutorIndex
             books={books}

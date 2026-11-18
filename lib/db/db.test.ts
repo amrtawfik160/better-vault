@@ -1353,6 +1353,30 @@ describe.each(backends)("%s store", (name, create) => {
       ]);
     });
 
+    it("keeps difficult review answers with the saved grade and in backups", async () => {
+      const card = await saveStudyCard({ front: "How do majorities overlap?", back: "They share a replica.", tags: [] });
+      const other = await saveStudyCard({ front: "Another question", back: "Another answer", tags: [] });
+      const attempt = {
+        answer: "A majority can decide alone.", choice: 1, cue: card.front, reference: card.back,
+        threadId: "feedback-for-this-attempt",
+      };
+      const review = { sessionId: "recall", dueAt: card.schedule.dueAt, attempt };
+      const outcomes = await Promise.all([
+        rateStudyItem(card.id, "again", 5, review),
+        rateStudyItem(card.id, "again", 5, review),
+      ]);
+      expect(outcomes.sort()).toEqual([false, true]);
+      expect(await rateStudyItem(other.id, "easy", 5, { ...review, dueAt: other.schedule.dueAt })).toBe(true);
+
+      const backup = JSON.parse(JSON.stringify(await exportBackup()));
+      await deleteAllData();
+      await importBackup(backup);
+      const grades = (await store().listStudy()).filter((row) => row.kind === "session");
+      expect(grades).toHaveLength(2);
+      expect(grades.find(({ itemId }) => itemId === card.id)).toMatchObject({ rating: "again", reviewAttempt: attempt });
+      expect(grades.find(({ itemId }) => itemId === other.id)?.reviewAttempt).toBeUndefined();
+    });
+
     it("preserves schedules and source links when saving an edit drafted before a review", async () => {
       const book = await addStudyBook({
         title: "Quorum notes",

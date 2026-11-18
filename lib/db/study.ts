@@ -18,7 +18,7 @@ import { locateStudyMark, resolveStudyRange, studyTextEdit, studyTextRevision } 
 import { cardEvidenceLimit, studyCardPassage, type StudyDraftPassage, type StudyPassage, type StudyTutorSources } from "@/lib/study/passages";
 import { locateCitedChunk } from "@/lib/study/locators";
 import { vocabularyOrigin } from "@/lib/study/vocabulary";
-import { recentPracticeCards, selectedStudyCards, studyHighlightPreview } from "@/lib/study/recall";
+import { isDifficultRating, recentPracticeCards, selectedStudyCards, studyHighlightPreview } from "@/lib/study/recall";
 import { legacyQuizCardSource, quizCardContent } from "@/lib/study/quiz-cards";
 import { studyFollowUpId, studyReportKey, studyReports } from "@/lib/study/reports";
 import { studyTutorContextSchema } from "@/lib/study/records";
@@ -43,6 +43,7 @@ import type {
   StudyRecordOf,
   StudyRating,
   StudyRecord,
+  StudyReviewAttempt,
   StudyReviewItemWrite,
   StudySection,
   StudyReportChange,
@@ -1052,7 +1053,7 @@ export async function rateStudyItem(
   id: string,
   rating: StudyRating,
   seconds: number,
-  review?: { sessionId: string; dueAt: number },
+  review?: { sessionId: string; dueAt: number; attempt?: StudyReviewAttempt },
 ) {
   const backend = store();
   const record = await backend.getStudy(id);
@@ -1074,6 +1075,7 @@ export async function rateStudyItem(
       rating,
       itemId: id,
       reviewSessionId: review?.sessionId,
+      reviewAttempt: isDifficultRating(rating) ? review?.attempt : undefined,
       origin:
         record.kind === "highlight"
           ? { kind: "book", bookId: record.bookId, section: record.section, highlightId: record.id }

@@ -95,10 +95,16 @@ it("keeps the interrupted review on Today while reviewing newly saved correction
       path: "/?view=study&tab=review&thread=tutor&fromAnswer=1",
       state: { ...parent.state, studyReviewSession: "correction", studyReturn: parent },
     };
+    const fromToday = {
+      ...child,
+      state: { ...parent.state, studyReviewSession: "from-today", studyTutorReturn: "/?view=study&tab=tutor&thread=tutor&fromToday=1" },
+    };
     const snapshot = { revealed: "first", rated: 0, practiced: null, position: { id: "first", dueAt: timestamp } };
     saveReviewCheckpoint("work", parent, snapshot);
-    saveReviewCheckpoint("work", child, { ...snapshot, revealed: "" });
-    saveReviewCheckpoint("work", child, { revealed: "", rated: 1, practiced: null });
+    for (const correction of [child, fromToday]) {
+      saveReviewCheckpoint("work", correction, { ...snapshot, revealed: "" });
+      saveReviewCheckpoint("work", correction, { revealed: "", rated: 1, practiced: null });
+    }
     expect(savedReview("work")).toEqual({ ...parent, snapshot });
   } finally {
     vi.unstubAllGlobals();

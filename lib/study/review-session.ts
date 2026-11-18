@@ -230,7 +230,7 @@ export function saveReviewCheckpoint(
     const current = savedReview(vaultId);
     if (snapshot.position) {
       if (
-        (snapshot.practiced || destination.state.studyReturn) &&
+        (snapshot.practiced || destination.state.studyReturn || destination.state.studyTutorReturn) &&
         current &&
         !current.snapshot.practiced &&
         !sameReview(current, destination)

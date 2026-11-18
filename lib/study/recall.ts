@@ -1,4 +1,16 @@
-import type { StudyRecord, StudyRecordOf, StudyReviewItemWrite, StudyThread } from "./records";
+import type { TFunction } from "i18next";
+import { quizChoiceLabel } from "./quiz-cards";
+import {
+  maxReviewAttemptCue,
+  maxReviewAttemptReference,
+  maxStudyTutorDraftLength,
+  type StudyRating,
+  type StudyRecord,
+  type StudyRecordOf,
+  type StudyReviewAttempt,
+  type StudyReviewItemWrite,
+  type StudyThread,
+} from "./records";
 
 export function patchedStudyReviewItem(item: StudyRecord | undefined, write: StudyReviewItemWrite) {
   if (item?.kind !== write.kind) return;
@@ -37,6 +49,37 @@ export function latestStudyReviews(history: readonly StudyRecordOf<"session">[])
   return latest;
 }
 
+export function isDifficultRating(rating: StudyRating | undefined): rating is "again" | "hard" {
+  return rating === "again" || rating === "hard";
+}
+
+export function studyReviewMaterial(item: StudyRecordOf<"card" | "highlight">) {
+  return {
+    cue: (item.kind === "card" ? item.front : item.cue ?? "").slice(0, maxReviewAttemptCue),
+    reference: (item.kind === "card" ? item.back : item.quote).slice(0, maxReviewAttemptReference),
+  };
+}
+
+export function studyReviewFeedback(
+  t: TFunction<"home">,
+  item: StudyRecordOf<"card" | "highlight">,
+  attempt: StudyReviewAttempt,
+) {
+  const response = attempt.choice === undefined
+    ? attempt.answer
+    : t("study.recall.feedbackChoice", { choice: quizChoiceLabel(attempt.choice), response: attempt.answer });
+  const cue = attempt.cue || t("study.recall.highlightPrompt");
+  const current = studyReviewMaterial(item);
+  const prompt = t(
+    item.kind === "card" ? "study.recall.cardFeedbackPrompt" : "study.recall.highlightFeedbackPrompt",
+    { cue, response },
+  );
+  const text = current.cue === attempt.cue && current.reference === attempt.reference
+    ? prompt
+    : `${prompt}\n\n${t("study.recall.feedbackBeforeEdit", { cue, reference: attempt.reference })}`;
+  return { text: text.slice(0, maxStudyTutorDraftLength), threadId: attempt.threadId };
+}
+
 export function difficultStudyItems(
   items: readonly StudyRecordOf<"card" | "highlight">[],
   history: readonly StudyRecordOf<"session">[],
@@ -47,8 +90,8 @@ export function difficultStudyItems(
     .flatMap((item) => {
       const review = latest.get(item.id);
       if (sessionId !== undefined && review?.reviewSessionId !== sessionId) return [];
-      return review?.rating === "again" || review?.rating === "hard"
-        ? [{ item, rating: review.rating, reviewedAt: review.updatedAt }]
+      return review && isDifficultRating(review.rating)
+        ? [{ item, rating: review.rating, reviewedAt: review.updatedAt, attempt: review.reviewAttempt }]
         : [];
     })
     .sort((a, b) => {
