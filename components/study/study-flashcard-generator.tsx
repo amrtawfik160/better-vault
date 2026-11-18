@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/panelui/button";
 import { Dialog } from "@/components/panelui/dialog";
 import { Input } from "@/components/panelui/input";
+import { Select } from "@/components/panelui/select";
 import { Textarea } from "@/components/panelui/textarea";
 import { textDirection } from "@/lib/text/direction";
 import { newStudyCard, putStudyRecords, readFlashcardDraftPassages } from "@/lib/db/study";
@@ -15,15 +16,25 @@ import type { StudyDraftPassage } from "@/lib/study/passages";
 import type { StudyCitation, StudyOrigin } from "@/lib/study/records";
 
 type Draft = { front: string; back: string; citations?: StudyCitation[] };
-export type FlashcardSource = {
-  title: string;
+type FlashcardMaterial = {
   text: string;
   origin: StudyOrigin;
   evidence?: StudyOrigin[];
   passages?: StudyDraftPassage[];
+};
+export type FlashcardSource = FlashcardMaterial & {
+  title: string;
   notebookId?: string;
   tags: string[];
   cards?: Draft[];
+  parts?: { heading?: string; preview?: string; load: () => FlashcardMaterial }[];
+};
+
+type DraftBatch = {
+  part: number;
+  origin?: StudyOrigin;
+  drafts: Draft[];
+  excerpts: string[];
 };
 
 export function StudyFlashcardDraftDialog({
@@ -71,14 +82,32 @@ export function StudyFlashcardGenerator({
 }) {
   const { t } = useTranslation("home");
   const navigate = useNavigate();
-  const [input, setInput] = useState(source?.text.slice(0, flashcardMaterialLimit) ?? "");
+  const [freeText, setFreeText] = useState("");
+  const [part, setPart] = useState(0);
   const [count, setCount] = useState(5);
-  const [drafts, setDrafts] = useState<Draft[]>(source?.cards ?? []);
-  const [referenceExcerpts, setReferenceExcerpts] = useState<string[]>([]);
+  const [batches, setBatches] = useState<DraftBatch[]>(() =>
+    source?.cards?.length ? [{ part: 0, origin: source.origin, drafts: source.cards, excerpts: [] }] : [],
+  );
   const [working, setWorking] = useState(false);
   const [saving, setSaving] = useState(false);
   const controller = useRef<AbortController | null>(null);
   const pendingSave = useRef<symbol | null>(null);
+  const material = useMemo(() => source?.parts?.[part]?.load() ?? source, [part, source]);
+  const input = material ? material.text.slice(0, flashcardMaterialLimit) : freeText;
+  const batch = batches.find((entry) => entry.part === part);
+  const drafts = batch?.drafts ?? [];
+  const parts = source?.parts ?? [];
+  const partOptions = parts.map(({ heading, preview }, index) => {
+    const number = t("study.capture.partNumber", { number: index + 1 });
+    return {
+      value: String(index),
+      label: heading ? `${heading} · ${number}` : number,
+      description: heading ? undefined : preview,
+    };
+  });
+  const pending = batches.toSorted((a, b) => a.part - b.part).flatMap(({ drafts, origin }) =>
+    drafts.filter(({ front, back }) => front.trim() && back.trim()).map((draft) => ({ ...draft, origin })),
+  );
 
   useEffect(
     () => () => {
@@ -93,7 +122,7 @@ export function StudyFlashcardGenerator({
     controller.current = request;
     setWorking(true);
     try {
-      const passages = source?.passages ?? await readFlashcardDraftPassages(source?.evidence ?? [], vaultId);
+      const passages = material?.passages ?? await readFlashcardDraftPassages(material?.evidence ?? [], vaultId);
       request.signal.throwIfAborted();
       const draftImages = passages.flatMap(({ image }, index) => image ? [{ passage: index + 1, image }] : []);
       const answer = await askStudyModel({
@@ -113,7 +142,7 @@ export function StudyFlashcardGenerator({
               {
                 front,
                 back,
-                citations: source?.evidence?.length || source?.passages?.length
+                citations: material?.evidence?.length || material?.passages?.length
                   ? flashcardCitationsFor(
                       answer.imageFallback ? citations?.filter((index) => !passages[index - 1]?.image) : citations,
                       passages,
@@ -126,8 +155,15 @@ export function StudyFlashcardGenerator({
         if (!cards.length) toast.error("The model returned no flashcards.");
         else {
           if (answer.imageFallback) toast.info(t("study.capture.draftImageFallback"));
-          setDrafts(cards);
-          setReferenceExcerpts(passages.map(({ text }) => text.slice(0, 280)));
+          setBatches((current) => [
+            ...current.filter((entry) => entry.part !== part),
+            {
+              part,
+              origin: material?.origin,
+              drafts: cards,
+              excerpts: passages.map(({ text }) => text.slice(0, 280)),
+            },
+          ]);
         }
       }
     } catch (error) {
@@ -143,19 +179,17 @@ export function StudyFlashcardGenerator({
 
   async function save(review: boolean) {
     if (working || pendingSave.current) return;
-    const cards = drafts
-      .filter(({ front, back }) => front.trim() && back.trim())
-      .map(({ front, back, citations }) =>
-        newStudyCard({
-          front: front.trim(),
-          back: back.trim(),
-          notebookId: source?.notebookId,
-          vaultId,
-          origin: source?.origin,
-          citations,
-          tags: source?.tags ?? [],
-        }),
-      );
+    const cards = pending.map(({ front, back, citations, origin }) =>
+      newStudyCard({
+        front: front.trim(),
+        back: back.trim(),
+        notebookId: source?.notebookId,
+        vaultId,
+        origin,
+        citations,
+        tags: source?.tags ?? [],
+      }),
+    );
     if (!cards.length) return;
     const transaction = Symbol();
     pendingSave.current = transaction;
@@ -180,11 +214,16 @@ export function StudyFlashcardGenerator({
     }
   }
 
-  const canSave =
-    !working && !saving && drafts.some(({ front, back }) => front.trim() && back.trim());
+  const canSave = !working && !saving && pending.length > 0;
+
+  function changeDrafts(update: (current: Draft[]) => Draft[]) {
+    setBatches((current) =>
+      current.map((entry) => entry.part === part ? { ...entry, drafts: update(entry.drafts) } : entry),
+    );
+  }
 
   function updateDraft(position: number, change: Partial<Draft>) {
-    setDrafts((items) =>
+    changeDrafts((items) =>
       items.map((item, index) => (index === position ? { ...item, ...change } : item)),
     );
   }
@@ -203,6 +242,23 @@ export function StudyFlashcardGenerator({
         }}
         className="space-y-2"
       >
+        {parts.length > 1 ? (
+          <Select
+            items={partOptions}
+            value={String(part)}
+            onValueChange={(value) => { if (value !== null) setPart(Number(value)); }}
+            disabled={working || saving}
+          >
+            <Select.Trigger aria-label={t("study.capture.materialPart")}>
+              <Select.Value />
+            </Select.Trigger>
+            <Select.Content alignItemWithTrigger={false} className="max-w-(--anchor-width)">
+              {partOptions.map(({ value, label, description }) => (
+                <Select.Item key={value} value={value} description={description}>{label}</Select.Item>
+              ))}
+            </Select.Content>
+          </Select>
+        ) : null}
         <Textarea
           aria-label="Text for flashcards"
           placeholder="Paste the material you want to study"
@@ -211,10 +267,10 @@ export function StudyFlashcardGenerator({
           value={input}
           disabled={working || saving}
           readOnly={Boolean(source)}
-          onChange={(event) => setInput(event.target.value)}
+          onChange={(event) => setFreeText(event.target.value)}
           maxLength={flashcardMaterialLimit}
         />
-        {source?.evidence?.some((origin) => origin.kind === "book" && origin.visual) ? (
+        {material?.evidence?.some((origin) => origin.kind === "book" && origin.visual) ? (
           <p className="text-xs text-muted-foreground">
             {t("study.capture.draftUsesImages", { count: maxDraftImages })}
           </p>
@@ -284,7 +340,7 @@ export function StudyFlashcardGenerator({
                               [{citation.index}] {citation.title}
                             </p>
                             <p dir="auto" className="line-clamp-2 text-xs text-muted-foreground">
-                              {referenceExcerpts[citation.index - 1] ||
+                              {batch?.excerpts[citation.index - 1] ||
                                 ("origin" in citation && citation.origin.kind === "book" && citation.origin.visual
                                   ? t("study.reader.imageContext")
                                   : null)}
@@ -321,7 +377,7 @@ export function StudyFlashcardGenerator({
                   className="justify-self-start"
                   disabled={working || saving}
                   onClick={() =>
-                    setDrafts((items) => items.filter((_, index) => index !== position))
+                    changeDrafts((items) => items.filter((_, index) => index !== position))
                   }
                 >
                   Remove draft
@@ -329,6 +385,15 @@ export function StudyFlashcardGenerator({
               </li>
             ))}
           </ul>
+        </div>
+      ) : null}
+      {drafts.length || pending.length ? (
+        <div className="space-y-2">
+          {parts.length > 1 && pending.length > 0 ? (
+            <p className="text-xs text-muted-foreground" role="status">
+              {t("study.capture.pendingDrafts", { count: pending.length })}
+            </p>
+          ) : null}
           <div className="flex flex-wrap gap-2">
             <Button type="button" size="sm" disabled={!canSave} onClick={() => void save(true)}>
               {t("study.capture.saveAndReview")}

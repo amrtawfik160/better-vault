@@ -459,6 +459,10 @@
     },
     "capture": {
       "draftCards": "Draft flashcards",
+      "materialPart": "Part to study",
+      "partNumber": "Part {{number}}",
+      "pendingDrafts_one": "{{count}} draft ready to save",
+      "pendingDrafts_other": "{{count}} drafts ready to save",
       "cardsFromSection": "Draft cards from this section",
       "cardsFromSelection": "Draft cards from selection",
       "cardsFromAnswer": "Draft cards from this answer",

@@ -6,6 +6,7 @@ import { StudyMarkdown, StudyText } from "./study-text";
 import { StudyDocumentEdits } from "./study-document-edits";
 import { highlightColors } from "./study-highlight-colors";
 import { flashcardMaterialLimit, flashcardPassageSize } from "@/lib/study/ai";
+import { flashcardDraftRanges } from "@/lib/study/flashcard-material";
 import { directionalInline, DirectionalText } from "@/components/common/directional-text";
 import { Button } from "@/components/panelui/button";
 import { StudyEpubChapter, type StudyEpubTheme } from "./study-epub-chapter";
@@ -550,23 +551,32 @@ export function StudyReader({
 
   function draftCards(text: string, selected?: Selection) {
     const origin = sourceOf(selected);
-    const length = Math.min(selected?.text.length ?? section.text.length, flashcardMaterialLimit);
-    const evidence = Array.from({ length: Math.ceil(length / flashcardPassageSize) }, (_, part) => {
-      const start = part * flashcardPassageSize;
-      return {
-        ...origin,
-        offset: (selected?.offset ?? 0) + start,
-        length: Math.min(flashcardPassageSize, length - start),
-        revision: selected?.revision ?? revision,
-      };
-    });
+    const draftEvidence = (offset: number, length: number) =>
+      Array.from({ length: Math.ceil(length / flashcardPassageSize) }, (_, part) => {
+        const start = part * flashcardPassageSize;
+        return {
+          ...origin,
+          offset: offset + start,
+          length: Math.min(flashcardPassageSize, length - start),
+          revision: selected?.revision ?? revision,
+        };
+      });
+    const parts = flashcardDraftRanges(text).map(({ offset, length }) => ({
+      preview: text.slice(offset, offset + Math.min(length, 100)).replace(/\s+/g, " "),
+      load: () => ({
+        text: text.slice(offset, offset + length),
+        origin: { ...origin, offset: (selected?.offset ?? 0) + offset, length, revision: selected?.revision ?? revision },
+        evidence: draftEvidence((selected?.offset ?? 0) + offset, length),
+      }),
+    }));
     setDraftSource({
       title: `${book.title} · ${section.title}`,
       text,
       origin,
-      evidence,
+      evidence: draftEvidence(selected?.offset ?? 0, Math.min(text.length, flashcardMaterialLimit)),
       notebookId: book.notebookId,
       tags: [book.title],
+      parts,
     });
   }
 
