@@ -160,15 +160,16 @@ export function revisedStudyBook(
     book?.kind !== "book" ||
     book.sourceId !== write.sourceId ||
     studyTextRevision(book) !== write.revision ||
-    book.sections[write.edit.section]?.text !== write.previousText
+    book.sections[write.edit.section]?.text !== write.previousText ||
+    book.sections[write.edit.section]?.markdown !== write.previousMarkdown
   )
     return;
   return {
     ...book,
     sections: book.sections.map((section, index) =>
-      index === write.edit.section ? { ...section, text: write.text } : section,
+      index === write.edit.section ? { ...section, text: write.text, markdown: write.markdown } : section,
     ),
-    textEdits: [...(book.textEdits ?? []), write.edit],
+    textEdits: write.text === write.previousText ? book.textEdits : [...(book.textEdits ?? []), write.edit],
     updatedAt: Math.max(book.updatedAt, write.updatedAt),
   };
 }

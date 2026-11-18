@@ -586,14 +586,16 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
         const source = get<Source>("sources", write.sourceId);
         if (!book || !source || !get<Notebook>("notebooks", book.notebookId)) return false;
         put("study", book);
-        put("sources", {
-          ...source,
-          text: sourceText,
-          charCount: sourceText.length,
-          studyRevision: write.revision + 1,
-        });
-        deleteWhere("chunks", "source_id", source.id);
-        for (const chunk of chunks) put("chunks", chunk);
+        if (write.text !== write.previousText) {
+          put("sources", {
+            ...source,
+            text: sourceText,
+            charCount: sourceText.length,
+            studyRevision: write.revision + 1,
+          });
+          deleteWhere("chunks", "source_id", source.id);
+          for (const chunk of chunks) put("chunks", chunk);
+        }
         touch(book.notebookId, book.updatedAt);
         return true;
       }),

@@ -1,4 +1,5 @@
 import { openStudyEpub } from "./epub";
+import { studyMarkdownContent } from "./markdown-document";
 import type { StudySection } from "./records";
 
 const epubMime = "application/epub+zip";
@@ -64,13 +65,15 @@ export async function readStudyFile(file: File): Promise<ParsedDocument> {
     const { title, sections } = await readEpub(bytes);
     result = { title: title || fallback, format: "epub", bytes, mime: epubMime, sections };
   } else if (extension === "txt" || extension === "md") {
-    const text = new TextDecoder().decode(bytes).trim();
+    const text = new TextDecoder().decode(bytes);
+    if (text.length > maxTextLength) throw new Error("This document has too much text.");
+    const content = extension === "md" ? studyMarkdownContent(text) : { text: text.trim() };
     result = {
       title: fallback,
       format: "text",
       bytes,
-      mime: "text/plain",
-      sections: [{ title: fallback, text }],
+      mime: extension === "md" ? "text/markdown" : "text/plain",
+      sections: [{ title: fallback, ...content }],
     };
   } else throw new Error("Choose a PDF, EPUB, Markdown, or text file.");
   if (result.sections.reduce((total, section) => total + section.text.length, 0) > maxTextLength) {

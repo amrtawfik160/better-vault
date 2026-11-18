@@ -3,6 +3,8 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { StudyText } from "./study-text";
+import { Markdown } from "@/components/chat/markdown";
+import { StudyDocumentEditor, type StudyDocumentDraft } from "./study-document-editor";
 import { highlightColors } from "./study-highlight-colors";
 import { flashcardMaterialLimit, flashcardPassageSize } from "@/lib/study/ai";
 import { directionalInline, DirectionalText } from "@/components/common/directional-text";
@@ -10,7 +12,7 @@ import { Button } from "@/components/panelui/button";
 import { StudyEpubChapter, type StudyEpubTheme } from "./study-epub-chapter";
 import { StudyPdfPage } from "./study-pdf-page";
 import { StudyFlashcardDraftDialog, type FlashcardSource } from "./study-flashcard-generator";
-import { renderedSelection } from "./study-rendered-text";
+import { renderedSelection, renderedStudyRange, useRenderedStudyMarks } from "./study-rendered-text";
 import { useStudyReadingPlace } from "./study-reading-place";
 import { Input } from "@/components/panelui/input";
 import { Textarea } from "@/components/panelui/textarea";
@@ -156,6 +158,7 @@ export function StudyReader({
   const [openedSection] = useState(book.section);
   const index = Math.min(Math.max(0, requestedPage ?? openedSection), book.sections.length - 1);
   const section = book.sections[index];
+  const markdown = section.markdown;
   const revision = studyTextRevision(book);
   const navigate = useNavigate();
   const location = useLocation();
@@ -186,7 +189,7 @@ export function StudyReader({
   const [translating, setTranslating] = useState(false);
   const [color, setColor] = useState<StudyHighlightColor>("yellow");
   const [search, setSearch] = useState("");
-  const [edit, setEdit] = useState<{ original: string; text: string } | null>(null);
+  const [edit, setEdit] = useState<(StudyDocumentDraft & { original: string; originalMarkdown?: string }) | null>(null);
   const [savingText, setSavingText] = useState(false);
   const [font, setFont] = useState(18);
   const [zoom, setZoom] = useState(100);
@@ -201,7 +204,7 @@ export function StudyReader({
     ? readingSurface.root : undefined;
   const [result, setResult] = useState<AssistResult | null>(null);
   const [busy, setBusy] = useState(false);
-  const [fileUrl, setFileUrl] = useState<string>();
+  const [originalFile, setOriginalFile] = useState<{ url: string; mime: string }>();
   const pendingAssist = useRef<AbortController | null>(null);
   const started = useRef(0);
   const [readingSessionId] = useState(studyId);
@@ -215,6 +218,7 @@ export function StudyReader({
     article: textBody,
     layout,
     loadingLayout: Boolean(showLayout && fileId && layout === undefined),
+    renderedArticle: markdown !== undefined,
     enabled: !visitingPassage && !edit,
     activity: latestInteraction,
     layoutCheckpoint,
@@ -224,6 +228,15 @@ export function StudyReader({
     const offset = locateStudyMark(book, item);
     return offset < 0 ? [] : [{ ...item, offset }];
   });
+  const renderedMarks = focus
+    ? [
+        ...pageHighlights.filter(({ offset, quote }) => (
+          offset >= focus.offset + focus.length || offset + quote.length <= focus.offset
+        )),
+        { offset: focus.offset, quote: section.text.slice(focus.offset, focus.offset + focus.length), color: "blue" as const },
+      ]
+    : pageHighlights;
+  useRenderedStudyMarks(textBody, markdown !== undefined, section.text, renderedMarks);
   const bookmarkPlaces = book.bookmarkPlaces ?? [];
 
   useEffect(() => {
@@ -278,7 +291,7 @@ export function StudyReader({
       void loadBlob(fileId).then((blob) => {
         if (!live || !blob) return;
         url = URL.createObjectURL(blob);
-        setFileUrl(url);
+        setOriginalFile({ url, mime: blob.type });
       });
     return () => {
       live = false;
@@ -288,10 +301,20 @@ export function StudyReader({
 
   useEffect(() => {
     if (restoredLayout.current === location.key) return;
+    const root = textBody.current;
+    if (root && markdown !== undefined && focusStart !== undefined && focusLength !== undefined) {
+      const quote = section.text.slice(focusStart, focusStart + focusLength);
+      const range = renderedStudyRange(root, section.text, { offset: focusStart, quote });
+      if (range && viewport) {
+        const position = range.getBoundingClientRect().top - viewport.getBoundingClientRect().top;
+        viewport.scrollBy({ top: position - viewport.clientHeight / 2, behavior: "instant" });
+      }
+      return;
+    }
     if (focusStart !== undefined)
       document.getElementById("focused-passage")?.scrollIntoView({ block: "center" });
     else if (missingPassage) passageNotice.current?.scrollIntoView({ block: "nearest" });
-  }, [index, focusStart, focusLength, location.key, missingPassage, restoredLayout]);
+  }, [index, focusStart, focusLength, location.key, markdown, missingPassage, restoredLayout, section.text, viewport]);
 
   function clearSelection() {
     setSelection(null);
@@ -316,6 +339,10 @@ export function StudyReader({
 
   function capture() {
     latestInteraction.current = Date.now();
+    if (markdown !== undefined && textBody.current) {
+      captureRendered(textBody.current);
+      return;
+    }
     const selected = window.getSelection();
     if (!selected?.rangeCount || selected.isCollapsed || !textBody.current) return;
     const range = selected.getRangeAt(0);
@@ -560,10 +587,10 @@ export function StudyReader({
           >
             Highlights
           </Link>
-          {fileId && fileUrl ? (
+          {fileId && originalFile ? (
             <a
-              href={fileUrl}
-              download={`${book.title}.${book.format === "text" ? "txt" : book.format}`}
+              href={originalFile.url}
+              download={`${book.title}.${book.format === "text" ? (originalFile.mime === "text/markdown" ? "md" : "txt") : book.format}`}
               className="rounded-lg border px-3 py-2 text-sm hover:bg-accent"
             >
               Download original
@@ -779,7 +806,12 @@ export function StudyReader({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setEdit({ original: section.text, text: section.text })}
+            onClick={() => setEdit({
+              original: section.text,
+              originalMarkdown: markdown,
+              text: markdown ?? section.text,
+              markdown: markdown !== undefined,
+            })}
           >
             Edit text
           </Button>
@@ -790,7 +822,12 @@ export function StudyReader({
               event.preventDefault();
               if (!edit.text.trim() || savingText) return;
               setSavingText(true);
-              void saveStudyText(book.id, edit.text, { section: index, original: edit.original })
+              void saveStudyText(book.id, edit.text, {
+                section: index,
+                original: edit.original,
+                originalMarkdown: edit.originalMarkdown,
+                markdown: edit.markdown,
+              })
                 .then(() => {
                   clearSelection();
                   setEdit(null);
@@ -805,13 +842,11 @@ export function StudyReader({
                 .finally(() => setSavingText(false));
             }}
           >
-            <textarea
-              aria-label="Edit document text"
-              className="min-h-40 w-full rounded-xl border bg-background p-3"
-              dir={textDirection(edit.text)}
+            <StudyDocumentEditor
+              label="Edit document text"
+              value={edit}
               disabled={savingText}
-              value={edit.text}
-              onChange={(event) => setEdit({ ...edit, text: event.target.value })}
+              onChange={(draft) => setEdit({ ...edit, ...draft })}
             />
             <div className="flex gap-2">
               <Button type="submit" disabled={!edit.text.trim() || savingText}>
@@ -890,7 +925,7 @@ export function StudyReader({
           ref={textBody}
           tabIndex={0}
           aria-label={section.title}
-          className="mx-auto max-w-prose leading-relaxed wrap-break-word whitespace-pre-wrap outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className={`mx-auto max-w-prose leading-relaxed wrap-break-word outline-none focus-visible:ring-2 focus-visible:ring-ring ${markdown === undefined ? "whitespace-pre-wrap" : "markdown"}`}
           style={{ fontSize: font }}
           onMouseUp={capture}
           onTouchEnd={capture}
@@ -899,9 +934,13 @@ export function StudyReader({
             latestInteraction.current = Date.now();
           }}
         >
-          {section.text
-            ? highlighted(section.text, pageHighlights, focus)
-            : "This page has no selectable text."}
+          {markdown !== undefined ? (
+            <Markdown bare imageAltOnly text={markdown} />
+          ) : section.text ? (
+            highlighted(section.text, pageHighlights, focus)
+          ) : (
+            "This page has no selectable text."
+          )}
         </article>
       </div>
       {selection ? (

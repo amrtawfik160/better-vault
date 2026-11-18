@@ -35,6 +35,7 @@ interface MarkdownProps {
   anchorHeadings?: boolean;
   plugins?: Pick<Options, "remarkPlugins" | "rehypePlugins">;
   staticContent?: boolean;
+  imageAltOnly?: boolean;
 }
 
 /** A heading's id: the line it starts on, which adding citation links never changes. */
@@ -68,6 +69,7 @@ export function Markdown({
   anchorHeadings = false,
   plugins,
   staticContent = false,
+  imageAltOnly = false,
 }: MarkdownProps) {
   const byN = useMemo(
     () => new Map((passages ?? []).map((passage) => [passage.n, passage])),
@@ -108,9 +110,9 @@ export function Markdown({
           </a>
         );
       },
-      ...(staticContent ? { img: ({ alt }) => <span>{alt}</span> } : {}),
+      ...(staticContent || imageAltOnly ? { img: ({ alt }) => <span>{alt}</span> } : {}),
     }),
-    [byN, onCite, anchorHeadings, staticContent],
+    [byN, onCite, anchorHeadings, staticContent, imageAltOnly],
   );
 
   const blocks = (

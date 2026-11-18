@@ -6,7 +6,12 @@ const base = z.object({
   vaultId: z.string().optional(),
   updatedAt: z.number(),
 });
-const section = z.object({ title: z.string(), text: z.string(), epubPath: z.string().optional() });
+const section = z.object({
+  title: z.string(),
+  text: z.string(),
+  epubPath: z.string().optional(),
+  markdown: z.string().optional(),
+});
 const schedule = z.object({
   dueAt: z.number(),
   intervalDays: z.number(),
@@ -271,7 +276,9 @@ export type StudyBookTextWrite = {
   sourceId: string;
   revision: number;
   previousText: string;
+  previousMarkdown?: string;
   text: string;
+  markdown?: string;
   edit: StudyTextEdit;
   updatedAt: number;
 };

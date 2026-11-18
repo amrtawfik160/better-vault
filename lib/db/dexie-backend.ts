@@ -305,14 +305,16 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
         const source = await db.sources.get(write.sourceId);
         if (!book || !source || !(await db.notebooks.get(book.notebookId))) return false;
         await db.study.put(book);
-        await db.sources.put({
-          ...source,
-          text: sourceText,
-          charCount: sourceText.length,
-          studyRevision: write.revision + 1,
-        });
-        await db.chunks.where("sourceId").equals(source.id).delete();
-        await db.chunks.bulkPut(chunks);
+        if (write.text !== write.previousText) {
+          await db.sources.put({
+            ...source,
+            text: sourceText,
+            charCount: sourceText.length,
+            studyRevision: write.revision + 1,
+          });
+          await db.chunks.where("sourceId").equals(source.id).delete();
+          await db.chunks.bulkPut(chunks);
+        }
         await db.notebooks.update(book.notebookId, { updatedAt: book.updatedAt });
         return true;
       }),

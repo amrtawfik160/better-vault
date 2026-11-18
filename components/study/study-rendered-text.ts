@@ -76,7 +76,7 @@ export function renderedStudyRange(root: HTMLElement, canonical: string, mark: P
 }
 
 export function useRenderedStudyMarks(
-  root: RefObject<HTMLDivElement | null>,
+  root: RefObject<HTMLElement | null>,
   ready: boolean,
   canonical: string,
   marks: Mark[],

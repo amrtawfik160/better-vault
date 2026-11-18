@@ -20,14 +20,15 @@ import { Card } from "@/components/panelui/card";
 import { Dialog } from "@/components/panelui/dialog";
 import { Input } from "@/components/panelui/input";
 import { Menu } from "@/components/panelui/menu";
-import { Textarea } from "@/components/panelui/textarea";
 import { useNotebook } from "@/lib/db/notebooks";
 import { addStudyBook, deleteStudyBook, renameStudyBook } from "@/lib/db/study";
 import { currentVaultId } from "@/lib/db/vaults";
 import { routes } from "@/lib/routes";
 import { studyHref } from "@/lib/study/links";
 import { readStudyFile } from "@/lib/study/read-file";
+import { studyMarkdownContent } from "@/lib/study/markdown-document";
 import type { StudyBook } from "@/lib/study/records";
+import { StudyDocumentEditor } from "./study-document-editor";
 
 const formatIcons = { pdf: Pdf01Icon, epub: Book02Icon, text: TextIcon };
 
@@ -166,7 +167,9 @@ export function StudyLibrary({
               <Card.Content className="flex flex-col gap-2">
                 <p className="text-xs text-muted-foreground">
                   {t("study.library.position", {
-                    format: book.format.toUpperCase(),
+                    format: book.sections.some((section) => section.markdown !== undefined)
+                      ? "Markdown"
+                      : book.format.toUpperCase(),
                     current: book.section + 1,
                     total: book.sections.length,
                   })}
@@ -275,7 +278,7 @@ function NewStudyDocument({
   const { t } = useTranslation("home");
   const { t: tCommon } = useTranslation();
   const [title, setTitle] = useState("");
-  const [text, setText] = useState("");
+  const [draft, setDraft] = useState({ text: "", markdown: false });
   const [saving, setSaving] = useState(false);
   const form = useId();
   return (
@@ -288,14 +291,15 @@ function NewStudyDocument({
             className="grid gap-3"
             onSubmit={async (event) => {
               event.preventDefault();
-              if (saving || !title.trim() || !text.trim()) return;
+              if (saving || !title.trim() || !draft.text.trim()) return;
               setSaving(true);
               try {
+                const content = draft.markdown ? studyMarkdownContent(draft.text) : { text: draft.text };
                 onSave(
                   await addStudyBook({
                     title,
                     format: "text",
-                    sections: [{ title, text }],
+                    sections: [{ title, ...content }],
                     vaultId,
                   }),
                 );
@@ -309,23 +313,19 @@ function NewStudyDocument({
               {t("study.library.title")}
               <Input required value={title} onChange={(event) => setTitle(event.target.value)} />
             </label>
-            <label className="grid gap-1.5 text-sm font-medium">
-              {t("study.library.text")}
-              <Textarea
-                dir="auto"
-                required
-                minRows={5}
-                value={text}
-                onChange={(event) => setText(event.target.value)}
-              />
-            </label>
+            <StudyDocumentEditor
+              value={draft}
+              onChange={setDraft}
+              label={t("study.library.text")}
+              disabled={saving}
+            />
           </form>
         </Dialog.Body>
         <Dialog.Footer>
           <Dialog.Close render={<Button variant="secondary" disabled={saving} />}>
             {tCommon("actions.cancel")}
           </Dialog.Close>
-          <Button type="submit" form={form} disabled={saving || !title.trim() || !text.trim()}>
+          <Button type="submit" form={form} disabled={saving || !title.trim() || !draft.text.trim()}>
             {t("study.library.save")}
           </Button>
         </Dialog.Footer>

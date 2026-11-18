@@ -302,6 +302,26 @@
       "noMatches": "No titles match your search.",
       "noReadableSelection": "Choose material with readable text to continue."
     },
+    "documentEditor": {
+      "markdown": "Format as Markdown",
+      "format": "Formatting",
+      "preview": "Preview formatting",
+      "commands": {
+        "headline": "Heading 1",
+        "heading": "Heading 2",
+        "subheading": "Heading 3",
+        "bold": "Bold",
+        "italic": "Italic",
+        "strike": "Strikethrough",
+        "bullet": "Bulleted list",
+        "numbered": "Numbered list",
+        "checklist": "Checklist",
+        "quote": "Quote",
+        "inlineCode": "Inline code",
+        "code": "Code block",
+        "link": "Link"
+      }
+    },
     "reader": {
       "resume": "Resume reading",
       "editConflict": "This document changed while you were editing it. Copy your draft, then reopen the editor to see the latest text.",

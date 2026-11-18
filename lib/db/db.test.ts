@@ -1598,6 +1598,44 @@ describe.each(backends)("%s store", (name, create) => {
       expect((await getChunks([book.sourceId])).map(({ id }) => id)).toEqual(editedChunkIds);
     });
 
+    it("preserves citation ids on Markdown-only edits and relocates passages after text changes", async () => {
+      const original = "Two majorities overlap.";
+      const book = await addStudyBook({
+        title: "Consensus proof",
+        format: "text",
+        sections: [{ title: "Consensus proof", text: original }],
+      });
+      const originalChunks = await getChunks([book.sourceId]);
+      const draft = { section: 0, original, markdown: true };
+      const edits = await Promise.allSettled([
+        saveStudyText(book.id, "**Two majorities** overlap.", draft),
+        saveStudyText(book.id, "*Two majorities* overlap.", draft),
+      ]);
+      expect(edits.map(({ status }) => status).sort()).toEqual(["fulfilled", "rejected"]);
+      const stale = edits.find((edit) => edit.status === "rejected");
+      expect(stale?.reason).toBeInstanceOf(StudyTextConflict);
+      const formatted = await store().getStudy(book.id);
+      if (formatted?.kind !== "book") throw new Error("Expected a formatted document");
+      expect(formatted.sections[0].text).toBe(original);
+      expect(formatted.textEdits ?? []).toEqual([]);
+      expect(await getChunks([book.sourceId])).toEqual(originalChunks);
+
+      const originalMarkdown = formatted.sections[0].markdown;
+      const after = `## Proof\n\n${originalMarkdown}`;
+      await saveStudyText(book.id, after, { ...draft, originalMarkdown });
+      const current = await store().getStudy(book.id);
+      if (current?.kind !== "book") throw new Error("Expected the revised document");
+      expect(current.sections[0]).toMatchObject({ markdown: after, text: `Proof\n${original}` });
+      expect(resolveStudyRange(current, 0, { offset: 0, length: original.length, revision: 0 })).toEqual({
+        offset: "Proof\n".length, length: original.length,
+      });
+      expect(await getChunks([book.sourceId])).toMatchObject([{ text: `Proof\n${original}` }]);
+      const backup = JSON.parse(JSON.stringify(await exportBackup()));
+      await deleteAllData();
+      await importBackup(backup);
+      expect(await store().getStudy(book.id)).toMatchObject({ sections: current.sections });
+    });
+
     it("keeps study documents, reading material and spaced reviews in both backends and backups", async () => {
       const book = await addStudyBook({
         title: "A study document",

@@ -5,6 +5,7 @@ import { notebookAnswerEvidence } from "@/lib/chat/study";
 import { freshSchedule, nextStudySchedule } from "@/lib/study/schedule";
 import { originHref, studyCitationOrigin } from "@/lib/study/links";
 import { studyPdfSections } from "@/lib/study/read-file";
+import { studyMarkdownContent } from "@/lib/study/markdown-document";
 import { locateStudyMark, resolveStudyRange, studyTextEdit, studyTextRevision } from "@/lib/study/text-edits";
 import { cardEvidenceLimit, type StudyPassage, type StudyTutorSources } from "@/lib/study/passages";
 import { locateCitedChunk } from "@/lib/study/locators";
@@ -858,24 +859,31 @@ export class StudyTextConflict extends Error {
 export async function saveStudyText(
   bookId: string,
   text: string,
-  draft?: { section: number; original: string },
+  draft?: { section: number; original: string; originalMarkdown?: string; markdown?: boolean },
 ) {
   const backend = store();
   const book = await backend.getStudy(bookId);
   if (book?.kind !== "book" || book.format !== "text" || book.attachedToNotebook)
     throw new Error("Choose a text document created in Study.");
   const section = draft?.section ?? 0;
-  const previousText = book.sections[section]?.text;
-  if (previousText === undefined || (draft && draft.original !== previousText))
+  const previous = book.sections[section];
+  if (!previous || (draft && (draft.original !== previous.text || draft.originalMarkdown !== previous.markdown)))
     throw new StudyTextConflict();
-  const body = text.replace(/\r\n?/g, "\n");
+  if (!text.trim() || text.length > 2_000_000)
+    throw new Error("The document needs between 1 and 2,000,000 characters.");
+  const previousText = previous.text;
+  const markdown = draft?.markdown ?? (previous.markdown !== undefined);
+  const content = markdown
+    ? studyMarkdownContent(text)
+    : { text: text.replace(/\r\n?/g, "\n"), markdown: undefined };
+  const body = content.text;
   const total = book.sections.reduce(
     (length, entry) => length + entry.text.length,
     body.length - previousText.length,
   );
   if (!body.trim() || total > 2_000_000)
     throw new Error("The document needs between 1 and 2,000,000 characters.");
-  if (previousText === body) return;
+  if (previousText === body && previous.markdown === content.markdown) return;
   const source = await backend.getSource(book.sourceId);
   if (!source) throw new StudyTextConflict();
   const keepLegacyHeading =
@@ -896,12 +904,13 @@ export async function saveStudyText(
       sourceId: book.sourceId,
       revision,
       previousText,
-      text: body,
+      previousMarkdown: previous.markdown,
+      ...content,
       edit: studyTextEdit(section, previousText, body),
       updatedAt: Date.now(),
     },
     sourceText,
-    chunksForSource({
+    previousText === body ? [] : chunksForSource({
       id: book.sourceId,
       notebookId: book.notebookId,
       text: sourceText,

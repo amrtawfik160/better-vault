@@ -56,6 +56,7 @@ function capturePlace(
   canonical: string,
   section: number,
   revision: number,
+  renderedArticle: boolean,
 ): StudyReadingPlace {
   const viewportBounds = viewport.getBoundingClientRect();
   const y = viewportBounds.top + readingInset(viewport);
@@ -71,7 +72,7 @@ function capturePlace(
   if (!canonical || viewport.scrollTop <= 1) return place;
   const range = visibleText(root, y);
   if (!range) return place;
-  if (inLayout) {
+  if (inLayout || renderedArticle) {
     const anchor = canonicalRenderedRange(root, range, canonical, 64);
     if (anchor) place.anchor = { offset: anchor.offset, quote: anchor.text.slice(0, 96), revision };
   } else {
@@ -91,6 +92,7 @@ function restorePlace(
   layout: HTMLElement | null | undefined,
   book: StudyBook,
   place: StudyReadingPlace,
+  renderedArticle: boolean,
 ) {
   const root = (place.surface === "layout" && layout) || article;
   if (place.progress === 0 && !place.anchor) {
@@ -101,7 +103,7 @@ function restorePlace(
   const anchor = place.anchor;
   const offset = anchor ? locateStudyMark(book, { ...anchor, section: place.section }) : -1;
   const range = anchor && offset >= 0
-    ? root === article
+    ? root === article && !renderedArticle
       ? textRangeAt(root, offset)
       : renderedStudyRange(root, canonical, { offset, quote: anchor.quote })
     : undefined;
@@ -123,6 +125,7 @@ export function useStudyReadingPlace({
   article,
   layout,
   loadingLayout,
+  renderedArticle = false,
   enabled,
   activity,
   layoutCheckpoint,
@@ -135,6 +138,7 @@ export function useStudyReadingPlace({
   article: RefObject<HTMLElement | null>;
   layout: HTMLElement | null | undefined;
   loadingLayout: boolean;
+  renderedArticle?: boolean;
   enabled: boolean;
   activity: RefObject<number>;
   layoutCheckpoint?: RefObject<(() => void) | null>;
@@ -161,10 +165,11 @@ export function useStudyReadingPlace({
           canonical,
           section,
           revision,
+          renderedArticle,
         );
       }
     },
-    [article, canonical, layout, loadingLayout, revision, section, viewport],
+    [article, canonical, layout, loadingLayout, renderedArticle, revision, section, viewport],
   );
 
   useLayoutEffect(() => {
@@ -177,7 +182,7 @@ export function useStudyReadingPlace({
       const place = captured ?? currentBook.current.readingPlace;
       if (place?.section === section) {
         if (loadingLayout) return;
-        restorePlace(scroll, root, layout, currentBook.current, place);
+        restorePlace(scroll, root, layout, currentBook.current, place, renderedArticle);
       } else scroll.scrollTo({ top: 0, behavior: "instant" });
       beforeLayoutChange.current = undefined;
       restored.current = visit;
@@ -192,7 +197,7 @@ export function useStudyReadingPlace({
     let captured: StudyReadingPlace | undefined;
     function measure() {
       if (root?.isConnected && scroll?.isConnected)
-        captured = capturePlace(scroll, root, layout, canonical, section, revision);
+        captured = capturePlace(scroll, root, layout, canonical, section, revision, renderedArticle);
     }
     function flush() {
       window.clearTimeout(timer);
@@ -227,7 +232,7 @@ export function useStudyReadingPlace({
       window.removeEventListener("pagehide", flush);
       flush();
     };
-  }, [activity, article, canonical, enabled, id, layout, loadingLayout, revision, section, viewport, visit]);
+  }, [activity, article, canonical, enabled, id, layout, loadingLayout, renderedArticle, revision, section, viewport, visit]);
 
   return restoredLayout;
 }
