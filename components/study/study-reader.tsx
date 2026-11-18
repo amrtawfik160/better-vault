@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Markdown } from "@/components/chat/markdown";
+import { flashcardMaterialLimit, flashcardPassageSize } from "@/lib/study/ai";
 import { directionalInline, DirectionalText } from "@/components/common/directional-text";
 import { Button } from "@/components/panelui/button";
 import { StudyEpubChapter, type StudyEpubTheme } from "./study-epub-chapter";
@@ -344,7 +345,7 @@ export function StudyReader({
     setSelection({ ...selected, revision });
   }
 
-  function sourceOf(selected?: Selection | null): StudyOrigin {
+  function sourceOf(selected?: Selection | null): Extract<StudyOrigin, { kind: "book" }> {
     return selected
       ? {
           kind: "book",
@@ -406,10 +407,22 @@ export function StudyReader({
   }
 
   function draftCards(text: string, selected?: Selection) {
+    const origin = sourceOf(selected);
+    const length = Math.min(selected?.text.length ?? section.text.length, flashcardMaterialLimit);
+    const evidence = Array.from({ length: Math.ceil(length / flashcardPassageSize) }, (_, part) => {
+      const start = part * flashcardPassageSize;
+      return {
+        ...origin,
+        offset: (selected?.offset ?? 0) + start,
+        length: Math.min(flashcardPassageSize, length - start),
+        revision: selected?.revision ?? revision,
+      };
+    });
     setDraftSource({
       title: `${book.title} · ${section.title}`,
       text,
-      origin: sourceOf(selected),
+      origin,
+      evidence,
       notebookId: book.notebookId,
       tags: [book.title],
     });

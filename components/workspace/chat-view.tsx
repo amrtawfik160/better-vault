@@ -1,6 +1,7 @@
 import { Book02Icon, Idea01Icon } from "@hugeicons/core-free-icons";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { notebookAnswerEvidence } from "@/lib/chat/study";
 import { useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { AssistantMessage } from "@/components/chat/assistant-message";
@@ -102,6 +103,7 @@ export function ChatView() {
                   title: notebook.title,
                   text,
                   cards,
+                  evidence: notebookAnswerEvidence(message, notebook.id),
                   origin: {
                     kind: "notebook-answer",
                     notebookId: notebook.id,

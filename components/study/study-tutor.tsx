@@ -44,7 +44,7 @@ import {
   updateStudyReport,
 } from "@/lib/db/study";
 import { askStudyModel } from "@/lib/study/client";
-import { studyConversationExcerpt } from "@/lib/study/ai";
+import { studyConversationMaterial } from "@/lib/study/ai";
 import { passagesFor, tutorBookOrigin } from "@/lib/study/passages";
 import { activeStudyCard, selectedStudyCards } from "@/lib/study/recall";
 import {
@@ -879,11 +879,12 @@ export function StudyTutor({
       .catch((error: Error) => toast.error(error.message));
   }
 
-  function draftCards(text: string, origin: StudyOrigin) {
+  function draftCards(text: string, origin: StudyOrigin, evidence?: StudyOrigin[]) {
     setDraftSource({
       title: thread.title,
       text,
       origin,
+      evidence,
       notebookId: thread.notebookId,
       tags: book && book.title !== thread.title ? [book.title, thread.title] : [thread.title],
     });
@@ -954,15 +955,13 @@ export function StudyTutor({
               variant="outline"
               size="sm"
               disabled={workPending || !model}
-              onClick={() =>
-                draftCards(
-                  studyConversationExcerpt(thread.messages, {
-                    learner: t("study.capture.learner"),
-                    tutor: t("study.capture.tutor"),
-                  }),
-                  { kind: "tutor", threadId: thread.id },
-                )
-              }
+              onClick={() => {
+                const { text, evidence } = studyConversationMaterial(thread.messages, {
+                  learner: t("study.capture.learner"),
+                  tutor: t("study.capture.tutor"),
+                });
+                draftCards(text, { kind: "tutor", threadId: thread.id }, evidence);
+              }}
             >
               {t("study.capture.cardsFromConversation")}
             </Button>
@@ -1199,11 +1198,11 @@ export function StudyTutor({
                       variant="ghost"
                       size="sm"
                       onClick={() =>
-                        draftCards(entry.text, {
-                          kind: "tutor",
-                          threadId: thread.id,
-                          message: index,
-                        })
+                        draftCards(
+                          entry.text,
+                          { kind: "tutor", threadId: thread.id, message: index },
+                          entry.citations?.map(studyCitationOrigin),
+                        )
                       }
                     >
                       {t("study.capture.cardsFromAnswer")}

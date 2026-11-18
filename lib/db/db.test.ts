@@ -10,6 +10,7 @@ import {
   rateStudyItem,
   readStudyThread,
   readStudyTutorSources,
+  readFlashcardDraftPassages,
   removeStudyRecord,
   saveStudyCard,
   saveStudyWord,
@@ -40,6 +41,7 @@ import { asBackend, createSqliteStore, schemaVersion } from "./sqlite/store";
 import { setStoreForTests, store } from "./store";
 import { conversationTitle } from "@/lib/chat/title";
 import { studyVaultIndex } from "@/lib/study/vault";
+import { studyCitationOrigin } from "@/lib/study/links";
 import { resolveStudyRange } from "@/lib/study/text-edits";
 import { captureReportPracticeContext, matchesStudyReport, plannedStudySteps, studyReports } from "@/lib/study/reports";
 import {
@@ -1095,13 +1097,27 @@ describe.each(backends)("%s store", (name, create) => {
         tags: [],
         origin: { kind: "book", bookId: book.id, section: 0, offset: 0, length: quote.length },
       });
-      const tutor = await startCardTutor([card.id, readerCard.id], work, "Quorum practice");
+      const unlinked = await saveStudyCard({
+        front: "Remember without the passage",
+        back: readerCard.back,
+        vaultId: work,
+        tags: [],
+        origin: readerCard.origin,
+        citations: [],
+      });
+      const draftPassages = await readFlashcardDraftPassages(
+        card.citations?.map(studyCitationOrigin) ?? [],
+        work,
+      );
+      expect(draftPassages.map(({ text }) => text)).toEqual([quote]);
+      const tutor = await startCardTutor([card.id, readerCard.id, unlinked.id], work, "Quorum practice");
       if (!tutor) throw new Error("Expected a Tutor practice session");
       const read = async (practiceCardId: string) =>
         (await readStudyTutorSources({ ...tutor, practiceCardId }, work)).cardEvidence?.get(
           practiceCardId,
         );
       expect(await read(card.id)).toMatchObject([{ text: quote, origin: { chunkId: chunk.id } }]);
+      expect(await read(unlinked.id)).toEqual([]);
       const prefix = "New background outside the saved excerpt.\n\n";
       await saveStudyText(book.id, prefix + quote, { section: 0, original: quote });
       const [moved] = await getChunks([book.sourceId]);

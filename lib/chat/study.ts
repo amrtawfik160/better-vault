@@ -1,7 +1,21 @@
 import { getToolName, isToolUIPart } from "ai";
-import { stripCitations } from "@/lib/grounding/passages";
+import { citedNumbers, stripCitations } from "@/lib/grounding/passages";
+import { passageRefSchema } from "@/lib/grounding/passage-schema";
+import type { StudyOrigin } from "@/lib/study/records";
 import type { ChatMessage } from "./types";
 import { visualSchemas, visualToolName } from "./visuals";
+
+export function notebookAnswerEvidence(message: ChatMessage, notebookId: string): StudyOrigin[] {
+  const cited = new Set(
+    message.parts.flatMap((part) => (part.type === "text" ? citedNumbers(part.text) : [])),
+  );
+  const passages = passageRefSchema.array().safeParse(message.metadata?.passages);
+  return passages.success
+    ? passages.data.flatMap(({ n, chunkId, sourceId, snippet }) =>
+        cited.has(n) ? [{ kind: "source", notebookId, chunkId, sourceId, snippet }] : [],
+      )
+    : [];
+}
 
 export function answerFlashcardMaterial(message: ChatMessage) {
   const text = stripCitations(

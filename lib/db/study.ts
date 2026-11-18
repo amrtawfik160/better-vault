@@ -1,5 +1,7 @@
 import { generateId } from "ai";
+import { flashcardPassageSize } from "@/lib/study/ai";
 import type { PassageRef } from "@/lib/chat/types";
+import { notebookAnswerEvidence } from "@/lib/chat/study";
 import { freshSchedule, nextStudySchedule } from "@/lib/study/schedule";
 import { originHref, studyCitationOrigin } from "@/lib/study/links";
 import { studyPdfSections } from "@/lib/study/read-file";
@@ -15,8 +17,6 @@ import { clearTutorDraftRecovery } from "@/lib/study/tutor-draft-recovery";
 import { flashcardsData } from "@/studio/tools/flashcards/definition";
 import { quizData } from "@/studio/tools/quiz/definition";
 import { normaliseText } from "@/lib/grounding/chunk";
-import { citedNumbers } from "@/lib/grounding/passages";
-import { passageRefSchema } from "@/lib/grounding/passage-schema";
 import { sectionOf } from "@/lib/notes/syntax";
 import type {
   StudyFollowUp,
@@ -113,16 +113,115 @@ function highlightSources(rows: StudyRecord[], ids: string[]) {
   });
 }
 
+async function studyEvidenceReader(vaultId: string, limit = cardEvidenceLimit) {
+  const backend = store();
+  const [notebooks, vaults] = await Promise.all([backend.listNotebooks(), listVaults()]);
+  const ownership = { notebooks, vaults, rows: [], defaultVaultId: DEFAULT_VAULT };
+  const { notebookOwner } = studyVaultIndex({ ...ownership, notes: [] });
+  const sourceReads = new Map<string, ReturnType<typeof readNotebookSource>>();
+  const bookReads = new Map<string, ReturnType<typeof readStudyRowsInVault>>();
+
+  async function readNotebookSource(id: string) {
+    const source = await backend.getSource(id);
+    if (!source || notebookOwner(source.notebookId) !== vaultId) return;
+    return { source, chunks: await getChunks([source.id]) };
+  }
+
+  async function readPassage(origin: StudyOrigin): Promise<StudyPassage | undefined> {
+    if (origin.kind === "source") {
+      if (notebookOwner(origin.notebookId) !== vaultId) return;
+      const pending = sourceReads.get(origin.sourceId) ?? readNotebookSource(origin.sourceId);
+      sourceReads.set(origin.sourceId, pending);
+      const loaded = await pending;
+      if (!loaded || loaded.source.notebookId !== origin.notebookId) return;
+      const { source, chunks } = loaded;
+      const snippet = origin.snippet?.slice(0, 280);
+      const quoted = snippet?.replace(/…$/u, "").trim();
+      const chunk = locateCitedChunk(chunks, origin.chunkId, quoted);
+      if (!chunk) return;
+      // A relocated excerpt confirms the saved quote, while its new surroundings may differ.
+      const text = (chunk.id === origin.chunkId ? chunk.text : quoted)
+        ?.trim()
+        .slice(0, limit);
+      if (text)
+        return {
+          origin: { ...origin, chunkId: chunk.id, snippet },
+          title: source.title.slice(0, 500),
+          text,
+        };
+    }
+    if (origin.kind === "note") {
+      const note = await backend.getNote(origin.noteId);
+      if (!note || studyVaultIndex({ ...ownership, notes: [note] }).noteOwner(note.id) !== vaultId)
+        return;
+      const body = origin.heading ? sectionOf(note.body, origin.heading) : note.body;
+      const text = body?.trim().slice(0, limit);
+      if (text) return { origin, title: note.title.slice(0, 500), text };
+    }
+    if (origin.kind === "book") {
+      const ids = [origin.bookId, ...(origin.highlightId ? [origin.highlightId] : [])];
+      const key = JSON.stringify(ids);
+      const pending = bookReads.get(key) ?? readStudyRowsInVault(ids, vaultId);
+      bookReads.set(key, pending);
+      const rows = await pending;
+      const book = rows.find((row) => row.kind === "book" && row.id === origin.bookId);
+      if (book?.kind !== "book") return;
+      const highlight = rows.find(
+        (row) => row.kind === "highlight" && row.id === origin.highlightId,
+      );
+      const revision = studyTextRevision(book);
+      if (origin.highlightId) {
+        if (highlight?.kind !== "highlight" || highlight.bookId !== book.id) return;
+        const offset = locateStudyMark(book, highlight);
+        const text = highlight.quote.slice(0, limit);
+        if (offset >= 0 && text.trim())
+          return {
+            origin: {
+              ...origin,
+              section: highlight.section,
+              offset,
+              length: text.length,
+              revision,
+            },
+            title: book.title.slice(0, 500),
+            text,
+          };
+        return;
+      }
+      const { section, offset, length } = origin;
+      if (section === undefined || offset === undefined || !length) return;
+      const range = resolveStudyRange(book, section, { offset, length, revision: origin.revision });
+      if (!range) return;
+      const end = range.offset + Math.min(range.length, limit);
+      const text = book.sections[section].text.slice(range.offset, end);
+      if (text.trim())
+        return {
+          origin: { ...origin, offset: range.offset, length: text.length, revision },
+          title: book.title.slice(0, 500),
+          text,
+        };
+    }
+  }
+
+  return { notebookOwner, readPassage };
+}
+
+export async function readFlashcardDraftPassages(origins: readonly StudyOrigin[], vaultId: string) {
+  if (!origins.length) return [];
+  const { readPassage } = await studyEvidenceReader(vaultId, flashcardPassageSize);
+  const distinct = new Map(origins.map((origin) => [JSON.stringify(origin), origin]));
+  const passages = await Promise.all([...distinct.values()].slice(0, 8).map(readPassage));
+  return passages.filter((passage) => passage !== undefined);
+}
+
 async function readFlashcardEvidence(cards: StudyCard[], vaultId: string) {
   const backend = store();
   const evidence = new Map<string, StudyPassage[]>();
   if (!cards.some((card) => card.origin || card.citations?.length)) return evidence;
-  const [notebooks, vaults] = await Promise.all([backend.listNotebooks(), listVaults()]);
-  const ownership = { notebooks, vaults, rows: [], defaultVaultId: DEFAULT_VAULT };
-  const { notebookOwner } = studyVaultIndex({ ...ownership, notes: [] });
+  const { notebookOwner, readPassage } = await studyEvidenceReader(vaultId);
 
   async function originsOf(card: StudyCard): Promise<StudyOrigin[]> {
-    if (card.citations?.length) return card.citations.map(studyCitationOrigin);
+    if (card.citations) return card.citations.map(studyCitationOrigin);
     const origin = card.origin;
     if (!origin) return [];
     if (origin.kind === "word") {
@@ -144,91 +243,9 @@ async function readFlashcardEvidence(cards: StudyCard[], vaultId: string) {
           message.id === origin.messageId &&
           message.role === "assistant",
       )?.message;
-      if (!answer) return [];
-      const cited = new Set(
-        answer.parts.flatMap((part) => (part.type === "text" ? citedNumbers(part.text) : [])),
-      );
-      const passages = passageRefSchema.array().safeParse(answer.metadata?.passages);
-      return passages.success
-        ? passages.data.flatMap(({ n, chunkId, sourceId, snippet }) =>
-            cited.has(n)
-              ? [{ kind: "source", notebookId: origin.notebookId, chunkId, sourceId, snippet }]
-              : [],
-          )
-        : [];
+      return answer ? notebookAnswerEvidence(answer, origin.notebookId) : [];
     }
     return [origin];
-  }
-
-  async function readPassage(origin: StudyOrigin): Promise<StudyPassage | undefined> {
-    if (origin.kind === "source") {
-      if (notebookOwner(origin.notebookId) !== vaultId) return;
-      const source = await backend.getSource(origin.sourceId);
-      if (source?.notebookId !== origin.notebookId) return;
-      const chunks = await getChunks([source.id]);
-      const snippet = origin.snippet?.slice(0, 280);
-      const quoted = snippet?.replace(/…$/u, "").trim();
-      const chunk = locateCitedChunk(chunks, origin.chunkId, quoted);
-      if (!chunk) return;
-      // A relocated excerpt confirms the saved quote, while its new surroundings may differ.
-      const text = (chunk.id === origin.chunkId ? chunk.text : quoted)
-        ?.trim()
-        .slice(0, cardEvidenceLimit);
-      if (text)
-        return {
-          origin: { ...origin, chunkId: chunk.id, snippet },
-          title: source.title.slice(0, 500),
-          text,
-        };
-    }
-    if (origin.kind === "note") {
-      const note = await backend.getNote(origin.noteId);
-      if (!note || studyVaultIndex({ ...ownership, notes: [note] }).noteOwner(note.id) !== vaultId)
-        return;
-      const body = origin.heading ? sectionOf(note.body, origin.heading) : note.body;
-      const text = body?.trim().slice(0, cardEvidenceLimit);
-      if (text) return { origin, title: note.title.slice(0, 500), text };
-    }
-    if (origin.kind === "book") {
-      const ids = [origin.bookId, ...(origin.highlightId ? [origin.highlightId] : [])];
-      const rows = await readStudyRowsInVault(ids, vaultId);
-      const book = rows.find((row) => row.kind === "book" && row.id === origin.bookId);
-      if (book?.kind !== "book") return;
-      const highlight = rows.find(
-        (row) => row.kind === "highlight" && row.id === origin.highlightId,
-      );
-      const revision = studyTextRevision(book);
-      if (origin.highlightId) {
-        if (highlight?.kind !== "highlight" || highlight.bookId !== book.id) return;
-        const offset = locateStudyMark(book, highlight);
-        const text = highlight.quote.slice(0, cardEvidenceLimit);
-        if (offset >= 0 && text.trim())
-          return {
-            origin: {
-              ...origin,
-              section: highlight.section,
-              offset,
-              length: text.length,
-              revision,
-            },
-            title: book.title.slice(0, 500),
-            text,
-          };
-        return;
-      }
-      const { section, offset, length } = origin;
-      if (section === undefined || offset === undefined || !length) return;
-      const range = resolveStudyRange(book, section, { offset, length, revision: origin.revision });
-      if (!range) return;
-      const end = range.offset + Math.min(range.length, cardEvidenceLimit);
-      const text = book.sections[section].text.slice(range.offset, end);
-      if (text.trim())
-        return {
-          origin: { ...origin, offset: range.offset, length: text.length, revision },
-          title: book.title.slice(0, 500),
-          text,
-        };
-    }
   }
 
   const loaded = new Map<string, Promise<StudyPassage | undefined>>();

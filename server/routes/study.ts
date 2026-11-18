@@ -5,7 +5,7 @@ import { describeError } from "@/lib/ai/errors";
 import { credentialsSchema, modelRefSchema } from "@/lib/ai/request";
 import { createLanguageModel } from "@/lib/ai/providers";
 import { studyCorrections, studyReportReplySchema } from "@/lib/study/records";
-import { studyAction, studyPassageSchema } from "@/lib/study/ai";
+import { studyAction, studyCardDraftSchema, studyPassageSchema } from "@/lib/study/ai";
 
 const bodySchema = z.object({
   action: studyAction,
@@ -30,7 +30,7 @@ const bodySchema = z.object({
 const reply = z.object({
   text: z.string(),
   citations: z.array(z.number()),
-  cards: z.array(z.object({ front: z.string(), back: z.string() })),
+  cards: z.array(studyCardDraftSchema.omit({ citations: true })),
   report: studyReportReplySchema.required(),
 });
 
@@ -77,6 +77,9 @@ export async function POST(request: Request) {
         ? "When comparing sources, identify what each source supports and cite its passages separately."
         : "",
       action === "cards" ? `Return up to ${cardCount} cards.` : "",
+      action === "cards" && passages.length
+        ? "For each card, list up to three numbered passages that directly support its answer in that card’s citations array. Use an empty array when the numbered passages do not support the answer."
+        : "",
       action === "report"
         ? correctionMode === "off"
           ? "The learner turned language feedback off. Leave languageFeedback and vocabulary empty."
@@ -117,7 +120,12 @@ export async function POST(request: Request) {
         practiceLanguage,
         passages: passages.map((passage, index) => ({ number: index + 1, ...passage })),
       }),
-      output: Output.object({ schema: reply }),
+      output: Output.object({
+        schema:
+          action === "cards" && passages.length
+            ? reply.extend({ cards: z.array(studyCardDraftSchema.required()) })
+            : reply,
+      }),
       maxOutputTokens: 3500,
       abortSignal: request.signal,
     });

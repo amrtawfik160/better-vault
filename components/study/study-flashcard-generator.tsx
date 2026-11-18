@@ -7,17 +7,19 @@ import { Dialog } from "@/components/panelui/dialog";
 import { Input } from "@/components/panelui/input";
 import { Textarea } from "@/components/panelui/textarea";
 import { textDirection } from "@/lib/text/direction";
-import { newStudyCard, putStudyRecords } from "@/lib/db/study";
-import { flashcardMaterialLimit } from "@/lib/study/ai";
+import { newStudyCard, putStudyRecords, readFlashcardDraftPassages } from "@/lib/db/study";
+import { flashcardCitationsFor, flashcardMaterialLimit } from "@/lib/study/ai";
 import { askStudyModel } from "@/lib/study/client";
 import { studyHref } from "@/lib/study/links";
-import type { StudyOrigin } from "@/lib/study/records";
+import type { StudyPassage } from "@/lib/study/passages";
+import type { StudyCitation, StudyOrigin } from "@/lib/study/records";
 
-type Draft = { front: string; back: string };
+type Draft = { front: string; back: string; citations?: StudyCitation[] };
 export type FlashcardSource = {
   title: string;
   text: string;
   origin: StudyOrigin;
+  evidence?: StudyOrigin[];
   notebookId?: string;
   tags: string[];
   cards?: Draft[];
@@ -69,6 +71,7 @@ export function StudyFlashcardGenerator({
   const [input, setInput] = useState(source?.text.slice(0, flashcardMaterialLimit) ?? "");
   const [count, setCount] = useState(5);
   const [drafts, setDrafts] = useState<Draft[]>(source?.cards ?? []);
+  const [references, setReferences] = useState<StudyPassage[]>([]);
   const [working, setWorking] = useState(false);
   const [saving, setSaving] = useState(false);
   const controller = useRef<AbortController | null>(null);
@@ -87,9 +90,12 @@ export function StudyFlashcardGenerator({
     controller.current = request;
     setWorking(true);
     try {
+      const passages = await readFlashcardDraftPassages(source?.evidence ?? [], vaultId);
+      request.signal.throwIfAborted();
       const answer = await askStudyModel({
         action: "cards",
         input: input.trim(),
+        passages,
         cardCount: count,
         signal: request.signal,
       });
@@ -97,11 +103,23 @@ export function StudyFlashcardGenerator({
         const unique = new Map(
           (answer.cards ?? [])
             .filter(({ front, back }) => front.trim() && back.trim())
-            .map((card) => [card.front.trim().toLocaleLowerCase(), card]),
+            .map(({ front, back, citations }) => [
+              front.trim().toLocaleLowerCase(),
+              {
+                front,
+                back,
+                citations: source?.evidence?.length
+                  ? flashcardCitationsFor(citations, passages)
+                  : undefined,
+              },
+            ]),
         );
         const cards = [...unique.values()];
         if (!cards.length) toast.error("The model returned no flashcards.");
-        else setDrafts(cards);
+        else {
+          setDrafts(cards);
+          setReferences(passages);
+        }
       }
     } catch (error) {
       if (!request.signal.aborted)
@@ -118,13 +136,14 @@ export function StudyFlashcardGenerator({
     if (working || pendingSave.current) return;
     const cards = drafts
       .filter(({ front, back }) => front.trim() && back.trim())
-      .map(({ front, back }) =>
+      .map(({ front, back, citations }) =>
         newStudyCard({
           front: front.trim(),
           back: back.trim(),
           notebookId: source?.notebookId,
           vaultId,
           origin: source?.origin,
+          citations,
           tags: source?.tags ?? [],
         }),
       );
@@ -153,6 +172,12 @@ export function StudyFlashcardGenerator({
 
   const canSave =
     !working && !saving && drafts.some(({ front, back }) => front.trim() && back.trim());
+
+  function updateDraft(position: number, change: Partial<Draft>) {
+    setDrafts((items) =>
+      items.map((item, index) => (index === position ? { ...item, ...change } : item)),
+    );
+  }
 
   return (
     <section
@@ -221,13 +246,7 @@ export function StudyFlashcardGenerator({
                   value={draft.front}
                   dir={textDirection(draft.front)}
                   disabled={working || saving}
-                  onChange={(event) =>
-                    setDrafts((items) =>
-                      items.map((item, index) =>
-                        index === position ? { ...item, front: event.target.value } : item,
-                      ),
-                    )
-                  }
+                  onChange={(event) => updateDraft(position, { front: event.target.value })}
                 />
                 <Textarea
                   aria-label={`Card ${position + 1} answer`}
@@ -235,14 +254,48 @@ export function StudyFlashcardGenerator({
                   value={draft.back}
                   dir={textDirection(draft.back)}
                   disabled={working || saving}
-                  onChange={(event) =>
-                    setDrafts((items) =>
-                      items.map((item, index) =>
-                        index === position ? { ...item, back: event.target.value } : item,
-                      ),
-                    )
-                  }
+                  onChange={(event) => updateDraft(position, { back: event.target.value })}
                 />
+                {draft.citations?.length ? (
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground">
+                      {t("study.capture.cardSources")}
+                    </p>
+                    <ul>
+                      {draft.citations.map((citation) => (
+                        <li key={citation.index} className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 py-1 text-sm wrap-break-word">
+                            <p dir="auto">
+                              [{citation.index}] {citation.title}
+                            </p>
+                            <p dir="auto" className="line-clamp-2 text-xs text-muted-foreground">
+                              {references[citation.index - 1]?.text.slice(0, 280)}
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            disabled={working || saving}
+                            aria-label={t("study.capture.removeCardSource", {
+                              title: citation.title,
+                              number: citation.index,
+                            })}
+                            onClick={() =>
+                              updateDraft(position, {
+                                citations: draft.citations?.filter(
+                                  ({ index }) => index !== citation.index,
+                                ),
+                              })
+                            }
+                          >
+                            {t("study.capture.removeSource")}
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
                 <Button
                   type="button"
                   size="sm"
