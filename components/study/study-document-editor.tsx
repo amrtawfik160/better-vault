@@ -1,10 +1,11 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Markdown } from "@/components/chat/markdown";
+import { StudyMarkdown } from "./study-text";
 import { Button } from "@/components/panelui/button";
 import { Menu } from "@/components/panelui/menu";
 import { Textarea } from "@/components/panelui/textarea";
 import { textDirection } from "@/lib/text/direction";
+import { containsStudyMath } from "@/lib/study/markdown-math";
 
 const styles = {
   headline: ["line", "# "],
@@ -155,7 +156,7 @@ export function StudyDocumentEditor({
           aria-label={t("study.documentEditor.preview")}
           className="max-h-64 overflow-auto rounded-xl border p-3"
         >
-          <Markdown text={value.text} staticContent />
+          <StudyMarkdown text={value.text} staticContent math={containsStudyMath(value.text)} />
         </div>
       ) : null}
     </div>

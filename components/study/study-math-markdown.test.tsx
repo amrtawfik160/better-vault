@@ -23,4 +23,15 @@ describe("study math Markdown", () => {
     expect(content).toContain('<pre dir="ltr">');
     expect(content).toContain("  const example = &#x27;$x$&#x27;;");
   });
+
+  it("keeps the authored equation on the element enclosing the rendered glyphs", () => {
+    const inline = "$\\frac{a_i}{b_i}$";
+    const block = "$$\n\\sum_{i=1}^n x_i\n$$";
+    const content = renderToStaticMarkup(
+      <StudyMathMarkdown text={`Ratio ${inline}.\n\n${block}`} formulaMode="source" />,
+    );
+    expect(content).toContain(`<span data-study-formula="${inline}"><span class="katex">`);
+    expect(content).toContain(`<div data-study-formula="${block}"><span class="katex-display">`);
+    expect(content.match(/<math\b/g)).toHaveLength(2);
+  });
 });

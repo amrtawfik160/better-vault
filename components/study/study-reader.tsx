@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { StudyText } from "./study-text";
-import { Markdown } from "@/components/chat/markdown";
+import { StudyMarkdown, StudyText } from "./study-text";
 import { StudyDocumentEditor, type StudyDocumentDraft } from "./study-document-editor";
 import { highlightColors } from "./study-highlight-colors";
 import { flashcardMaterialLimit, flashcardPassageSize } from "@/lib/study/ai";
@@ -45,6 +44,7 @@ import {
   type StudyThread,
 } from "@/lib/study/records";
 import { locateStudyMark, resolveStudyRange, studyTextRevision } from "@/lib/study/text-edits";
+import { studyDocumentFormulaMode } from "@/lib/study/markdown-document";
 
 type Selection = { text: string; offset: number; revision: number };
 type AssistResult = {
@@ -159,6 +159,13 @@ export function StudyReader({
   const index = Math.min(Math.max(0, requestedPage ?? openedSection), book.sections.length - 1);
   const section = book.sections[index];
   const markdown = section.markdown;
+  const formulaMode = useMemo(
+    () => markdown === undefined ? undefined : studyDocumentFormulaMode(markdown, section.text),
+    [markdown, section.text],
+  );
+  const [paintedMath, setPaintedMath] = useState<string>();
+  const onMathReady = useCallback(() => setPaintedMath(markdown), [markdown]);
+  const waitingMath = Boolean(formulaMode) && paintedMath !== markdown;
   const revision = studyTextRevision(book);
   const navigate = useNavigate();
   const location = useLocation();
@@ -217,7 +224,7 @@ export function StudyReader({
     viewport,
     article: textBody,
     layout,
-    loadingLayout: Boolean(showLayout && fileId && layout === undefined),
+    loadingLayout: waitingMath || Boolean(showLayout && fileId && layout === undefined),
     renderedArticle: markdown !== undefined,
     enabled: !visitingPassage && !edit,
     activity: latestInteraction,
@@ -236,7 +243,7 @@ export function StudyReader({
         { offset: focus.offset, quote: section.text.slice(focus.offset, focus.offset + focus.length), color: "blue" as const },
       ]
     : pageHighlights;
-  useRenderedStudyMarks(textBody, markdown !== undefined, section.text, renderedMarks);
+  useRenderedStudyMarks(textBody, !waitingMath && markdown !== undefined, section.text, renderedMarks);
   const bookmarkPlaces = book.bookmarkPlaces ?? [];
 
   useEffect(() => {
@@ -300,7 +307,7 @@ export function StudyReader({
   }, [fileId]);
 
   useEffect(() => {
-    if (restoredLayout.current === location.key) return;
+    if (waitingMath || restoredLayout.current === location.key) return;
     const root = textBody.current;
     if (root && markdown !== undefined && focusStart !== undefined && focusLength !== undefined) {
       const quote = section.text.slice(focusStart, focusStart + focusLength);
@@ -314,7 +321,7 @@ export function StudyReader({
     if (focusStart !== undefined)
       document.getElementById("focused-passage")?.scrollIntoView({ block: "center" });
     else if (missingPassage) passageNotice.current?.scrollIntoView({ block: "nearest" });
-  }, [index, focusStart, focusLength, location.key, markdown, missingPassage, restoredLayout, section.text, viewport]);
+  }, [index, focusStart, focusLength, location.key, markdown, missingPassage, restoredLayout, section.text, viewport, waitingMath]);
 
   function clearSelection() {
     setSelection(null);
@@ -338,6 +345,7 @@ export function StudyReader({
   }
 
   function capture() {
+    if (waitingMath) return;
     latestInteraction.current = Date.now();
     if (markdown !== undefined && textBody.current) {
       captureRendered(textBody.current);
@@ -726,12 +734,9 @@ export function StudyReader({
             {missingPassage ? (
               <div>
                 <p className="font-medium">{t("study.highlights.savedExcerpt")}</p>
-                <DirectionalText
-                  as="blockquote"
-                  multiline
-                  text={selectedHighlight.quote}
-                  className="mt-1 wrap-break-word whitespace-pre-wrap"
-                />
+                <blockquote className="mt-1">
+                  <StudyText text={selectedHighlight.quote} className="wrap-break-word" />
+                </blockquote>
               </div>
             ) : null}
             {selectedHighlight.note.trim() ? (
@@ -925,7 +930,7 @@ export function StudyReader({
           ref={textBody}
           tabIndex={0}
           aria-label={section.title}
-          className={`mx-auto max-w-prose leading-relaxed wrap-break-word outline-none focus-visible:ring-2 focus-visible:ring-ring ${markdown === undefined ? "whitespace-pre-wrap" : "markdown"}`}
+          className={`mx-auto max-w-prose leading-relaxed wrap-break-word outline-none focus-visible:ring-2 focus-visible:ring-ring ${markdown === undefined ? "whitespace-pre-wrap" : "markdown study-math"}`}
           style={{ fontSize: font }}
           onMouseUp={capture}
           onTouchEnd={capture}
@@ -935,7 +940,7 @@ export function StudyReader({
           }}
         >
           {markdown !== undefined ? (
-            <Markdown bare imageAltOnly text={markdown} />
+            <StudyMarkdown bare imageAltOnly math={formulaMode} onMathReady={onMathReady} text={markdown} />
           ) : section.text ? (
             highlighted(section.text, pageHighlights, focus)
           ) : (
@@ -949,9 +954,9 @@ export function StudyReader({
           className="sticky bottom-3 z-10 space-y-2 rounded-2xl border bg-popover p-3 shadow"
         >
           <div className="flex items-start justify-between gap-3">
-            <DirectionalText
+            <StudyText
               text={selection.text}
-              className="line-clamp-2 text-sm text-muted-foreground"
+              className="min-w-0 line-clamp-2 text-sm text-muted-foreground"
             />
             <Button size="sm" variant="ghost" onClick={clearSelection}>
               {t("study.capture.dismiss")}

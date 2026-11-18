@@ -1,9 +1,28 @@
 import { useEffect, type RefObject } from "react";
 import { locateStudyQuote } from "@/lib/study/locators";
+import { studyFormulaAttribute } from "@/lib/study/markdown-math";
 import { studyHighlightColor, type StudyRecordOf } from "@/lib/study/records";
 
 type Mark = Pick<StudyRecordOf<"highlight">, "quote" | "offset" | "color">;
 const compact = (text: string) => text.replace(/\s/gu, "");
+const formulaSelector = `[${studyFormulaAttribute}]`;
+
+function formulaAt(node: Node) {
+  return (node instanceof Element ? node : node.parentElement)?.closest(formulaSelector);
+}
+
+function projectedText(range: Range, formulas: readonly Element[]) {
+  const tail = range.cloneRange();
+  let text = "";
+  for (const formula of formulas) {
+    if (!range.intersectsNode(formula)) continue;
+    const before = tail.cloneRange();
+    before.setEndBefore(formula);
+    text += before.toString() + (formula.getAttribute(studyFormulaAttribute) ?? "");
+    tail.setStartAfter(formula);
+  }
+  return text + tail.toString();
+}
 
 export function renderedSelection(root: HTMLElement, canonical: string) {
   const selection = window.getSelection();
@@ -14,12 +33,18 @@ export function renderedSelection(root: HTMLElement, canonical: string) {
 }
 
 export function canonicalRenderedRange(root: HTMLElement, range: Range, canonical: string, limit: number) {
-  const quote = compact(range.toString().trim().slice(0, limit));
+  const formulas = Array.from(root.querySelectorAll(formulaSelector));
+  const selection = range.cloneRange();
+  const firstFormula = formulaAt(selection.startContainer);
+  const lastFormula = formulaAt(selection.endContainer);
+  if (firstFormula) selection.setStartBefore(firstFormula);
+  if (lastFormula) selection.setEndAfter(lastFormula);
+  const quote = compact(projectedText(selection, formulas).trim().slice(0, limit));
   if (!quote) return;
   const prefix = range.cloneRange();
   prefix.selectNodeContents(root);
-  prefix.setEnd(range.startContainer, range.startOffset);
-  const expected = compact(prefix.toString()).length;
+  prefix.setEnd(selection.startContainer, selection.startOffset);
+  const expected = compact(projectedText(prefix, formulas)).length;
   const at = locateStudyQuote(compact(canonical), quote, expected);
   if (at < 0) return null;
 
@@ -37,11 +62,27 @@ export function canonicalRenderedRange(root: HTMLElement, range: Range, canonica
   return { offset, text: canonical.slice(offset, end + 1) };
 }
 
+type RenderedPiece = { node: Text; offset: number } | { node: Element };
+
 function renderedTextIndex(root: HTMLElement) {
-  const pieces: { node: Text; offset: number }[] = [];
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const pieces: RenderedPiece[] = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+    acceptNode(node) {
+      if (node.parentElement?.closest(formulaSelector)) return NodeFilter.FILTER_REJECT;
+      return node instanceof Text || (node instanceof Element && node.matches(formulaSelector))
+        ? NodeFilter.FILTER_ACCEPT
+        : NodeFilter.FILTER_SKIP;
+    },
+  });
   let text = "";
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (node instanceof Element) {
+      const source = compact(node.getAttribute(studyFormulaAttribute) ?? "");
+      text += source;
+      const piece = { node };
+      for (let index = 0; index < source.length; index++) pieces.push(piece);
+      continue;
+    }
     if (!(node instanceof Text)) continue;
     for (let offset = 0; offset < node.length; offset++) {
       const char = node.data[offset];
@@ -66,8 +107,10 @@ function locateRenderedRange(
   const last = pieces[start + quote.length - 1];
   if (!first || !last) return;
   const range = new Range();
-  range.setStart(first.node, first.offset);
-  range.setEnd(last.node, last.offset + 1);
+  if ("offset" in first) range.setStart(first.node, first.offset);
+  else range.setStartBefore(first.node);
+  if ("offset" in last) range.setEnd(last.node, last.offset + 1);
+  else range.setEndAfter(last.node);
   return range;
 }
 

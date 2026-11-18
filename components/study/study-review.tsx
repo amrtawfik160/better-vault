@@ -305,10 +305,9 @@ export function StudyReview({
           {item.kind === "card" ? (
             <StudyText text={item.front} className="text-xl font-medium wrap-break-word" />
           ) : (
-            <DirectionalText
-              multiline
+            <StudyText
               text={item.cue || "Recall why you saved this passage."}
-              className="text-xl font-medium wrap-break-word whitespace-pre-wrap"
+              className="text-xl font-medium wrap-break-word"
             />
           )}
           {item.kind === "card" && item.image ? (
@@ -327,11 +326,7 @@ export function StudyReview({
               {item.kind === "card" ? (
                 <StudyText text={item.back} className="border-t pt-4 wrap-break-word" />
               ) : (
-                <DirectionalText
-                  multiline
-                  text={item.quote}
-                  className="border-t pt-4 wrap-break-word whitespace-pre-wrap"
-                />
+                <StudyText text={item.quote} className="border-t pt-4 wrap-break-word" />
               )}
               {item.kind === "card" && item.backImage ? (
                 <img
@@ -1066,11 +1061,9 @@ export function HighlightsLibrary({
                     setSelected((ids) => checked ? [...ids, item.id] : ids.filter((id) => id !== item.id));
                   }}
                 />
-                <DirectionalText
-                  as="blockquote"
-                  text={item.quote}
-                  className="min-w-0 flex-1 font-medium wrap-break-word"
-                />
+                <blockquote className="min-w-0 flex-1 font-medium wrap-break-word">
+                  <StudyText text={item.quote} />
+                </blockquote>
                 <span
                   className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium ${highlightColors[item.color]}`}
                 >
