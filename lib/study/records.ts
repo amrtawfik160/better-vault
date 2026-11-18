@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { notePassageSchema } from "@/lib/notes/search-match";
-import { ocrLanguages, ocrText } from "./ocr-format";
+import { maxOcrText, ocrLanguages, ocrText } from "./ocr-format";
 
 const base = z.object({
   id: z.string(),
@@ -55,6 +55,20 @@ export const pdfOcrSourceSchema = z.object({
   edits: z.array(textEdit),
 });
 export type PdfOcrSource = z.infer<typeof pdfOcrSourceSchema>;
+export const studyOcrDraftPages = z.array(z.object({
+  section: index,
+  previousText: z.string().max(maxOcrText),
+  text: z.string().max(maxOcrText),
+  languages: ocrLanguages,
+  reviewed: z.boolean(),
+}));
+const studyOcrDraftSchema = base.extend({
+  kind: z.literal("ocr-draft"),
+  bookId: z.string(),
+  fileId: z.string(),
+  version: z.string(),
+  pages: studyOcrDraftPages,
+});
 const imageEdge = index.max(100);
 export const studyImageCropSchema = z.object({
   left: imageEdge,
@@ -209,6 +223,7 @@ const studyReportSchema = studyReportReplySchema.extend({
 
 export const studyRecordSchema = z.discriminatedUnion("kind", [
   studyDocumentDraftSchema,
+  studyOcrDraftSchema,
   base.extend({
     kind: z.literal("book"),
     notebookId: z.string(),
@@ -350,7 +365,10 @@ export type StudyBookTextWrite = {
   updatedAt: number;
 };
 export type StudyOcrPage = { section: number; previousText: string; text: string; languages: string[] };
-export type StudyOcrWrite = { bookId: string; fileId: string; pages: StudyOcrPage[]; updatedAt: number };
+export type StudyOcrDraft = z.infer<typeof studyOcrDraftSchema>;
+export type StudyOcrDraftPage = StudyOcrDraft["pages"][number];
+export type StudyOcrDraftWrite = Pick<StudyOcrDraft, "bookId" | "fileId" | "version" | "pages" | "updatedAt"> & { replaces?: string };
+export type StudyOcrWrite = { bookId: string; fileId: string; pages: StudyOcrPage[]; updatedAt: number; draftVersion?: string };
 export type StudyOcrWriteResult = "saved" | "conflict" | "limit";
 export type StudyThread = StudyRecordOf<"thread">;
 export type StudyTutorDraft = z.infer<typeof studyTutorDraftSchema>;

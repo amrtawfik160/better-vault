@@ -4,7 +4,7 @@ import { DEFAULT_VAULT } from "@/lib/study/vault";
 import { patchedStudyReviewItem } from "@/lib/study/recall";
 import { patchedStudyThread } from "@/lib/study/reports";
 import { patchedStudyBook, renamedStudyBook, revisedStudyBook } from "@/lib/study/text-edits";
-import { prepareStudyOcrWrite } from "@/lib/study/ocr-write";
+import { prepareStudyOcrDraft, prepareStudyOcrWrite, remainingStudyOcrDraft, scanDraftId } from "@/lib/study/ocr-write";
 import { detachedVocabularyCard, vocabularyCardId, vocabularyChanges } from "@/lib/study/vocabulary";
 import { updatedStudioPractice } from "@/studio/shared/practice";
 import type { Backend, StoreContent, TableName } from "../backend";
@@ -442,6 +442,10 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
       }),
     deleteSource: (id) =>
       transaction(db, () => {
+        const source = get<Source>("sources", id);
+        if (source) {
+          for (const book of studyBooksForSource(source.notebookId, id)) deleteWhere("study", "id", scanDraftId(book.id));
+        }
         deleteWhere("chunks", "source_id", id);
         db.prepare("DELETE FROM blobs WHERE source_id = ?").run(id);
         deleteWhere("sources", "id", id);
@@ -624,6 +628,16 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
         put("study", row);
         return true;
       }),
+    writeStudyOcrDraft: (write) =>
+      transaction(db, () => {
+        const book = get<StudyRecord>("study", write.bookId);
+        if (book?.kind !== "book" || !get<Notebook>("notebooks", book.notebookId)) return false;
+        const next = prepareStudyOcrDraft(book, get<Source>("sources", book.sourceId),
+          get<StudyRecord>("study", scanDraftId(book.id)), write);
+        if (!next) return false;
+        put("study", next);
+        return true;
+      }),
     patchStudyReviewItem: (write) =>
       transaction(db, () => {
         const next = patchedStudyReviewItem(get<StudyRecord>("study", write.id), write);
@@ -668,6 +682,9 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
         if (book?.kind !== "book" || !get<Notebook>("notebooks", book.notebookId)) return "conflict";
         const prepared = prepareStudyOcrWrite(book, get<Source>("sources", book.sourceId), write);
         if (prepared.kind !== "ready") return prepared.kind;
+        const draft = remainingStudyOcrDraft(get<StudyRecord>("study", scanDraftId(book.id)), write);
+        if (!draft.allowed) return "conflict";
+        if (draft.remaining) put("study", draft.remaining);
         put("study", prepared.book);
         put("sources", prepared.source);
         if (prepared.chunks) {
@@ -681,6 +698,7 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
       transaction(db, () => {
         const row = get<StudyRecord>("study", id);
         if (row?.kind === "book") {
+          deleteWhere("study", "id", scanDraftId(id));
           db.prepare(
             "DELETE FROM study WHERE notebook_id = ? AND json_extract(doc, '$.kind') IN ('highlight', 'document-draft') AND json_extract(doc, '$.bookId') = ?",
           ).run(row.notebookId, id);

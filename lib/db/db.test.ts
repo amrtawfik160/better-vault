@@ -20,6 +20,7 @@ import {
   saveStudyReadingPlace,
   saveStudyOcrText,
   saveStudyOcrPages,
+  writeStudyOcrDraft,
   saveStudyText,
   startSourceTutor,
   startBookTutor,
@@ -58,6 +59,7 @@ import { studyVaultIndex } from "@/lib/study/vault";
 import { originHref, studyCitationOrigin } from "@/lib/study/links";
 import { passagesFor } from "@/lib/study/passages";
 import { studyDocumentDraftId } from "@/lib/study/document-drafts";
+import { scanDraftId } from "@/lib/study/ocr-write";
 import type { StudyDocumentRecovery } from "@/lib/study/records";
 import { ingestFile } from "@/lib/sources/ingest";
 import { resolveStudyRange } from "@/lib/study/text-edits";
@@ -324,6 +326,42 @@ describe.each(backends)("%s store", (name, create) => {
       expect((await getChunks([book.sourceId])).map(({ text }) => text))
         .toEqual(["Page 2\n\nNative text.", "First page reviewed.", "Third page reviewed."]);
       expect(await store().getSource(book.sourceId)).toMatchObject({ studyRevision: 2 });
+    });
+
+    it("preserves scan review drafts privately and only publishes the approved current version", async () => {
+      const book = await addStudyBook({ title: "Scan packet", format: "pdf", bytes: Uint8Array.of(37, 80, 68, 70),
+        mime: "application/pdf", sections: [{ title: "Page 1", text: "" }, { title: "Page 2", text: "" }, { title: "Page 3", text: "Native text." }] });
+      if (!book.fileId) throw new Error("The original PDF was not saved");
+      const id = scanDraftId(book.id);
+      const first = { section: 0, previousText: "", text: "Reviewed passage.", languages: ["eng"], reviewed: true };
+      const second = { section: 1, previousText: "", text: "Unreviewed evidence.", languages: ["eng"], reviewed: false };
+      const draft = { bookId: book.id, fileId: book.fileId, version: "scan-review-v1", pages: [first, second] };
+      expect(await writeStudyOcrDraft({ ...draft, pages: [{ ...first, section: 2, previousText: "Native text." }] })).toBe(false);
+      expect(await writeStudyOcrDraft(draft)).toBe(true);
+      expect(await writeStudyOcrDraft({ ...draft, version: "stale", pages: [] })).toBe(false);
+      expect(await store().getStudy(book.id)).toEqual(book);
+      expect((await getChunks([book.sourceId])).map(({ text }) => text)).toEqual(["Page 3\n\nNative text."]);
+
+      const backup = JSON.parse(JSON.stringify(await exportBackup()));
+      await deleteAllData();
+      await importBackup(backup);
+      expect(await store().getStudy(id)).toMatchObject({ pages: [first, second], version: draft.version });
+      await expect(saveStudyOcrText({ ...first, bookId: book.id, fileId: book.fileId })).rejects.toBeInstanceOf(StudyTextConflict);
+      await expect(saveStudyOcrPages({ ...draft, pages: [first, second], draftVersion: draft.version }))
+        .rejects.toBeInstanceOf(StudyTextConflict);
+      await expect(saveStudyOcrPages({ ...draft, pages: [first], draftVersion: "stale" })).rejects.toBeInstanceOf(StudyTextConflict);
+      await expect(saveStudyOcrPages({ ...draft, pages: [{ ...first, text: "A stale edit." }], draftVersion: draft.version }))
+        .rejects.toBeInstanceOf(StudyTextConflict);
+
+      await saveStudyOcrPages({ ...draft, pages: [first], draftVersion: draft.version });
+      expect(await store().getStudy(id)).toMatchObject({ pages: [second] });
+      expect((await getChunks([book.sourceId])).map(({ text }) => text)).toEqual(["Page 3\n\nNative text.", first.text]);
+      expect(await writeStudyOcrDraft({ ...draft, replaces: draft.version, version: "late", pages: [first, second] })).toBe(false);
+      expect(await writeStudyOcrDraft({ ...draft, replaces: draft.version, version: "discarded", pages: [] })).toBe(true);
+      expect(await writeStudyOcrDraft({ ...draft, replaces: "discarded", version: "restarted", pages: [second] })).toBe(true);
+      await store().deleteSource(book.sourceId);
+      expect(await store().getStudy(id)).toBeUndefined();
+      expect(await writeStudyOcrDraft({ ...draft, pages: [second] })).toBe(false);
     });
   });
 

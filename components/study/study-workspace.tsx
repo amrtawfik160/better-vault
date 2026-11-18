@@ -12,6 +12,7 @@ import { difficultStudyItems, studyHighlightPreview } from "@/lib/study/recall";
 import { studyReadingProgress } from "@/lib/study/reading-progress";
 import { studyActivityGroups } from "@/lib/study/activity";
 import { studyReportKey } from "@/lib/study/reports";
+import { scanDraftId } from "@/lib/study/ocr-write";
 import {
   directReviewSession,
   pendingReviewLearning,
@@ -467,7 +468,7 @@ export default function StudyWorkspace({
     : undefined;
   const studyVaultId = linkedVault ?? vaultId;
   const rows = (saved ?? [])
-    .filter((row) => row.kind !== "document-draft" && scope.owner(row) === studyVaultId)
+    .filter((row) => row.kind !== "document-draft" && row.kind !== "ocr-draft" && scope.owner(row) === studyVaultId)
     .sort((a, b) => b.updatedAt - a.updatedAt);
 
   useEffect(() => {
@@ -496,6 +497,7 @@ export default function StudyWorkspace({
   });
   const bookId = params.get("book");
   const book = books.find((entry) => entry.id === bookId);
+  const scanDraft = book && saved?.find((row) => row.id === scanDraftId(book.id));
   const readerThread =
     book && threads.find(({ id, bookId }) => id === requestedReaderTutor && bookId === book.id);
   const readerThreadId = readerThread?.id;
@@ -797,6 +799,7 @@ export default function StudyWorkspace({
           <StudyReader
             key={book.id}
             book={book}
+            scanDraft={scanDraft?.kind === "ocr-draft" && scanDraft.fileId === book.fileId ? scanDraft : undefined}
             viewport={readerViewport}
             vaultId={studyVaultId}
             requestedPage={page}

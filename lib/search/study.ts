@@ -5,7 +5,7 @@ import { studyReportKey, studyReports } from "@/lib/study/reports";
 import { studyVaultIndex } from "@/lib/study/vault";
 
 export type StudySearchLink = {
-  type: Exclude<StudyRecord["kind"], "session" | "document-draft"> | "message" | "report" | "passage";
+  type: Exclude<StudyRecord["kind"], "session" | "document-draft" | "ocr-draft"> | "message" | "report" | "passage";
   href: string;
   context?: string;
 };
@@ -44,7 +44,7 @@ export function studySearchCatalogue(
   const documents: { book: StudyBook; vaultId: string }[] = [];
 
   for (const row of input.rows) {
-    if (row.kind === "session" || row.kind === "document-draft") continue;
+    if (row.kind === "session" || row.kind === "document-draft" || row.kind === "ocr-draft") continue;
     const vaultId = owner(row);
     const add = (study: StudySearchLink, title: string, text = "") => {
       if (!title.trim() && !text.trim()) return;

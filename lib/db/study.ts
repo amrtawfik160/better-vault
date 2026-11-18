@@ -12,6 +12,7 @@ import {
   studyMarkdownContent,
 } from "@/lib/study/markdown-document";
 import { clearDocumentRecoveries } from "@/lib/study/document-drafts";
+import { scanDraftId } from "@/lib/study/ocr-write";
 import { clearFlashcardDraftsFrom } from "@/lib/study/flashcard-draft-recovery";
 import { locateStudyMark, resolveStudyRange, studyTextEdit, studyTextRevision } from "@/lib/study/text-edits";
 import { cardEvidenceLimit, type StudyDraftPassage, type StudyPassage, type StudyTutorSources } from "@/lib/study/passages";
@@ -34,6 +35,7 @@ import type {
   StudyBook,
   StudyBookWrite,
   StudyOrigin,
+  StudyOcrDraftWrite,
   StudyOcrPage,
   StudyOcrWrite,
   StudyThread,
@@ -1052,6 +1054,15 @@ export async function saveStudyOcrPages(write: Omit<StudyOcrWrite, "updatedAt">)
   const saved = await store().saveStudyOcrPages({ ...write, updatedAt: Date.now() });
   if (saved === "conflict") throw new StudyTextConflict();
   if (saved === "limit") throw new Error("The reviewed text exceeds the page or document size limit.");
+}
+
+export function writeStudyOcrDraft(write: Omit<StudyOcrDraftWrite, "updatedAt">) {
+  return store().writeStudyOcrDraft({ ...write, updatedAt: Date.now() });
+}
+
+export async function readStudyOcrDraft(bookId: string, fileId: string) {
+  const row = await store().getStudy(scanDraftId(bookId));
+  if (row?.kind === "ocr-draft" && row.fileId === fileId) return row;
 }
 
 export function saveStudyOcrText({ bookId, fileId, ...page }: Pick<StudyOcrWrite, "bookId" | "fileId"> & StudyOcrPage) {

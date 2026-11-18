@@ -2,13 +2,46 @@ import { chunksForSource, sourceTextParts } from "@/lib/db/source-text";
 import type { Chunk, Source } from "@/lib/db/types";
 import { normaliseText } from "@/lib/grounding/chunk";
 import { maxOcrText, ocrLanguages } from "./ocr-format";
-import type { StudyBook, StudyOcrWrite, StudyRecord } from "./records";
+import { studyOcrDraftPages, type StudyBook, type StudyOcrDraft, type StudyOcrDraftWrite, type StudyOcrWrite, type StudyRecord } from "./records";
 import { studyTextEdit, studyTextRevision } from "./text-edits";
+
+export function scanDraftId(bookId: string) {
+  return `ocr-draft:${bookId}`;
+}
+
+function matchesOriginal(book: StudyRecord | undefined, source: Source | undefined, fileId: string): book is StudyBook {
+  return book?.kind === "book" && book.format === "pdf" && book.fileId === fileId &&
+    source?.id === book.sourceId && source.notebookId === book.notebookId && source.originalFileId === fileId;
+}
+
+export function prepareStudyOcrDraft(book: StudyRecord | undefined, source: Source | undefined,
+  existing: StudyRecord | undefined, write: StudyOcrDraftWrite): StudyOcrDraft | undefined {
+  if (!matchesOriginal(book, source, write.fileId) || (existing && existing.kind !== "ocr-draft") ||
+    existing?.version !== write.replaces) return;
+  const pages = studyOcrDraftPages.safeParse(write.pages).data;
+  if (!pages || new Set(pages.map(({ section }) => section)).size !== pages.length ||
+    pages.some(({ section, previousText }) => previousText.trim() || book.sections[section]?.text !== previousText)) return;
+  return { id: scanDraftId(book.id), kind: "ocr-draft", notebookId: book.notebookId,
+    bookId: book.id, fileId: write.fileId, version: write.version, pages, updatedAt: write.updatedAt };
+}
+
+export function remainingStudyOcrDraft(draft: StudyRecord | undefined, write: StudyOcrWrite) {
+  const current = draft?.kind === "ocr-draft" && draft.fileId === write.fileId ? draft : undefined;
+  const selected = new Map(write.pages.map((page) => [page.section, page]));
+  const selectedDrafts = current?.pages.filter(({ section }) => selected.has(section)) ?? [];
+  if (write.draftVersion === undefined) return { allowed: selectedDrafts.length === 0 };
+  if (!current || current.version !== write.draftVersion || selectedDrafts.length !== write.pages.length ||
+    selectedDrafts.some((draftPage) => {
+      const page = selected.get(draftPage.section);
+      return !draftPage.reviewed || page?.text !== draftPage.text || page.previousText !== draftPage.previousText ||
+        page.languages.join("+") !== draftPage.languages.join("+");
+    })) return { allowed: false };
+  return { allowed: true, remaining: { ...current, pages: current.pages.filter(({ section }) => !selected.has(section)) } };
+}
 
 export function prepareStudyOcrWrite(row: StudyRecord | undefined, source: Source | undefined, write: StudyOcrWrite):
   { kind: "ready"; book: StudyBook; source: Source; chunks?: Chunk[] } | { kind: "conflict" | "limit" } {
-  if (row?.kind !== "book" || row.format !== "pdf" || row.fileId !== write.fileId || !source ||
-    source.id !== row.sourceId || source.notebookId !== row.notebookId || source.originalFileId !== row.fileId ||
+  if (!source || !matchesOriginal(row, source, write.fileId) ||
     (source.studyRevision ?? 0) !== studyTextRevision(row) || !write.pages.length)
     return { kind: "conflict" };
 

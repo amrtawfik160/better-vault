@@ -31,6 +31,7 @@ import { studyReturnState } from "@/lib/study/return-links";
 import {
   freshSchedule,
   putStudyRecords,
+  readStudyOcrDraft,
   recordStudyActivity,
   saveStudyCard,
   saveStudyNote,
@@ -47,6 +48,7 @@ import {
   studyHighlightColor,
   type StudyBook,
   type StudyHighlightColor,
+  type StudyOcrDraft,
   type StudyOrigin,
   type StudyReadingAppearance,
   type StudyReadingPlace,
@@ -130,6 +132,7 @@ function highlighted(
 
 export function StudyReader({
   book,
+  scanDraft,
   viewport,
   vaultId,
   requestedPage,
@@ -150,6 +153,7 @@ export function StudyReader({
   back,
 }: {
   book: StudyBook;
+  scanDraft?: StudyOcrDraft;
   viewport: HTMLDivElement | null;
   vaultId: string;
   requestedPage?: number;
@@ -227,6 +231,8 @@ export function StudyReader({
   const [color, setColor] = useState<StudyHighlightColor>("yellow");
   const [editingSection, setEditingSection] = useState<number>();
   const [ocrMode, setOcrMode] = useState<"page" | "batch">();
+  const [batchDraft, setBatchDraft] = useState<StudyOcrDraft>();
+  const [openingScanReview, setOpeningScanReview] = useState(false);
   const appearance = { ...defaultStudyReadingAppearance, ...book.readingAppearance };
   const { textSize: font, pdfZoom: zoom, epubTheme } = appearance;
   const appearanceCheckpoint = useRef<StudyReadingPlace | undefined>(undefined);
@@ -439,6 +445,19 @@ export function StudyReader({
     setOcrMode(undefined);
     setResult(null);
     openPage(page);
+  }
+
+  async function openScanReview() {
+    if (!fileId || openingScanReview) return;
+    setOpeningScanReview(true);
+    try {
+      setBatchDraft(await readStudyOcrDraft(book.id, fileId));
+      setOcrMode("batch");
+    } catch {
+      toast.error(t("study.scan.openFailed"));
+    } finally {
+      setOpeningScanReview(false);
+    }
   }
 
   function openVisualAction(capture: StudyImageCapture, action: "card" | "discuss") {
@@ -850,14 +869,15 @@ export function StudyReader({
           >
             {book.bookmarks.includes(index) ? "Remove bookmark" : "Bookmark"}
           </Button>
-          {book.format === "pdf" && fileId && (!hasPageText || section.ocrLanguages) ? (
+          {book.format === "pdf" && fileId && (!hasPageText || section.ocrLanguages) &&
+            !scanDraft?.pages.some(({ section }) => section === index) ? (
             <Button size="sm" variant="outline" onClick={() => setOcrMode("page")}>
               {t(section.ocrLanguages ? "study.scan.edit" : "study.scan.title")}
             </Button>
           ) : null}
           {book.format === "pdf" && fileId && book.sections.length > 1 && book.sections.some(({ text }) => !text.trim()) ? (
-            <Button size="sm" variant="outline" onClick={() => setOcrMode("batch")}>
-              {t("study.scan.batch")}
+            <Button size="sm" variant="outline" disabled={openingScanReview} onClick={() => void openScanReview()}>
+              {t(scanDraft?.pages.length ? "study.scan.resume" : "study.scan.batch")}
             </Button>
           ) : null}
         </div>
@@ -1271,7 +1291,7 @@ export function StudyReader({
         />
       ) : null}
       {ocrMode === "batch" && fileId ? (
-        <StudyBatchOcr key={`${book.id}:${index}`} book={book} fileId={fileId} page={index}
+        <StudyBatchOcr key={`${book.id}:${index}`} book={book} fileId={fileId} page={index} draft={batchDraft}
           onClose={() => setOcrMode(undefined)} onSave={() => {
             if (needsOriginal) setSurfaceChoice({ visit: location.key, surface: "layout" });
             clearSelection();

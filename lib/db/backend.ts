@@ -3,6 +3,7 @@ import type {
   StudyBookTextWrite,
   StudyBookWrite,
   StudyDocumentRecovery,
+  StudyOcrDraftWrite,
   StudyOcrWrite,
   StudyOcrWriteResult,
   StudyRecord,
@@ -160,6 +161,7 @@ export interface Backend {
   patchStudyBook(write: StudyBookWrite): Promise<void>;
   patchStudyThread(write: StudyThreadWrite): Promise<boolean>;
   writeStudyDocumentDraft(row: StudyDocumentRecovery, replaces?: string): Promise<boolean>;
+  writeStudyOcrDraft(write: StudyOcrDraftWrite): Promise<boolean>;
   writeStudyVocabulary(write: StudyWordWrite): Promise<StudyWordResult>;
   patchStudyReviewItem(write: StudyReviewItemWrite): Promise<boolean>;
   applyStudyReview(write: StudyReviewWrite): Promise<boolean>;
@@ -260,7 +262,7 @@ export const writes = {
   patchSource: ["sources"],
   renameDocument: ["sources", "study", "notebooks"],
   patchNotebookSources: ["sources"],
-  deleteSource: ["sources", "chunks", "blobs"],
+  deleteSource: ["sources", "chunks", "blobs", "study"],
   saveChat: ["messages", "conversations", "notebooks"],
   patchConversation: ["conversations"],
   deleteConversation: ["conversations", "messages"],
@@ -277,6 +279,7 @@ export const writes = {
   patchStudyBook: ["study"],
   patchStudyThread: ["study"],
   writeStudyDocumentDraft: ["study"],
+  writeStudyOcrDraft: ["study"],
   writeStudyVocabulary: ["study"],
   patchStudyReviewItem: ["study"],
   applyStudyReview: ["study"],
@@ -389,6 +392,7 @@ export const backendMethods = [
   "patchStudyBook",
   "patchStudyThread",
   "writeStudyDocumentDraft",
+  "writeStudyOcrDraft",
   "writeStudyVocabulary",
   "patchStudyReviewItem",
   "applyStudyReview",

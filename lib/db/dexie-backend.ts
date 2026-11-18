@@ -4,7 +4,7 @@ import { DEFAULT_VAULT } from "@/lib/study/vault";
 import { patchedStudyReviewItem } from "@/lib/study/recall";
 import { patchedStudyThread } from "@/lib/study/reports";
 import { patchedStudyBook, renamedStudyBook, revisedStudyBook } from "@/lib/study/text-edits";
-import { prepareStudyOcrWrite } from "@/lib/study/ocr-write";
+import { prepareStudyOcrDraft, prepareStudyOcrWrite, remainingStudyOcrDraft, scanDraftId } from "@/lib/study/ocr-write";
 import { detachedVocabularyCard, vocabularyCardId, vocabularyChanges } from "@/lib/study/vocabulary";
 import { updatedStudioPractice } from "@/studio/shared/practice";
 import type { Backend } from "./backend";
@@ -183,7 +183,12 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
       });
     },
     deleteSource: (id) =>
-      db.transaction("rw", [db.sources, db.chunks, db.blobs], async () => {
+      db.transaction("rw", [db.sources, db.chunks, db.blobs, db.study], async () => {
+        const source = await db.sources.get(id);
+        if (source) {
+          const books = await studyBooksForSource(source.notebookId, id).primaryKeys();
+          await db.study.bulkDelete(books.map(scanDraftId));
+        }
         await db.chunks.where("sourceId").equals(id).delete();
         await db.blobs.where("sourceId").equals(id).delete();
         await db.sources.delete(id);
@@ -343,6 +348,16 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
         await db.study.put(row);
         return true;
       }),
+    writeStudyOcrDraft: (write) =>
+      db.transaction("rw", [db.study, db.sources, db.notebooks], async () => {
+        const book = await db.study.get(write.bookId);
+        if (book?.kind !== "book" || !(await db.notebooks.get(book.notebookId))) return false;
+        const next = prepareStudyOcrDraft(book, await db.sources.get(book.sourceId),
+          await db.study.get(scanDraftId(book.id)), write);
+        if (!next) return false;
+        await db.study.put(next);
+        return true;
+      }),
     patchStudyReviewItem: (write) =>
       db.transaction("rw", db.study, async () => {
         const next = patchedStudyReviewItem(await db.study.get(write.id), write);
@@ -388,6 +403,9 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
         if (book?.kind !== "book" || !(await db.notebooks.get(book.notebookId))) return "conflict";
         const prepared = prepareStudyOcrWrite(book, await db.sources.get(book.sourceId), write);
         if (prepared.kind !== "ready") return prepared.kind;
+        const draft = remainingStudyOcrDraft(await db.study.get(scanDraftId(book.id)), write);
+        if (!draft.allowed) return "conflict";
+        if (draft.remaining) await db.study.put(draft.remaining);
         await db.study.put(prepared.book);
         await db.sources.put(prepared.source);
         if (prepared.chunks) {
@@ -401,6 +419,7 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
       db.transaction("rw", db.study, async () => {
         const row = await db.study.get(id);
         if (row?.kind === "book") {
+          await db.study.delete(scanDraftId(id));
           await db.study
             .where("notebookId")
             .equals(row.notebookId)
