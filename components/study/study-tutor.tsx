@@ -18,7 +18,7 @@ import {
   type TutorMaterialSelection,
 } from "./tutor-material-picker";
 import { StudyFlashcardDraftDialog, type FlashcardSource } from "./study-flashcard-generator";
-import { originHref, studyCitationOrigin, studyHref } from "@/lib/study/links";
+import { originHref, studyCitationOrigin, studyHref, tutorCardsScope } from "@/lib/study/links";
 import { Button, buttonVariants } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
 import { modelKey, parseModelKey } from "@/lib/ai/catalog";
@@ -50,7 +50,7 @@ import { askStudyModel } from "@/lib/study/client";
 import { studyConversationMaterial, studyPracticeImages } from "@/lib/study/ai";
 import { passagesFor, tutorBookOrigin } from "@/lib/study/passages";
 import { activeStudyCard, selectedStudyCards } from "@/lib/study/recall";
-import { returnToTutor, studyReturnState } from "@/lib/study/return-links";
+import { returnFromTutorCards, returnToTutor, studyReturnState } from "@/lib/study/return-links";
 import {
   captureReportPracticeContext,
   matchesStudyReport,
@@ -574,6 +574,9 @@ export function StudyTutor({
       ? conversation.filter(({ entry }) => practiceCard && entry.practiceCardId === practiceCard.id)
       : conversation;
   const hasSavedAnswer = thread.messages.some(({ role, text }) => role === "assistant" && text.trim());
+  const answersWithCards = new Set(reportCards.flatMap(({ origin }) =>
+    origin?.kind === "tutor" && origin.threadId === thread.id && origin.message !== undefined ? [origin.message] : [],
+  ));
 
   useEffect(() => {
     const probe = new AbortController();
@@ -1394,6 +1397,15 @@ export function StudyTutor({
                     >
                       {t("study.capture.cardsFromAnswer")}
                     </Button>
+                    {index !== undefined && answersWithCards.has(index) ? (
+                      <Link
+                        to={studyHref("cards", { vault: vaultId, thread: thread.id, fromAnswer: index })}
+                        state={returnToTutor(location.pathname + location.search, location.state, { message: index })}
+                        className="inline-flex rounded-lg px-2 py-1 text-sm text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {t("study.capture.viewCards")}
+                      </Link>
+                    ) : null}
                   </>
                 ) : null}
               </div>
@@ -1849,12 +1861,9 @@ export function StudyTutor({
                   navigate(
                     studyHref(
                       "cards",
-                      draftSource.origin.kind === "report"
-                        ? { thread: thread.id, fromReport: draftSource.origin.reportId ?? "legacy" }
-                        : thread.notebookId
-                          ? { notebook: thread.notebookId }
-                          : {},
+                      { vault: vaultId, ...(tutorCardsScope(draftSource.origin) ?? { notebook: thread.notebookId }) },
                     ),
+                    { state: returnFromTutorCards(location.pathname + location.search, location.state, draftSource.origin) },
                   ),
               },
             })

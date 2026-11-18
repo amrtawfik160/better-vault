@@ -14,6 +14,13 @@ export function studyHref(tab: string, params: Record<string, string | number | 
   return withQuery(routes.home, { view: "study", tab, ...params });
 }
 
+export function tutorCardsScope(origin?: StudyOrigin) {
+  if (origin?.kind === "tutor" && origin.message !== undefined)
+    return { thread: origin.threadId, fromAnswer: String(origin.message) };
+  if (origin?.kind === "report")
+    return { thread: origin.threadId, fromReport: origin.reportId ?? "legacy" };
+}
+
 export function isFocusedStudyReader(params: URLSearchParams) {
   return params.get("view") === "study" && params.get("tab") === "library" &&
     Boolean(params.get("book")) && params.get("readerFocus") === "1";

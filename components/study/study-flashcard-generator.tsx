@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { Button } from "@/components/panelui/button";
@@ -22,7 +22,8 @@ import {
   type FlashcardDraftState,
   type FlashcardSource,
 } from "@/lib/study/flashcard-draft-recovery";
-import { studyHref } from "@/lib/study/links";
+import { studyHref, tutorCardsScope } from "@/lib/study/links";
+import { returnFromTutorCards } from "@/lib/study/return-links";
 
 export type { FlashcardSource };
 type Draft = FlashcardDraftState["batches"][number]["drafts"][number];
@@ -78,6 +79,7 @@ export function StudyFlashcardGenerator({
 }) {
   const { t } = useTranslation("home");
   const navigate = useNavigate();
+  const location = useLocation();
   const [key] = useState(() => recoveryKey ?? flashcardDraftKey(vaultId, requestedSource));
   const [restored] = useState(() => {
     const recovery = readFlashcardDraft(key);
@@ -240,9 +242,14 @@ export function StudyFlashcardGenerator({
       if (version.current) clearFlashcardDraft(key, version.current);
       close();
       if (review) {
-        const note = source?.origin.kind === "note" ? source.origin.noteId : undefined;
-        navigate(studyHref("review", { vault: vaultId, note }), {
-          state: { studyReviewVault: vaultId, studyReviewIds: cards.map(({ id }) => id) },
+        const origin = source?.origin;
+        const note = origin?.kind === "note" ? origin.noteId : undefined;
+        navigate(studyHref("review", { vault: vaultId, note, ...tutorCardsScope(origin) }), {
+          state: {
+            ...returnFromTutorCards(location.pathname + location.search, location.state, origin),
+            studyReviewVault: vaultId,
+            studyReviewIds: cards.map(({ id }) => id),
+          },
         });
       } else onSave?.(cards.length);
     } catch (error) {

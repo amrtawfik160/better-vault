@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { routes } from "@/lib/routes";
+import { originHref } from "./links";
+import type { StudyOrigin } from "./records";
 import { reviewReturnState } from "./review-session";
 
 const tutorReturnSchema = z.object({ studyTutorReturn: z.string() });
@@ -50,4 +52,13 @@ export function returnToTutor(path: string, state: unknown, focus: TutorReturnFo
     else params.delete("suggestion");
   }
   return { ...reviewReturnState(state), studyTutorReturn: `${routes.home}?${params}` };
+}
+
+export function returnFromTutorCards(path: string, state: unknown, origin?: StudyOrigin) {
+  if (origin?.kind !== "tutor" && origin?.kind !== "report") return;
+  const tutorPath = tutorSearch(path) ? path : originHref(origin);
+  if (origin?.kind === "tutor" && origin.message !== undefined)
+    return returnToTutor(tutorPath, state, { message: origin.message });
+  if (origin?.kind === "report")
+    return returnToTutor(tutorPath, state, { report: { id: origin.reportId ?? "legacy" } });
 }

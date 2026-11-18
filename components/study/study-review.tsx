@@ -41,6 +41,7 @@ import {
   type ReviewSnapshot,
   type ReviewTutorFeedback,
 } from "@/lib/study/review-session";
+import { studyReturnState } from "@/lib/study/return-links";
 import { toast } from "sonner";
 import { Button } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
@@ -102,7 +103,7 @@ export function StudyReview({
   vaultId,
   libraryHref,
   libraryLabel,
-  studioReturn,
+  collectionSource,
   history,
   sessionId,
 }: {
@@ -119,13 +120,14 @@ export function StudyReview({
   vaultId: string;
   libraryHref?: string;
   libraryLabel?: string;
-  studioReturn?: { href: string; label: string };
+  collectionSource?: { href: string; label: string };
   history: StudyRecordOf<"session">[];
   sessionId: string;
 }) {
   const { t } = useTranslation("home");
   const now = useStudyClock(items);
   const location = useLocation();
+  const links = studyReturnState(location.state);
   const path = location.pathname + location.search;
   const destination = useMemo(() => {
     const selection = reviewSelection(location.state);
@@ -133,6 +135,7 @@ export function StudyReview({
       path,
       state: {
         ...selection,
+        ...studyReturnState(location.state),
         studyReviewSession: sessionId,
         studyReviewVault: vaultId,
       },
@@ -334,16 +337,16 @@ export function StudyReview({
             : `${queue.length} due · ${rated} reviewed this session`}
           {collection ? ` · ${collection}` : ""}
         </p>
-        {(item && libraryHref) || studioReturn ? (
+        {(item && libraryHref) || collectionSource ? (
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
             {item && libraryHref ? (
-              <Link to={library} className="underline underline-offset-4">
+              <Link to={library} state={links} className="underline underline-offset-4">
                 {libraryName}
               </Link>
             ) : null}
-            {studioReturn ? (
-              <Link to={studioReturn.href} state={returnState} className="underline underline-offset-4">
-                {studioReturn.label}
+            {collectionSource ? (
+              <Link to={collectionSource.href} state={returnState} className="underline underline-offset-4">
+                {collectionSource.label}
               </Link>
             ) : null}
           </div>
@@ -532,6 +535,7 @@ export function StudyReview({
             ) : null}
             <Link
               to={library}
+              state={links}
               className="underline underline-offset-4"
             >
               {libraryName}
@@ -597,6 +601,7 @@ export function CardLibrary({
   vaultId,
   filter,
   noteId,
+  tutorAnswer,
   clearFilter,
   review,
   practice,
@@ -607,6 +612,7 @@ export function CardLibrary({
   vaultId: string;
   filter?: string;
   noteId?: string;
+  tutorAnswer?: { threadId: string; message: number };
   clearFilter: () => void;
   review: (ids?: string[], practiceOnly?: boolean) => void;
   practice: (ids: string[]) => void;
@@ -786,6 +792,9 @@ export function CardLibrary({
         <FilterCaption label={filter} clear={clearFilter}>
           {noteId ? (
             <StudyOriginLink origin={{ kind: "note", noteId }} label={t("study.recall.backToNote")} />
+          ) : null}
+          {tutorAnswer ? (
+            <StudyOriginLink origin={{ kind: "tutor", ...tutorAnswer }} label={t("study.recall.openTutorAnswer")} />
           ) : null}
         </FilterCaption>
       ) : null}

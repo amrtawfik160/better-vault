@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { returnToTutor, studyReturnState, tutorReturnState } from "./return-links";
+import { returnFromTutorCards, returnToTutor, studyReturnState, tutorReturnState } from "./return-links";
 
 describe("Tutor return links", () => {
   const review = {
@@ -24,6 +24,22 @@ describe("Tutor return links", () => {
       studyTutorReturn:
         "/?view=study&tab=library&book=b1&page=4&readerTutor=t1&report=1&reportId=r2&suggestion=word%3A0",
     });
+  });
+
+  it("keeps the answer and interrupted review links during a source visit from correction review", () => {
+    const origin = { kind: "tutor", threadId: "t1", message: 0 } as const;
+    const links = returnFromTutorCards("/?view=study&tab=cards", review, origin);
+    expect(links).toEqual({
+      ...review,
+      studyTutorReturn: "/?view=study&tab=tutor&thread=t1&message=0",
+    });
+    const sourceVisit = {
+      studyReturn: {
+        path: "/?view=study&tab=review&thread=t1&fromAnswer=0",
+        state: { ...links, studyReviewSession: "corrections", studyReviewIds: ["new"] },
+      },
+    };
+    expect(studyReturnState(sourceVisit)).toEqual(sourceVisit);
   });
 
   it.each([

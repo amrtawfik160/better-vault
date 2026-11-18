@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { routes } from "@/lib/routes";
+import { queryIndex } from "./links";
 import { difficultStudyItems, latestStudyReviews } from "./recall";
 import type { StudyBook, StudyRecord, StudyRecordOf } from "./records";
 import { matchesStudyReport } from "./reports";
@@ -31,10 +32,14 @@ const selectionSchema = z.object({
   studyReviewIds: z.array(z.string()).optional(),
   studyReviewVault: z.string().optional(),
 });
+const reviewIdentity = selectionSchema.extend({ studyReviewSession: z.string().min(1).max(80) });
+const reviewTarget = z.object({ path: z.string().refine(isReviewPath), state: reviewIdentity });
 const returnSchema = z.object({
-  studyReturn: z.object({
-    path: z.string(),
-    state: selectionSchema.extend({ studyReviewSession: z.string().min(1).max(80) }),
+  studyReturn: reviewTarget.extend({
+    state: reviewIdentity.extend({
+      studyReturn: reviewTarget.optional(),
+      studyTutorReturn: z.string().optional(),
+    }),
   }),
 });
 const resumeSchema = returnSchema.shape.studyReturn.extend({ snapshot: snapshotSchema });
@@ -54,8 +59,7 @@ export function reviewSelection(state: unknown) {
 }
 
 export function reviewReturnState(state: unknown) {
-  const parsed = returnSchema.safeParse(state);
-  if (parsed.success && isReviewPath(parsed.data.studyReturn.path)) return parsed.data;
+  return returnSchema.safeParse(state).data;
 }
 
 export function studyCardsInScope(
@@ -65,6 +69,8 @@ export function studyCardsInScope(
   threadId: string | null,
 ) {
   const fromReport = params.get("fromReport");
+  const fromAnswer = params.get("fromAnswer");
+  const answerIndex = queryIndex(fromAnswer);
   const outputId = params.get("output");
   const cardId = params.get("card");
   const notebookId = params.get("notebook");
@@ -79,6 +85,8 @@ export function studyCardsInScope(
       (!noteId || (card.origin?.kind === "note" && card.origin.noteId === noteId)) &&
       (!outputId || (card.origin?.kind === "studio" && card.origin.outputId === outputId)) &&
       (!fromReport || matchesStudyReport(card.origin, threadId, fromReport)) &&
+      (fromAnswer === null || (answerIndex !== undefined && card.origin?.kind === "tutor" &&
+        card.origin.threadId === threadId && card.origin.message === answerIndex)) &&
       (!cardId || card.id === cardId),
   );
 }
@@ -113,7 +121,8 @@ export function reviewCollection(
         rows.some((row) => row.kind === "thread" && row.id === threadId) ? threadId : null,
       );
   const ids = selection && new Set(selection);
-  const scoped = ids ? items.filter(({ id }) => ids.has(id)) : items;
+  const byId = ids && new Map(items.map((item) => [item.id, item]));
+  const scoped = ids && byId ? [...ids].flatMap((id) => byId.get(id) ?? []) : items;
   if (params.get("mode") !== "weak") return scoped;
   const history = rows.filter((row) => row.kind === "session");
   return difficultStudyItems(scoped, history).map(({ item }) => item);
@@ -221,7 +230,7 @@ export function saveReviewCheckpoint(
     const current = savedReview(vaultId);
     if (snapshot.position) {
       if (
-        snapshot.practiced &&
+        (snapshot.practiced || destination.state.studyReturn) &&
         current &&
         !current.snapshot.practiced &&
         !sameReview(current, destination)

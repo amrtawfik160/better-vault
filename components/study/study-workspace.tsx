@@ -23,7 +23,7 @@ import {
   studyCardsInScope,
   type ReviewTutorFeedback,
 } from "@/lib/study/review-session";
-import { studyReturnState } from "@/lib/study/return-links";
+import { studyReturnState, tutorReturnState } from "@/lib/study/return-links";
 import { studyVaultIndex } from "@/lib/study/vault";
 import { studyTextRevision } from "@/lib/study/text-edits";
 import { cn } from "@/lib/utils";
@@ -506,6 +506,12 @@ export default function StudyWorkspace({
   const tutorVisible = Boolean(readerThreadId && (sideBySide || !readingWithoutPane));
   const unavailableBook = Boolean(ready && bookId && !book);
   const thread = threads.find((entry) => entry.id === params.get("thread"));
+  const fromAnswer = params.get("fromAnswer");
+  const answerIndex = queryIndex(fromAnswer);
+  const answerFilter = fromAnswer !== null && thread ? { thread: thread.id, fromAnswer } : undefined;
+  const answerCollection = fromAnswer !== null ? t("study.recall.tutorAnswerCards") : undefined;
+  const tutorAnswer = answerIndex !== undefined && thread?.messages[answerIndex]?.role === "assistant" &&
+    !tutorReturnState(location.state) ? { threadId: thread.id, message: answerIndex } : undefined;
   const fromReport = params.get("fromReport");
   const reportFilter = fromReport && thread ? { thread: thread.id, fromReport } : undefined;
   const reportCollection = fromReport ? t("study.followUps.reportCards") : undefined;
@@ -583,7 +589,11 @@ export default function StudyWorkspace({
       {
         state:
           next === "review"
-            ? { studyReviewIds: review, studyReviewVault: studyVaultId }
+            ? {
+                ...(extra?.fromAnswer !== undefined || extra?.fromReport !== undefined ? studyReturnState(location.state) : undefined),
+                studyReviewIds: review,
+                studyReviewVault: studyVaultId,
+              }
             : studyReturnState(location.state),
       },
     );
@@ -848,10 +858,12 @@ export default function StudyWorkspace({
         <CardLibrary
           cards={filteredCards}
           noteId={collectionNote?.id}
+          tutorAnswer={tutorAnswer}
           vaultId={studyVaultId}
           practice={(ids) => void openTutorSelection("card", ids)}
           openingPractice={openingPractice}
           filter={
+            answerCollection ??
             reportCollection ??
             noteCollection ??
             book?.title ??
@@ -865,7 +877,7 @@ export default function StudyWorkspace({
           }
           clearFilter={() => go("cards")}
           creation={
-            output || cardId || fromReport || noteId
+            output || cardId || fromReport || fromAnswer !== null || noteId
               ? false
               : book
                 ? {
@@ -882,6 +894,7 @@ export default function StudyWorkspace({
               {
                 ...bookFilter,
                 ...reportFilter,
+                ...answerFilter,
                 ...noteFilter,
                 ...(notebookId ? { notebook: notebookId } : {}),
                 ...(output ? { output } : {}),
@@ -910,14 +923,17 @@ export default function StudyWorkspace({
           initialPractice={weakMode || practiceMode}
           sessionId={reviewSessionId}
           history={rows.filter((row) => row.kind === "session")}
-          studioReturn={studioReturn}
+          collectionSource={studioReturn ?? (tutorAnswer ? {
+            href: originHref({ kind: "tutor", ...tutorAnswer }),
+            label: t("study.recall.openTutorAnswer"),
+          } : undefined)}
           libraryHref={
             reviewingVocabulary
               ? studyHref("vocabulary", { vault: studyVaultId })
               : reviewingHighlights && book
               ? studyHref("highlights", { book: book.id })
-              : reportFilter
-                ? studyHref("cards", reportFilter)
+              : reportFilter || answerFilter
+                ? studyHref("cards", { vault: studyVaultId, ...reportFilter, ...answerFilter })
                 : noteFilter || output || book || notebookId || cardId
                   ? studyHref("cards", {
                       ...bookFilter,
@@ -942,7 +958,7 @@ export default function StudyWorkspace({
                       : "study.recall.cardSelection",
                     { count: new Set(requestedReview).size },
                   )
-                : (reportCollection ?? noteCollection ?? book?.title)
+                : (answerCollection ?? reportCollection ?? noteCollection ?? book?.title)
           }
         />
       ) : null}
