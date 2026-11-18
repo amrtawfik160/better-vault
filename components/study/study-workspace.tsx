@@ -382,6 +382,7 @@ export default function StudyWorkspace({
   const highlights = rows.filter((row) => row.kind === "highlight");
   const threads = rows.filter((row) => row.kind === "thread");
   const words = rows.filter((row) => row.kind === "word");
+  const vaultNotes = (notes ?? []).filter((note) => scope.noteOwner(note.id) === studyVaultId);
   const bookId = params.get("book");
   const book = books.find((entry) => entry.id === bookId);
   const unavailableBook = Boolean(ready && bookId && !book);
@@ -605,7 +606,8 @@ export default function StudyWorkspace({
             key={`${thread.id}:${params.get("report") ?? ""}:${params.get("reportId") ?? ""}`}
             thread={thread}
             vaultId={studyVaultId}
-            vaultNotes={(notes ?? []).filter((note) => scope.noteOwner(note.id) === studyVaultId)}
+            vaultNotes={vaultNotes}
+            vaultBooks={books}
             book={books.find((item) => item.id === thread.bookId)}
             openReport={params.get("report") === "1"}
             requestedReportId={params.get("reportId") ?? undefined}
@@ -615,7 +617,13 @@ export default function StudyWorkspace({
             setup={() => setSettings(true)}
           />
         ) : (
-          <TutorIndex books={books} threads={threads} vaultId={studyVaultId} open={openThread} />
+          <TutorIndex
+            books={books}
+            notes={vaultNotes}
+            threads={threads}
+            vaultId={studyVaultId}
+            open={openThread}
+          />
         )
       ) : null}
     </>

@@ -8,6 +8,7 @@ import {
   freshSchedule,
   putStudyRecords,
   rateStudyItem,
+  readStudyTutorSources,
   saveStudyText,
   StudyTextConflict,
   updateStudyBook,
@@ -723,6 +724,68 @@ describe.each(backends)("%s store", (name, create) => {
         updatedAt: 0,
       });
       expect(await store().getStudy("standalone")).toMatchObject({ front: "Question" });
+    });
+
+    it("loads only selected Tutor materials still owned by the conversation's vault", async () => {
+      const work = await createVault({ name: "Work materials" });
+      const other = await createVault({ name: "Private materials" });
+      const first = await addStudyBook({
+        title: "First",
+        format: "text",
+        vaultId: work,
+        sections: [{ title: "Page", text: "Original material" }],
+      });
+      const second = await addStudyBook({
+        title: "Second",
+        format: "text",
+        vaultId: work,
+        sections: [{ title: "Page", text: "Second source" }],
+      });
+      const external = await addStudyBook({
+        title: "External",
+        format: "text",
+        vaultId: other,
+        sections: [{ title: "Page", text: "Private document" }],
+      });
+      const note = await createNote({
+        title: "Selected note",
+        vaultId: work,
+        body: "Selected note text",
+      });
+      const privateNote = await createNote({
+        title: "Private note",
+        vaultId: other,
+        body: "Private note text",
+      });
+      const thread = {
+        id: "selected-materials",
+        kind: "thread",
+        title: "Compare",
+        goal: "book",
+        scope: "materials",
+        vaultId: work,
+        bookIds: [first.id, second.id, external.id],
+        noteIds: [note.id, privateNote.id],
+        messages: [],
+        updatedAt: 0,
+      } satisfies import("@/lib/study/records").StudyThread;
+      await putStudyRecords(thread);
+      const sources = await readStudyTutorSources(thread, work);
+      expect(sources.books?.map(({ id }) => id)).toEqual([first.id, second.id]);
+      expect(sources.notes?.map(({ id }) => id)).toEqual([note.id]);
+      await updateNotebook(second.notebookId, { vaultId: other });
+      const moved = await readStudyTutorSources(thread, work);
+      expect(moved.books?.map(({ id }) => id)).toEqual([first.id]);
+      expect(await readStudyTutorSources(thread, other)).toEqual({});
+
+      const backup = JSON.parse(JSON.stringify(await exportBackup()));
+      await deleteAllData();
+      await importBackup(backup);
+      expect(await store().getStudy(thread.id)).toMatchObject({
+        scope: "materials",
+        bookIds: thread.bookIds,
+        noteIds: thread.noteIds,
+      });
     });
 
     it("keeps dated reports, flashcard origins and follow-ups through regeneration and backup", async () => {

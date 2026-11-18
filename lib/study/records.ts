@@ -31,7 +31,7 @@ export const studyOriginSchema = z.discriminatedUnion("kind", [
     length: index.optional(),
     revision: index.optional(),
   }),
-  z.object({ kind: z.literal("note"), noteId: z.string() }),
+  z.object({ kind: z.literal("note"), noteId: z.string(), heading: z.string().optional() }),
   z.object({ kind: z.literal("tutor"), threadId: z.string(), message: index.optional() }),
   z.object({ kind: z.literal("report"), threadId: z.string(), reportId: z.string().optional() }),
   z.object({ kind: z.literal("studio"), notebookId: z.string(), outputId: z.string() }),
@@ -45,7 +45,7 @@ const citation = z.union([
 ]);
 
 export const studyGoals = ["book", "teach-back", "language", "general"] as const;
-export const studyScopes = ["passage", "chapter", "book", "notes", "general"] as const;
+export const studyScopes = ["passage", "chapter", "book", "notes", "materials", "general"] as const;
 export const studyCorrections = ["live", "report", "off"] as const;
 export const studyRatings = ["again", "hard", "good", "easy"] as const;
 
@@ -163,6 +163,7 @@ export const studyRecordSchema = z.discriminatedUnion("kind", [
     offset: index.optional(),
     revision: index.optional(),
     noteIds: z.array(z.string()).optional(),
+    bookIds: z.array(z.string()).optional(),
     messages: z.array(
       z.object({
         role: z.enum(["user", "assistant"]),

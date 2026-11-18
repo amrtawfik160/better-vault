@@ -37,7 +37,11 @@ export function originHref(origin: StudyOrigin) {
         rev: origin.revision,
       });
     case "note":
-      return withQuery(routes.home, { view: "notes", note: origin.noteId });
+      return withQuery(routes.home, {
+        view: "notes",
+        note: origin.noteId,
+        heading: origin.heading,
+      });
     case "tutor":
       return studyHref("tutor", { thread: origin.threadId, message: origin.message });
     case "report":

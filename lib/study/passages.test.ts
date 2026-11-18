@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { passagesFor } from "./passages";
 import { findStudyExcerpt } from "./locators";
+import { originHref } from "./links";
 import type { StudyBook, StudyThread } from "./records";
 
 const sectionText =
@@ -33,7 +34,11 @@ const thread = {
 
 describe("Tutor grounding", () => {
   it("retrieves evidence near the end of a long chapter and links the exact source text", () => {
-    const passages = passagesFor(thread, book, "Where does the Nyquist stability criterion apply?");
+    const passages = passagesFor(
+      thread,
+      { book },
+      "Where does the Nyquist stability criterion apply?",
+    );
     const evidence = passages.find(({ text }) => text.includes("encirclements"));
     expect(evidence?.origin.kind).toBe("book");
     if (evidence?.origin.kind !== "book") throw new Error("Missing source evidence");
@@ -51,12 +56,13 @@ describe("Tutor grounding", () => {
         noteIds: ["reading-note"],
         messages: [{ role: "user", text: "How does the Nyquist criterion work?" }],
       },
-      undefined,
+      {
+        notes: [
+          { id: "reading-note", title: "Stability notes", body: sectionText },
+          { id: "other-note", title: "Other vault", body: "Nyquist criterion private notes" },
+        ],
+      },
       "Why does that matter?",
-      [
-        { id: "reading-note", title: "Stability notes", body: sectionText },
-        { id: "other-note", title: "Other vault", body: "Nyquist criterion private notes" },
-      ],
     );
     expect(passages.some(({ text }) => text.includes("critical point"))).toBe(true);
     expect(
@@ -71,13 +77,100 @@ describe("Tutor grounding", () => {
     }));
     const passages = passagesFor(
       { ...thread, scope: "book" },
-      { ...book, sections },
+      { book: { ...book, sections } },
       "Compare capacitance and plate area",
     );
     expect(passages).toHaveLength(8);
     expect(passages.some(({ origin }) => origin.kind === "book" && origin.section === 89)).toBe(
       true,
     );
+  });
+
+  it("reserves evidence for each selected document and note before a long source fills the budget", () => {
+    const longBook = {
+      ...book,
+      sections: Array.from({ length: 32 }, (_, index) => ({
+        title: `Candidate ${index}`,
+        text: `Nyquist loop gain and feedback ${index}.`,
+      })),
+    };
+    const shortBook = {
+      ...book,
+      id: "handbook",
+      title: "Controller handbook",
+      sections: [
+        { title: "Measurement", text: "Measure the transfer function against the modeled loop." },
+      ],
+    };
+    const material = {
+      ...thread,
+      scope: "materials",
+      bookIds: [longBook.id, shortBook.id],
+      noteIds: ["lab-notes"],
+    } satisfies StudyThread;
+    const passages = passagesFor(
+      material,
+      {
+        books: [
+          longBook,
+          shortBook,
+          {
+            ...shortBook,
+            id: "unselected",
+            sections: [{ title: "Private", text: "UNSELECTED DOCUMENT" }],
+          },
+        ],
+        notes: [
+          {
+            id: "lab-notes",
+            title: "Lab notes",
+            body: "Raw measurements.\n\n## Open-loop measurement\nNyquist results depend on the measured gain.",
+          },
+          { id: "unselected-note", title: "Other notes", body: "UNSELECTED NOTE" },
+        ],
+      },
+      "Nyquist loop gain feedback measurement",
+    );
+    expect(passages).toHaveLength(8);
+    expect(
+      passages.some(({ origin }) => origin.kind === "book" && origin.bookId === longBook.id),
+    ).toBe(true);
+    expect(
+      passages.some(
+        ({ origin }) =>
+          origin.kind === "book" && origin.bookId === shortBook.id && origin.offset === 0,
+      ),
+    ).toBe(true);
+    const note = passages.find(({ text }) => text.includes("measured gain"));
+    expect(note?.origin).toEqual({
+      kind: "note",
+      noteId: "lab-notes",
+      heading: "Open-loop measurement",
+    });
+    expect(
+      note && new URL(originHref(note.origin), "https://deeple.test").searchParams.get("heading"),
+    ).toBe("Open-loop measurement");
+    expect(passages.map(({ text }) => text).join("\n")).not.toContain("UNSELECTED");
+  });
+
+  it("uses the note itself when a heading appears more than once", () => {
+    const passages = passagesFor(
+      { ...thread, scope: "notes", noteIds: ["n"] },
+      {
+        notes: [
+          {
+            id: "n",
+            title: "Experiments",
+            body: "## Experiment\nFirst data\n\n## experiment\nSecond data",
+          },
+        ],
+      },
+      "Compare both experiments",
+    );
+    expect(passages.map(({ origin }) => origin)).toEqual([
+      { kind: "note", noteId: "n" },
+      { kind: "note", noteId: "n" },
+    ]);
   });
 });
 

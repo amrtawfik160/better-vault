@@ -69,11 +69,12 @@ const write = (key: string, value: unknown) => {
 export default function NotesWorkspace() {
   const { t, i18n } = useTranslation("notes");
   const navigate = useNavigate();
-  const { state } = useLocation();
+  const { state, key: routeKey } = useLocation();
   const world = useNotesWorld();
   const vaultId = useCurrentVault(world?.vaults);
   const [params, setParams] = useSearchParams();
   const activeId = params.get("note");
+  const citedHeading = params.get("heading");
   const graphOpen = params.get("graph") === "1";
   const notebookFilter = params.get("notebook");
 
@@ -89,6 +90,7 @@ export default function NotesWorkspace() {
   const editor = useRef<NoteEditorHandle>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const pendingReveal = useRef<string | null>(null);
+  const revealedRoute = useRef<string | null>(null);
 
   const notes = world?.notes;
   const byId = useMemo(() => new Map((notes ?? []).map((note) => [note.id, note])), [notes]);
@@ -228,10 +230,15 @@ export default function NotesWorkspace() {
   // After following a `[[Note#Heading]]` link, scroll to the heading once the note is open.
   useEffect(() => {
     const heading = pendingReveal.current;
-    if (!heading || !note) return;
-    pendingReveal.current = null;
-    revealHeading(heading);
-  }, [note, revealHeading]);
+    if (!note) return;
+    if (heading) {
+      pendingReveal.current = null;
+      revealHeading(heading);
+    } else if (citedHeading && revealedRoute.current !== routeKey) {
+      revealedRoute.current = routeKey;
+      revealHeading(citedHeading);
+    }
+  }, [note, revealHeading, routeKey, citedHeading]);
 
   const go = useCallback(
     (direction: "back" | "forward") => {

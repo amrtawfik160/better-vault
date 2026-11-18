@@ -8,7 +8,7 @@ export interface Passage extends Omit<PassageRef, "snippet"> {
 }
 
 type SourceInfo = Pick<Source, "id" | "title" | "kind">;
-type PassageChunk = Pick<Chunk, "id" | "sourceId" | "text">;
+type PassageChunk = Pick<Chunk, "id" | "sourceId" | "text"> & { title?: string };
 
 interface SelectOptions {
   sources: SourceInfo[];
@@ -19,6 +19,7 @@ interface SelectOptions {
   /** What the passages should be about: the question, or a Studio tool's focus. */
   query?: string;
   maxPassages?: number;
+  coverSources?: boolean;
 }
 
 /** Takes chunks in order until the budget is spent. */
@@ -37,8 +38,11 @@ function fill(chunks: PassageChunk[], budget: number, limit: number): PassageChu
 /** An even spread of each source's passages, each source getting a share of the budget by its size. */
 function spread(chunks: PassageChunk[], budget: number, limit: number): PassageChunk[] {
   const bySource = new Map<string, PassageChunk[]>();
-  for (const chunk of chunks)
-    bySource.set(chunk.sourceId, [...(bySource.get(chunk.sourceId) ?? []), chunk]);
+  for (const chunk of chunks) {
+    const list = bySource.get(chunk.sourceId);
+    if (list) list.push(chunk);
+    else bySource.set(chunk.sourceId, [chunk]);
+  }
   const total = chunks.reduce((sum, chunk) => sum + chunk.text.length, 0);
   const picked: PassageChunk[] = [];
   for (const list of bySource.values()) {
@@ -65,21 +69,45 @@ function search(
   query: string,
   budget: number,
   limit: number,
+  coverSources: boolean,
 ): PassageChunk[] {
-  const index = new MiniSearch<{ id: string; text: string; title: string }>({
-    fields: ["text", "title"],
-    searchOptions: { prefix: true, fuzzy: 0.15, boost: { title: 1.5 } },
-  });
-  index.addAll(
-    chunks.map((chunk) => ({
-      id: chunk.id,
-      text: chunk.text,
-      title: titles.get(chunk.sourceId) ?? "",
-    })),
-  );
-  const byId = new Map(chunks.map((chunk) => [chunk.id, chunk]));
-  const ranked = index.search(query).flatMap((result) => byId.get(String(result.id)) ?? []);
-  const found = fill(ranked, Math.floor(budget * 0.75), limit);
+  let ranked: PassageChunk[] = [];
+  if (query.trim()) {
+    const index = new MiniSearch<{ id: string; text: string; title: string }>({
+      fields: ["text", "title"],
+      searchOptions: { prefix: true, fuzzy: 0.15, boost: { title: 1.5 } },
+    });
+    index.addAll(
+      chunks.map(({ id, text, sourceId, title }) => ({
+        id,
+        text,
+        title: title ?? titles.get(sourceId) ?? "",
+      })),
+    );
+    const byId = new Map(chunks.map((chunk) => [chunk.id, chunk]));
+    ranked = index.search(query).flatMap((result) => byId.get(String(result.id)) ?? []);
+  }
+  const first = new Map<string, PassageChunk>();
+  if (coverSources) {
+    for (const chunk of [...ranked, ...chunks]) {
+      if (!first.has(chunk.sourceId)) first.set(chunk.sourceId, chunk);
+    }
+  }
+  const sourceHeads = [...first.values()];
+  const covered =
+    !ranked.length && sourceHeads.length > limit
+      ? spread(sourceHeads, budget, limit)
+      : fill(sourceHeads, budget, limit);
+  const reserved = new Set(covered.map(({ id }) => id));
+  const left = budget - covered.reduce((sum, chunk) => sum + chunk.text.length, 0);
+  const found = [
+    ...covered,
+    ...fill(
+      ranked.filter(({ id }) => !reserved.has(id)),
+      Math.floor(left * 0.75),
+      limit - covered.length,
+    ),
+  ];
   const used = found.reduce((sum, chunk) => sum + chunk.text.length, 0);
   const chosen = new Set(found.map((chunk) => chunk.id));
   const rest = spread(
@@ -102,15 +130,16 @@ export function selectPassages({
   budget,
   query,
   maxPassages = Infinity,
+  coverSources = false,
 }: SelectOptions): Passage[] {
   const info = new Map(sources.map((source) => [source.id, source]));
   const usable = chunks.filter((chunk) => info.has(chunk.sourceId));
   const total = usable.reduce((sum, chunk) => sum + chunk.text.length, 0);
   let picked: PassageChunk[];
   if (total <= budget && usable.length <= maxPassages) picked = usable;
-  else if (query?.trim()) {
+  else if (query?.trim() || coverSources) {
     const titles = new Map(sources.map((source) => [source.id, source.title]));
-    picked = search(usable, titles, query, budget, maxPassages);
+    picked = search(usable, titles, query ?? "", budget, maxPassages, coverSources);
   } else picked = spread(usable, budget, maxPassages);
 
   const order = new Map(usable.map((chunk, at) => [chunk.id, at]));

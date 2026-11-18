@@ -3,6 +3,8 @@ import { freshSchedule, nextStudySchedule } from "@/lib/study/schedule";
 import { originHref } from "@/lib/study/links";
 import { studyPdfSections } from "@/lib/study/read-file";
 import { studyTextEdit, studyTextRevision } from "@/lib/study/text-edits";
+import type { StudyTutorSources } from "@/lib/study/passages";
+import { studyVaultIndex } from "@/lib/study/vault";
 import { flashcardsData } from "@/studio/tools/flashcards/definition";
 import { quizData } from "@/studio/tools/quiz/definition";
 import { normaliseText } from "@/lib/grounding/chunk";
@@ -24,7 +26,7 @@ import { useStoreQuery } from "./live";
 import { createNotebook, deleteNotebook, renameNotebook } from "./notebooks";
 import { addSource, chunksForSource, renameSource } from "./sources";
 import { store } from "./store";
-import { currentVaultId, vaultOf } from "./vaults";
+import { currentVaultId, DEFAULT_VAULT, listVaults, vaultOf } from "./vaults";
 import { getSettings } from "./settings";
 
 export { freshSchedule } from "@/lib/study/schedule";
@@ -45,6 +47,41 @@ export async function readStudyThread(id: string): Promise<StudyThread> {
   const thread = await store().getStudy(id);
   if (thread?.kind !== "thread") throw new Error("This Tutor conversation is no longer available.");
   return thread;
+}
+
+export async function readStudyTutorSources(
+  thread: StudyThread,
+  vaultId: string,
+): Promise<StudyTutorSources> {
+  if (thread.scope === "general") return {};
+  const backend = store();
+  const bookIds = new Set(thread.scope === "materials" ? thread.bookIds : []);
+  if (thread.bookId) bookIds.add(thread.bookId);
+  const noteIds = new Set(
+    thread.scope === "materials" || thread.scope === "notes" ? thread.noteIds : [],
+  );
+  const [records, savedNotes, notebooks, vaults] = await Promise.all([
+    Promise.all([...bookIds].map((id) => backend.getStudy(id))),
+    Promise.all([...noteIds].map((id) => backend.getNote(id))),
+    backend.listNotebooks(),
+    listVaults(),
+  ]);
+  const books = records.filter((row) => row?.kind === "book");
+  const notes = savedNotes.filter((note) => note !== undefined);
+  const scope = studyVaultIndex({
+    rows: [thread, ...books],
+    notebooks,
+    notes,
+    vaults,
+    defaultVaultId: DEFAULT_VAULT,
+  });
+  if (scope.owner(thread) !== vaultId) return {};
+  const visible = books.filter((book) => scope.owner(book) === vaultId);
+  return {
+    book: visible.find(({ id }) => id === thread.bookId),
+    books: visible,
+    notes: notes.filter(({ id }) => scope.noteOwner(id) === vaultId),
+  };
 }
 
 export async function updateStudyThread(

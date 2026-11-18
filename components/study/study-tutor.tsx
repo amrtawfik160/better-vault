@@ -1,9 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Link, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { StudySessionReport } from "./study-session-report";
 import { StudyOriginLink } from "./study-origin-link";
+import {
+  TutorMaterialPicker,
+  availableTutorSelection,
+  type TutorMaterialSelection,
+} from "./tutor-material-picker";
 import { StudyFlashcardDraftDialog, type FlashcardSource } from "./study-flashcard-generator";
 import { originHref, studyHref } from "@/lib/study/links";
 import { Button, buttonVariants } from "@/components/panelui/button";
@@ -25,6 +30,7 @@ import {
   putStudyRecords,
   recordStudyActivity,
   readStudyThread,
+  readStudyTutorSources,
   removeStudyRecord,
   studyConversationDefaults,
   studyId,
@@ -79,11 +85,13 @@ type LiveVoice = ReturnType<typeof startStudyVoiceSession> & { abort: AbortContr
 export function TutorIndex({
   threads,
   books,
+  notes,
   vaultId,
   open,
 }: {
   threads: StudyThread[];
   books: StudyBook[];
+  notes: Note[];
   vaultId: string;
   open: (thread: StudyThread) => void;
 }) {
@@ -91,9 +99,23 @@ export function TutorIndex({
   const [goal, setGoal] = useState<StudyThread["goal"]>("book");
   const [scope, setScope] = useState<StudyThread["scope"]>("general");
   const [bookId, setBookId] = useState("");
+  const [selection, setSelection] = useState<TutorMaterialSelection>({ bookIds: [], noteIds: [] });
   const [query, setQuery] = useState("");
   const [deleting, setDeleting] = useState<StudyThread | null>(null);
   const savedSettings = useSettings();
+  const curated = scope === "notes" || scope === "materials";
+  const readableBooks = useMemo(
+    () => books.filter(({ sections }) => sections.some(({ text }) => text.trim())),
+    [books],
+  );
+  const readableNotes = useMemo(() => notes.filter(({ body }) => body.trim()), [notes]);
+  const selected = availableTutorSelection(
+    scope === "materials" ? readableBooks : [],
+    readableNotes,
+    selection,
+  );
+  const selectedCount = selected.bookIds.length + selected.noteIds.length;
+  const ready = !curated || selectedCount > 0;
 
   return (
     <section className="space-y-5">
@@ -102,16 +124,29 @@ export function TutorIndex({
         className="grid gap-3 rounded-2xl border p-4"
         onSubmit={(event) => {
           event.preventDefault();
-          const book = books.find((item) => item.id === bookId);
+          if (!ready) return;
+          const book =
+            scope === "book" || scope === "chapter"
+              ? books.find((item) => item.id === bookId)
+              : undefined;
+          const materialTitle = curated
+            ? (readableBooks.find(({ id }) => id === selected.bookIds[0])?.title ??
+              readableNotes.find(({ id }) => id === selected.noteIds[0])?.title)
+            : undefined;
+          const subject =
+            materialTitle && selectedCount > 1
+              ? t("study.materials.threadTitle", { title: materialTitle, count: selectedCount - 1 })
+              : (materialTitle ?? book?.title);
           const thread: StudyThread = {
             id: studyId(),
             kind: "thread",
-            title: book ? `${goalLabels[goal]} · ${book.title}` : goalLabels[goal],
+            title: subject ? `${goalLabels[goal]} · ${subject}` : goalLabels[goal],
             goal,
             scope,
             messages: [],
             vaultId,
             bookId: book?.id,
+            ...(curated ? selected : {}),
             notebookId: scope === "book" || scope === "chapter" ? book?.notebookId : undefined,
             updatedAt: Date.now(),
           };
@@ -137,8 +172,9 @@ export function TutorIndex({
             </select>
           </label>
           <label className="grid gap-1 text-sm">
-            Context
+            {t("study.materials.context")}
             <select
+              aria-label={t("study.materials.context")}
               className={optionClass}
               value={scope}
               onChange={(event) => setScope(event.target.value as StudyThread["scope"])}
@@ -147,7 +183,7 @@ export function TutorIndex({
                 .filter((value) => value !== "passage")
                 .map((value) => (
                   <option key={value} value={value}>
-                    {scopeLabels[value]}
+                    {value === "materials" ? t("study.materials.scope") : scopeLabels[value]}
                   </option>
                 ))}
             </select>
@@ -170,7 +206,25 @@ export function TutorIndex({
               </select>
             </label>
           ) : null}
-          <Button type="submit">Start conversation</Button>
+          {curated ? (
+            <TutorMaterialPicker
+              books={scope === "materials" ? readableBooks : []}
+              notes={readableNotes}
+              selection={{
+                bookIds: scope === "materials" ? selection.bookIds : [],
+                noteIds: selection.noteIds,
+              }}
+              onApply={(change) =>
+                setSelection((current) => ({
+                  bookIds: scope === "materials" ? change.bookIds : current.bookIds,
+                  noteIds: change.noteIds,
+                }))
+              }
+            />
+          ) : null}
+          <Button type="submit" disabled={!ready}>
+            Start conversation
+          </Button>
         </div>
       </form>
       <details className="rounded-xl border p-3 text-sm">
@@ -268,6 +322,7 @@ export function StudyTutor({
   thread,
   vaultId,
   vaultNotes,
+  vaultBooks,
   book,
   openReport,
   requestedReportId,
@@ -279,6 +334,7 @@ export function StudyTutor({
   thread: StudyThread;
   vaultId: string;
   vaultNotes: Note[];
+  vaultBooks: StudyBook[];
   book?: StudyBook;
   openReport?: boolean;
   requestedReportId?: string;
@@ -308,6 +364,21 @@ export function StudyTutor({
   const [readAloud, setReadAloud] = useState(false);
   const [language, setLanguage] = useState(thread.practiceLanguage ?? "");
   const workPending = busy || voiceState !== null || livePhase !== null;
+  const curated = thread.scope === "materials" || thread.scope === "notes";
+  const readableBooks = useMemo(
+    () =>
+      thread.scope === "materials"
+        ? vaultBooks.filter(({ sections }) => sections.some(({ text }) => text.trim()))
+        : [],
+    [thread.scope, vaultBooks],
+  );
+  const readableNotes = useMemo(() => vaultNotes.filter(({ body }) => body.trim()), [vaultNotes]);
+  const selection = {
+    bookIds: thread.scope === "materials" ? (thread.bookIds ?? []) : [],
+    noteIds: thread.noteIds ?? [],
+  };
+  const selected = availableTutorSelection(readableBooks, readableNotes, selection);
+  const contextReady = !curated || !!(selected.bookIds.length || selected.noteIds.length);
   const controller = useRef<AbortController | null>(null);
   const voice = useRef<VoiceCapture | null>(null);
   const live = useRef<LiveVoice | null>(null);
@@ -396,13 +467,16 @@ export function StudyTutor({
     const signal = session ? AbortSignal.any([abort.signal, session]) : abort.signal;
     try {
       const current = await currentConversation();
+      const sources = await readStudyTutorSources(current, vaultId);
       signal.throwIfAborted();
-      const passages = passagesFor(current, book, text, vaultNotes);
+      const passages = passagesFor(current, sources, text);
       if (current.scope !== "general" && !passages.length)
         throw new Error(
-          current.scope === "notes"
-            ? "Choose a note with text first."
-            : "This scope has no readable text. Choose another context.",
+          current.scope === "materials"
+            ? t("study.materials.noReadableSelection")
+            : current.scope === "notes"
+              ? "Choose a note with text first."
+              : "This scope has no readable text. Choose another context.",
         );
       const answer = await askStudyModel({
         action: "chat",
@@ -494,7 +568,7 @@ export function StudyTutor({
   }
 
   async function beginVoiceConversation() {
-    if (voice.current || live.current || controller.current || !model) return;
+    if (voice.current || live.current || controller.current || !model || !contextReady) return;
     const abort = new AbortController();
     const { signal } = abort;
     setLivePhase("opening");
@@ -548,6 +622,7 @@ export function StudyTutor({
     controller.current = abort;
     try {
       const context = await currentConversation();
+      const sources = await readStudyTutorSources(context, vaultId);
       abort.signal.throwIfAborted();
       const history = context.messages;
       const topic = history
@@ -558,7 +633,7 @@ export function StudyTutor({
       const result = await askStudyModel({
         action: "report",
         input: "Write a report on the study conversation.",
-        passages: passagesFor(context, book, topic, vaultNotes),
+        passages: passagesFor(context, sources, topic),
         thread: context,
         signal: abort.signal,
       });
@@ -728,24 +803,34 @@ export function StudyTutor({
           </select>
         </label>
         <label className="grid gap-1">
-          Context
+          {t("study.materials.context")}
           <select
-            aria-label="Context"
+            aria-label={t("study.materials.context")}
             className={optionClass}
             disabled={workPending}
             value={thread.scope}
-            onChange={(event) => void save({ scope: event.target.value as StudyThread["scope"] })}
+            onChange={(event) => {
+              const scope = studyScopes.find((value) => value === event.target.value);
+              if (scope)
+                void save({
+                  scope,
+                  ...(scope === "materials" && thread.bookIds === undefined && book
+                    ? { bookIds: [book.id] }
+                    : {}),
+                });
+            }}
           >
             {studyScopes
               .filter(
                 (scope) =>
                   scope === "general" ||
                   scope === "notes" ||
+                  scope === "materials" ||
                   (book && (scope !== "passage" || thread.quote)),
               )
               .map((scope) => (
                 <option value={scope} key={scope}>
-                  {scopeLabels[scope]}
+                  {scope === "materials" ? t("study.materials.scope") : scopeLabels[scope]}
                 </option>
               ))}
           </select>
@@ -768,32 +853,21 @@ export function StudyTutor({
             ))}
           </select>
         </label>
-        {thread.scope === "notes" ? (
-          <fieldset className="flex max-h-40 flex-wrap gap-2 overflow-auto">
-            <legend className="mb-1 text-sm">Include notes</legend>
-            {vaultNotes.length === 0 ? (
-              <p className="text-muted-foreground">Create a note in the Notes workspace first.</p>
+        {curated ? (
+          <div className="flex basis-full flex-wrap items-center gap-2">
+            <TutorMaterialPicker
+              books={readableBooks}
+              notes={readableNotes}
+              selection={selection}
+              disabled={workPending}
+              onApply={(next) =>
+                save(thread.scope === "materials" ? next : { noteIds: next.noteIds })
+              }
+            />
+            {!contextReady ? (
+              <p className="text-muted-foreground">{t("study.materials.noReadableSelection")}</p>
             ) : null}
-            {vaultNotes.map((note) => {
-              const chosen = thread.noteIds?.includes(note.id) ?? false;
-              return (
-                <label key={note.id} className="flex items-center gap-1.5">
-                  <input
-                    type="checkbox"
-                    checked={chosen}
-                    disabled={workPending}
-                    onChange={() => {
-                      const ids = thread.noteIds ?? [];
-                      void save({
-                        noteIds: chosen ? ids.filter((id) => id !== note.id) : [...ids, note.id],
-                      });
-                    }}
-                  />
-                  {note.title}
-                </label>
-              );
-            })}
-          </fieldset>
+          </div>
         ) : null}
       </div>
       {conversation.length ? (
@@ -901,7 +975,7 @@ export function StudyTutor({
           maxLength={12000}
         />
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="submit" disabled={!input.trim() || workPending || !model}>
+          <Button type="submit" disabled={!input.trim() || workPending || !model || !contextReady}>
             {busy ? "Working…" : "Send"}
           </Button>
           {busy && !livePhase ? (
@@ -946,7 +1020,7 @@ export function StudyTutor({
                 type="button"
                 variant="outline"
                 onClick={() => void dictate(true, Date.now())}
-                disabled={busy || !model}
+                disabled={busy || !model || !contextReady}
               >
                 {voicePractice ? "Record next turn" : "Speak to tutor"}
               </Button>
@@ -954,7 +1028,7 @@ export function StudyTutor({
                 type="button"
                 variant="outline"
                 onClick={() => void beginVoiceConversation()}
-                disabled={busy || !model}
+                disabled={busy || !model || !contextReady}
               >
                 {t("study.voice.start")}
               </Button>

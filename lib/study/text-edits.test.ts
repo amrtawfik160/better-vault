@@ -51,7 +51,7 @@ describe("Study passages after editing", () => {
       messages: [],
       updatedAt: 0,
     } satisfies StudyThread;
-    const [passage] = passagesFor(thread, book, "Which replicas form a majority?");
+    const [passage] = passagesFor(thread, { book }, "Which replicas form a majority?");
     expect(new URL(originHref(passage.origin), "https://deeple.test").searchParams.get("rev")).toBe(
       "2",
     );
