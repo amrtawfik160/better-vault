@@ -1,20 +1,28 @@
 import { generateId } from "ai";
+import { freshSchedule, nextStudySchedule } from "@/lib/study/schedule";
+import { originHref } from "@/lib/study/links";
+import { flashcardsData } from "@/studio/tools/flashcards/definition";
 import { chunkText, normaliseText } from "@/lib/grounding/chunk";
 import type {
   StudyBook,
+  StudyOrigin,
+  StudyThread,
+  StudyRecordOf,
   StudyRating,
   StudyRecord,
-  StudySchedule,
   StudySection,
 } from "@/lib/study/records";
+import { createNote } from "./notes";
+import type { Note, Source, StudioOutput } from "./types";
 import { saveBlob } from "./blobs";
 import { useStoreQuery } from "./live";
 import { createNotebook, deleteNotebook, renameNotebook } from "./notebooks";
 import { addSource, renameSource } from "./sources";
 import { store } from "./store";
-import { currentVaultId } from "./vaults";
+import { currentVaultId, vaultOf } from "./vaults";
+import { getSettings } from "./settings";
 
-const day = 86_400_000;
+export { freshSchedule } from "@/lib/study/schedule";
 
 export function useStudyRecords() {
   return useStoreQuery(() => store().listStudy(), [], ["study"]);
@@ -22,6 +30,18 @@ export function useStudyRecords() {
 
 export function putStudyRecords(...rows: StudyRecord[]) {
   return store().putStudy(rows);
+}
+
+export function updateStudyThread(thread: StudyThread, change: Partial<StudyThread>) {
+  return putStudyRecords({ ...thread, ...change, updatedAt: Date.now() });
+}
+
+export async function studyConversationDefaults(goal: StudyThread["goal"]) {
+  const { study } = await getSettings();
+  return {
+    corrections: study?.corrections ?? (goal === "language" ? "live" : "off"),
+    keepVoiceTranscripts: study?.keepVoiceTranscripts,
+  } satisfies Pick<StudyThread, "corrections" | "keepVoiceTranscripts">;
 }
 
 export function removeStudyRecord(id: string) {
@@ -76,86 +96,187 @@ export async function addStudyBook(input: {
   }
 }
 
+export async function studyBookForSource(sourceId: string) {
+  const backend = store();
+  const existing = (await backend.listStudy()).find(
+    (row): row is StudyBook => row.kind === "book" && row.sourceId === sourceId,
+  );
+  if (existing) return existing;
+  const source = await backend.getSource(sourceId);
+  if (!source) throw new Error("This source was removed.");
+  const book = bookFromSource(source);
+  await backend.insertStudy([book]);
+  return book;
+}
+
+function bookFromSource(source: Source): StudyBook {
+  return {
+    id: `source-${source.id}`,
+    kind: "book",
+    notebookId: source.notebookId,
+    sourceId: source.id,
+    title: source.title,
+    format: "text",
+    sections: [{ title: source.title, text: source.text }],
+    section: 0,
+    bookmarks: [],
+    attachedToNotebook: true,
+    updatedAt: Date.now(),
+  };
+}
+
+export async function deleteStudyBook(book: StudyBook) {
+  if (book.attachedToNotebook) await removeStudyRecord(book.id);
+  else await deleteNotebook(book.notebookId);
+}
+
+export type StudyCard = StudyRecordOf<"card">;
+type CardContent = Pick<
+  StudyCard,
+  "front" | "back" | "image" | "backImage" | "tags" | "notebookId" | "origin"
+>;
+
+export function newStudyCard(content: CardContent, id = studyId()): StudyCard {
+  const now = Date.now();
+  return { ...content, id, kind: "card", updatedAt: now, schedule: freshSchedule(now) };
+}
+
+export async function saveStudyCard(content: CardContent, id?: string) {
+  const card = newStudyCard(content, id);
+  await store().insertStudy([card]);
+  return card;
+}
+
+export async function saveStudyWord(
+  content: Omit<StudyRecordOf<"word">, "id" | "updatedAt" | "kind">,
+  id = studyId(),
+) {
+  const word: StudyRecordOf<"word"> = { ...content, id, kind: "word", updatedAt: Date.now() };
+  await store().insertStudy([word]);
+  return word;
+}
+
+export async function addStudioFlashcards(output: StudioOutput) {
+  if (output.status !== "ready" || output.toolId !== "flashcards")
+    throw new Error("Open a completed Studio flashcard set first.");
+  const parsed = flashcardsData.parse(output.data);
+  return store().insertStudy(
+    parsed.cards.map(({ front, back }, position) =>
+      newStudyCard(
+        {
+          front,
+          back,
+          tags: [output.title],
+          notebookId: output.notebookId,
+          origin: { kind: "studio", notebookId: output.notebookId, outputId: output.id },
+        },
+        `studio-${output.id}-${position}`,
+      ),
+    ),
+  );
+}
+
+export async function startNoteTutor(note: Pick<Note, "id" | "vaultId" | "notebookId" | "title">) {
+  const thread: StudyThread = {
+    id: studyId(),
+    kind: "thread",
+    title: note.title,
+    goal: "book",
+    scope: "notes",
+    notebookId: note.notebookId ?? undefined,
+    noteIds: [note.id],
+    vaultId: note.vaultId,
+    ...(await studyConversationDefaults("book")),
+    messages: [],
+    updatedAt: Date.now(),
+  };
+  await putStudyRecords(thread);
+  return thread;
+}
+
+export async function saveStudyNote({
+  title,
+  body,
+  origin,
+  notebookId,
+  vaultId,
+}: {
+  title: string;
+  body: string;
+  origin: StudyOrigin;
+  notebookId?: string;
+  vaultId?: string;
+}) {
+  const notebook = notebookId ? await store().getNotebook(notebookId) : undefined;
+  return createNote({
+    title,
+    body: `${body.trim()}
+
+[Open original](${originHref(origin)})`,
+    notebookId: notebook?.id,
+    vaultId: notebook ? vaultOf(notebook) : (vaultId ?? currentVaultId()),
+  });
+}
+
 export async function renameStudyBook(book: StudyBook, title: string) {
   const current = await store().getStudy(book.id);
   const next = title.trim();
   if (!next || current?.kind !== "book") return;
-  await renameNotebook(current.notebookId, next);
-  await renameSource(current.sourceId, next);
+  if (!current.attachedToNotebook) {
+    await renameNotebook(current.notebookId, next);
+    await renameSource(current.sourceId, next);
+  }
   await putStudyRecords({ ...current, title: next, updatedAt: Date.now() });
 }
 
 export async function updateStudyBook(
   bookId: string,
-  patch: Pick<Partial<StudyBook>, "section" | "bookmarks">,
+  patch: Pick<Partial<StudyBook>, "section" | "bookmarks" | "bookmarkPlaces">,
 ) {
   const book = await store().getStudy(bookId);
-  if (book?.kind === "book") await putStudyRecords({ ...book, ...patch, updatedAt: Date.now() });
-}
-
-export const freshSchedule = (now = Date.now()): StudySchedule => ({
-  dueAt: now,
-  intervalDays: 0,
-  repetitions: 0,
-  ease: 2.5,
-});
-
-export function nextStudySchedule(
-  current: StudySchedule,
-  rating: StudyRating,
-  now = Date.now(),
-): StudySchedule {
-  if (rating === "again") {
-    return {
-      dueAt: now + 10 * 60_000,
-      intervalDays: 0,
-      repetitions: 0,
-      ease: Math.max(1.3, current.ease - 0.2),
-    };
-  }
-  const ease =
-    rating === "hard"
-      ? Math.max(1.3, current.ease - 0.15)
-      : rating === "easy"
-        ? current.ease + 0.15
-        : current.ease;
-  const multiplier = rating === "hard" ? 1.2 : rating === "easy" ? ease * 1.3 : ease;
-  const first = rating === "easy" ? 4 : 1;
-  const intervalDays =
-    current.intervalDays > 0 ? Math.ceil(current.intervalDays * multiplier) : first;
-  return {
-    dueAt: now + intervalDays * day,
-    intervalDays,
-    repetitions: current.repetitions + 1,
-    ease,
-  };
+  if (book?.kind !== "book") return;
+  const now = Date.now();
+  await putStudyRecords({
+    ...book,
+    ...patch,
+    updatedAt: now,
+    lastReadAt: patch.section === undefined ? book.lastReadAt : now,
+  });
 }
 
 export async function rateStudyItem(id: string, rating: StudyRating, seconds: number) {
-  const record = await store().getStudy(id);
+  const backend = store();
+  const record = await backend.getStudy(id);
   const now = Date.now();
   if ((record?.kind !== "card" && record?.kind !== "highlight") || record.schedule.dueAt > now)
-    return;
-  await putStudyRecords(
-    { ...record, schedule: nextStudySchedule(record.schedule, rating, now), updatedAt: now },
-    {
+    return false;
+  return backend.applyStudyReview({
+    id,
+    previousDueAt: record.schedule.dueAt,
+    schedule: nextStudySchedule(record.schedule, rating, now),
+    activity: {
       id: studyId(),
       kind: "session",
       activity: "review",
       rating,
       itemId: id,
+      origin:
+        record.kind === "highlight"
+          ? { kind: "book", bookId: record.bookId, section: record.section, highlightId: record.id }
+          : record.origin,
       notebookId: record.notebookId,
       seconds: Math.max(0, Math.min(seconds, 120)),
       count: 1,
       updatedAt: now,
     },
-  );
+  });
 }
 
 export async function recordStudyActivity(
   activity: "reading" | "speaking",
   seconds: number,
   notebookId?: string,
+  origin?: StudyOrigin,
 ) {
   if (seconds < 1) return;
   await putStudyRecords({
@@ -165,6 +286,7 @@ export async function recordStudyActivity(
     seconds,
     count: 1,
     notebookId,
+    origin,
     updatedAt: Date.now(),
   });
 }

@@ -1,4 +1,15 @@
-import { useEffect, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type FormEvent,
+} from "react";
+import { Link, useNavigate } from "react-router";
+import { StudyFlashcardGenerator } from "./study-flashcard-generator";
+import { StudyOriginLink } from "./study-origin-link";
+import { originHref, studyHref } from "@/lib/study/links";
 import { toast } from "sonner";
 import { Button } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
@@ -7,10 +18,13 @@ import {
   freshSchedule,
   putStudyRecords,
   rateStudyItem,
+  saveStudyCard,
+  saveStudyNote,
   removeStudyRecord,
   studyId,
 } from "@/lib/db/study";
-import { studyRatings, type StudyRecordOf } from "@/lib/study/records";
+import { scheduleState, studyIntervalLabel } from "@/lib/study/schedule";
+import { studyRatings, type StudyRating, type StudyRecordOf } from "@/lib/study/records";
 
 type Card = StudyRecordOf<"card">;
 type Highlight = StudyRecordOf<"highlight">;
@@ -46,12 +60,58 @@ export function StudyReview({
   const [started, setStarted] = useState(Date.now);
   const [rated, setRated] = useState(0);
   const [busy, setBusy] = useState(false);
+  const grading = useRef(false);
   const all = useHighlights ? highlights : cards;
   const due = all
     .filter(({ schedule }) => schedule.dueAt <= now)
     .toSorted((a, b) => a.schedule.dueAt - b.schedule.dueAt);
   const item = due[0];
   const remaining = all.toSorted((a, b) => a.schedule.dueAt - b.schedule.dueAt)[0];
+
+  const grade = useCallback(
+    async (rating: StudyRating) => {
+      if (!item || grading.current) return;
+      grading.current = true;
+      setBusy(true);
+      try {
+        if (await rateStudyItem(item.id, rating, (Date.now() - started) / 1000)) {
+          setRated((value) => value + 1);
+        }
+        setRevealed("");
+        setStarted(Date.now());
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : String(error));
+      } finally {
+        grading.current = false;
+        setBusy(false);
+      }
+    },
+    [item, started],
+  );
+
+  useEffect(() => {
+    if (!item) return;
+    function keydown(event: KeyboardEvent) {
+      if (event.altKey || event.metaKey || event.ctrlKey || event.shiftKey || event.repeat) return;
+      if (
+        event.target instanceof HTMLElement &&
+        event.target.closest("input, textarea, select, [contenteditable=true]")
+      )
+        return;
+      if (event.key === " " && revealed !== item.id) {
+        if (event.target instanceof HTMLElement && event.target.closest("button, a")) return;
+        event.preventDefault();
+        setRevealed(item.id);
+      }
+      const rating = studyRatings[Number(event.key) - 1];
+      if (rating && revealed === item.id) {
+        event.preventDefault();
+        void grade(rating);
+      }
+    }
+    window.addEventListener("keydown", keydown);
+    return () => window.removeEventListener("keydown", keydown);
+  }, [grade, item, revealed]);
 
   return (
     <section className="space-y-5">
@@ -82,31 +142,45 @@ export function StudyReview({
               <p dir="auto" className="border-t pt-4 whitespace-pre-wrap">
                 {item.kind === "card" ? item.back : item.quote}
               </p>
+              {item.kind === "card" && item.backImage ? (
+                <img
+                  className="max-h-52 rounded-lg object-contain"
+                  src={item.backImage}
+                  alt="Answer attachment"
+                />
+              ) : null}
               {item.kind === "highlight" && item.note ? (
                 <p dir="auto" className="text-sm text-muted-foreground">
                   {item.note}
                 </p>
               ) : null}
+              {item.kind === "highlight" ? (
+                <StudyOriginLink
+                  origin={{
+                    kind: "book",
+                    bookId: item.bookId,
+                    section: item.section,
+                    highlightId: item.id,
+                  }}
+                />
+              ) : item.origin ? (
+                <StudyOriginLink origin={item.origin} />
+              ) : null}
               <div className="flex flex-wrap gap-2">
-                {studyRatings.map((rating) => (
+                {studyRatings.map((rating, index) => (
                   <Button
                     key={rating}
                     variant={rating === "good" ? "default" : "outline"}
                     className="capitalize"
                     disabled={busy}
-                    onClick={() => {
-                      setBusy(true);
-                      void rateStudyItem(item.id, rating, (Date.now() - started) / 1000)
-                        .then(() => {
-                          setRated((value) => value + 1);
-                          setRevealed("");
-                          setStarted(Date.now());
-                        })
-                        .catch((error: Error) => toast.error(error.message))
-                        .finally(() => setBusy(false));
-                    }}
+                    onClick={() => void grade(rating)}
+                    aria-keyshortcuts={String(index + 1)}
+                    aria-label={rating}
                   >
                     {rating}
+                    <span className="ms-1 text-xs normal-case opacity-75">
+                      {studyIntervalLabel(item.schedule, rating)}
+                    </span>
                   </Button>
                 ))}
               </div>
@@ -115,49 +189,64 @@ export function StudyReview({
         </div>
       ) : (
         <p className="rounded-2xl border border-dashed p-8 text-sm text-muted-foreground">
+          {rated > 0 ? `Reviewed ${rated} this session. ` : ""}
           {remaining
             ? `You’re caught up. Next review ${date.format(remaining.schedule.dueAt)}.`
-            : "Add something to study first."}
+            : "Add something to study first."}{" "}
+          <Link
+            to={studyHref(useHighlights ? "highlights" : "cards")}
+            className="underline underline-offset-4"
+          >
+            {useHighlights ? "Open highlights" : "Open flashcards"}
+          </Link>
         </p>
       )}
     </section>
   );
 }
 
-function ImagePicker({ image, change }: { image?: string; change: (value?: string) => void }) {
+function loadCardImage(file: File, change: (value: string) => void) {
+  if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type) || file.size > 2 * 1024 * 1024) {
+    toast.error("Choose a PNG, JPEG, WebP, or GIF under 2 MB.");
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    if (typeof reader.result === "string") change(reader.result);
+  };
+  reader.onerror = () => toast.error("Could not open that image.");
+  reader.readAsDataURL(file);
+}
+
+function ImagePicker({
+  label,
+  image,
+  change,
+}: {
+  label: string;
+  image?: string;
+  change: (value?: string) => void;
+}) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       <label className="text-sm">
-        Card image{" "}
+        {label}
         <input
           type="file"
           accept="image/png,image/jpeg,image/webp,image/gif"
           className="mt-1 block"
           onChange={(event) => {
             const file = event.target.files?.[0];
-            if (!file) return;
-            if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type) || file.size > 2 * 1024 * 1024) {
-              toast.error("Choose a PNG, JPEG, WebP, or GIF under 2 MB.");
-              return;
-            }
-            const reader = new FileReader();
-            reader.onload = () => {
-              if (typeof reader.result === "string") change(reader.result);
-            };
-            reader.onerror = () => toast.error("Could not open that image.");
-            reader.readAsDataURL(file);
+            if (file) loadCardImage(file, change);
+            event.target.value = "";
           }}
         />
       </label>
       {image ? (
         <>
-          <img
-            src={image}
-            className="h-12 w-12 rounded object-cover"
-            alt="Selected card attachment"
-          />
-          <Button size="sm" variant="ghost" onClick={() => change(undefined)}>
-            Remove image
+          <img src={image} className="h-12 w-12 rounded object-cover" alt={label} />
+          <Button type="button" size="sm" variant="ghost" onClick={() => change(undefined)}>
+            Remove {label.toLowerCase()}
           </Button>
         </>
       ) : null}
@@ -165,25 +254,63 @@ function ImagePicker({ image, change }: { image?: string; change: (value?: strin
   );
 }
 
-export function CardLibrary({ cards }: { cards: Card[] }) {
+export function CardLibrary({
+  cards,
+  filter,
+  clearFilter,
+  review,
+}: {
+  cards: Card[];
+  filter?: string;
+  clearFilter: () => void;
+  review: () => void;
+}) {
   const now = useReviewClock();
+  const [generating, setGenerating] = useState(false);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<Card | null>(null);
   const [deleting, setDeleting] = useState<string[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [status, setStatus] = useState("all");
+  const [tag, setTag] = useState("");
+  const [sort, setSort] = useState("recent");
+  const [view, setView] = useState<"list" | "grid">("list");
+  const [flipped, setFlipped] = useState<string>();
   const [saving, setSaving] = useState(false);
-  const cardsShown = cards.filter((card) => {
-    const matched = [card.front, card.back, ...card.tags]
-      .join(" ")
-      .toLowerCase()
-      .includes(query.toLowerCase());
-    return (
-      matched &&
-      (status === "all" ||
-        (status === "due" ? card.schedule.dueAt <= now : card.schedule.dueAt > now))
-    );
-  });
+  const tags = [...new Set(cards.flatMap((card) => card.tags))].sort();
+  const selectedCards = cards.filter((card) => selected.includes(card.id));
+  const cardsShown = cards
+    .filter((card) => {
+      const matched = [card.front, card.back, ...card.tags]
+        .join(" ")
+        .toLowerCase()
+        .includes(query.trim().toLowerCase());
+      return (
+        matched &&
+        (!tag || card.tags.includes(tag)) &&
+        (status === "all" ||
+          (status === "due" ? card.schedule.dueAt <= now : scheduleState(card.schedule) === status))
+      );
+    })
+    .sort((a, b) => {
+      if (sort === "due") return a.schedule.dueAt - b.schedule.dueAt;
+      if (sort === "question") return a.front.localeCompare(b.front);
+      return b.updatedAt - a.updatedAt;
+    });
+  const allShownSelected =
+    cardsShown.length > 0 && cardsShown.every((card) => selected.includes(card.id));
+
+  function changeImage(side: "image" | "backImage", value?: string) {
+    const editingId = editing?.id;
+    setEditing((card) => (card && card.id === editingId ? { ...card, [side]: value } : card));
+  }
+
+  function pasteImage(event: ClipboardEvent<HTMLTextAreaElement>, side: "image" | "backImage") {
+    const image = [...event.clipboardData.files].find((file) => file.type.startsWith("image/"));
+    if (!image) return;
+    event.preventDefault();
+    loadCardImage(image, (value) => changeImage(side, value));
+  }
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -194,7 +321,8 @@ export function CardLibrary({ cards }: { cards: Card[] }) {
         ...editing,
         front: editing.front.trim(),
         back: editing.back.trim(),
-        tags: editing.tags.map((tag) => tag.trim()).filter(Boolean),
+        tags: [...new Set(editing.tags.map((tag) => tag.trim()).filter(Boolean))],
+        schedule: cards.find(({ id }) => id === editing.id)?.schedule ?? editing.schedule,
         updatedAt: Date.now(),
       });
       setEditing(null);
@@ -210,9 +338,36 @@ export function CardLibrary({ cards }: { cards: Card[] }) {
       <div className="flex flex-wrap justify-between gap-2">
         <h2 className="text-xl font-semibold">Flashcards</h2>
         <div className="flex flex-wrap gap-2">
-          {selected.length ? (
-            <Button variant="outline" onClick={() => setDeleting(selected)}>
-              Delete selected ({selected.length})
+          {selectedCards.length ? (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const text = selectedCards
+                    .map((card) => `Q: ${card.front}\nA: ${card.back}`)
+                    .join("\n\n");
+                  void navigator.clipboard
+                    .writeText(text)
+                    .then(() => toast.success("Flashcards copied"))
+                    .catch(() => toast.error("Could not copy flashcards"));
+                }}
+              >
+                Copy selection
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setDeleting(selectedCards.map((card) => card.id))}
+              >
+                Delete selected ({selectedCards.length})
+              </Button>
+            </>
+          ) : null}
+          <Button variant="outline" onClick={review} disabled={!cards.length}>
+            Review these cards
+          </Button>
+          {!filter && !generating ? (
+            <Button variant="outline" onClick={() => setGenerating(true)}>
+              Generate from text
             </Button>
           ) : null}
           <Button
@@ -232,6 +387,10 @@ export function CardLibrary({ cards }: { cards: Card[] }) {
           </Button>
         </div>
       </div>
+      {generating && !filter ? (
+        <StudyFlashcardGenerator close={() => setGenerating(false)} />
+      ) : null}
+      {filter ? <FilterCaption label={filter} clear={clearFilter} /> : null}
       {editing ? (
         <form
           onSubmit={(event) => void save(event)}
@@ -245,6 +404,7 @@ export function CardLibrary({ cards }: { cards: Card[] }) {
             required
             value={editing.front}
             onChange={(event) => setEditing({ ...editing, front: event.target.value })}
+            onPaste={(event) => pasteImage(event, "image")}
           />
           <textarea
             className={textArea}
@@ -254,6 +414,7 @@ export function CardLibrary({ cards }: { cards: Card[] }) {
             required
             value={editing.back}
             onChange={(event) => setEditing({ ...editing, back: event.target.value })}
+            onPaste={(event) => pasteImage(event, "backImage")}
           />
           <Input
             aria-label="Tags"
@@ -262,8 +423,14 @@ export function CardLibrary({ cards }: { cards: Card[] }) {
             onChange={(event) => setEditing({ ...editing, tags: event.target.value.split(",") })}
           />
           <ImagePicker
+            label="Front image"
             image={editing.image}
-            change={(image) => setEditing((value) => (value ? { ...value, image } : value))}
+            change={(image) => changeImage("image", image)}
+          />
+          <ImagePicker
+            label="Back image"
+            image={editing.backImage}
+            change={(image) => changeImage("backImage", image)}
           />
           <div className="flex gap-2">
             <Button type="submit" disabled={saving}>
@@ -292,12 +459,82 @@ export function CardLibrary({ cards }: { cards: Card[] }) {
         >
           <option value="all">All cards</option>
           <option value="due">Due</option>
-          <option value="scheduled">Scheduled</option>
+          <option value="new">New</option>
+          <option value="learning">Learning</option>
+          <option value="reviewing">Reviewing</option>
+          <option value="mature">Mature</option>
         </select>
+        {tags.length ? (
+          <select
+            value={tag}
+            onChange={(event) => setTag(event.target.value)}
+            aria-label="Filter by tag"
+            className="rounded-lg border bg-background px-2 text-sm"
+          >
+            <option value="">All tags</option>
+            {tags.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        ) : null}
+        <select
+          value={sort}
+          onChange={(event) => setSort(event.target.value)}
+          aria-label="Sort flashcards"
+          className="rounded-lg border bg-background px-2 text-sm"
+        >
+          <option value="recent">Recently updated</option>
+          <option value="due">Next review</option>
+          <option value="question">Question</option>
+        </select>
+        <div className="flex gap-1" role="group" aria-label="Flashcard layout">
+          {(["list", "grid"] as const).map((mode) => (
+            <Button
+              key={mode}
+              size="sm"
+              variant={view === mode ? "secondary" : "ghost"}
+              aria-pressed={view === mode}
+              onClick={() => setView(mode)}
+            >
+              {mode === "list" ? "List" : "Grid"}
+            </Button>
+          ))}
+        </div>
       </div>
-      <ul className="divide-y rounded-2xl border">
+      {cardsShown.length ? (
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={allShownSelected}
+            onChange={(event) => {
+              const checked = event.target.checked;
+              const shown = new Set(cardsShown.map(({ id }) => id));
+              setSelected((ids) =>
+                checked ? [...new Set([...ids, ...shown])] : ids.filter((id) => !shown.has(id)),
+              );
+            }}
+          />
+          Select shown cards
+        </label>
+      ) : null}
+      <ul
+        className={
+          view === "grid"
+            ? "grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
+            : "divide-y rounded-2xl border"
+        }
+      >
         {cardsShown.map((card) => (
-          <li key={card.id} className="flex flex-wrap items-center gap-3 p-4">
+          <li
+            key={card.id}
+            className={
+              view === "grid"
+                ? "grid content-start gap-3 rounded-2xl border bg-card p-4"
+                : "flex flex-wrap items-center gap-3 p-4"
+            }
+          >
             <input
               type="checkbox"
               aria-label={`Select ${card.front}`}
@@ -314,20 +551,50 @@ export function CardLibrary({ cards }: { cards: Card[] }) {
               <p dir="auto" className="font-medium wrap-break-word">
                 {card.front}
               </p>
-              <p dir="auto" className="line-clamp-2 text-sm text-muted-foreground">
-                {card.back}
-              </p>
+              {card.image ? (
+                <img
+                  className="my-2 max-h-20 rounded object-contain"
+                  src={card.image}
+                  alt="Question attachment"
+                />
+              ) : null}
+              {view === "list" || flipped === card.id ? (
+                <>
+                  <p dir="auto" className="line-clamp-2 text-sm text-muted-foreground">
+                    {card.back}
+                  </p>
+                  {card.backImage ? (
+                    <img
+                      className="my-2 max-h-20 rounded object-contain"
+                      src={card.backImage}
+                      alt="Answer attachment"
+                    />
+                  ) : null}
+                </>
+              ) : null}
               <p className="text-xs text-muted-foreground">
                 {card.schedule.dueAt <= now ? "Due now" : date.format(card.schedule.dueAt)}
                 {card.tags.length ? ` · ${card.tags.join(", ")}` : ""}
               </p>
             </div>
-            <Button size="sm" variant="ghost" onClick={() => setEditing(card)}>
-              Edit
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setDeleting([card.id])}>
-              Delete
-            </Button>
+            <div className="flex flex-wrap items-center gap-1">
+              {view === "grid" ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setFlipped(flipped === card.id ? undefined : card.id)}
+                >
+                  {flipped === card.id ? "Hide answer" : "Show answer"}
+                </Button>
+              ) : null}
+              {card.origin ? <StudyOriginLink origin={card.origin} /> : null}
+              <Button size="sm" variant="ghost" onClick={() => setEditing(card)}>
+                Edit
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setDeleting([card.id])}>
+                Delete
+              </Button>
+            </div>
           </li>
         ))}
       </ul>
@@ -353,15 +620,31 @@ export function CardLibrary({ cards }: { cards: Card[] }) {
   );
 }
 
+function FilterCaption({ label, clear }: { label: string; clear: () => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      <span dir="auto">{label}</span>
+      <Button variant="ghost" size="sm" onClick={clear}>
+        Show all
+      </Button>
+    </div>
+  );
+}
+
 export function HighlightsLibrary({
   highlights,
+  filter,
+  clearFilter,
   locate,
   review,
 }: {
   highlights: Highlight[];
+  filter?: string;
+  clearFilter: () => void;
   locate: (item: Highlight) => void;
   review: () => void;
 }) {
+  const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<Highlight | null>(null);
   const [deleting, setDeleting] = useState<Highlight | null>(null);
@@ -371,6 +654,7 @@ export function HighlightsLibrary({
         <h2 className="text-xl font-semibold">Highlights</h2>
         <Button onClick={review}>Review highlights</Button>
       </div>
+      {filter ? <FilterCaption label={filter} clear={clearFilter} /> : null}
       <Input
         type="search"
         aria-label="Search highlights"
@@ -430,6 +714,35 @@ export function HighlightsLibrary({
                     <Button size="sm" variant="outline" onClick={() => locate(item)}>
                       Go to passage
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        void saveStudyNote({
+                          title: "Reading highlight",
+                          body: [item.quote, item.note].filter(Boolean).join("\n\n"),
+                          notebookId: item.notebookId,
+                          origin: {
+                            kind: "book",
+                            bookId: item.bookId,
+                            section: item.section,
+                            highlightId: item.id,
+                          },
+                        })
+                          .then((note) =>
+                            toast.success("Saved to Notes", {
+                              action: {
+                                label: "Open note",
+                                onClick: () =>
+                                  navigate(originHref({ kind: "note", noteId: note.id })),
+                              },
+                            }),
+                          )
+                          .catch((error: Error) => toast.error(error.message));
+                      }}
+                    >
+                      Save to Notes
+                    </Button>
                     <Button size="sm" variant="ghost" onClick={() => setEditing(item)}>
                       Edit note
                     </Button>
@@ -464,7 +777,12 @@ export function HighlightsLibrary({
   );
 }
 
-export function VocabularyLibrary({ words }: { words: Word[] }) {
+export function VocabularyLibrary({ words, focusedWord }: { words: Word[]; focusedWord?: string }) {
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (focusedWord)
+      document.getElementById(`study-word-${focusedWord}`)?.scrollIntoView({ block: "center" });
+  }, [focusedWord, words.length]);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<Word | null>(null);
   const [deleting, setDeleting] = useState<Word | null>(null);
@@ -553,7 +871,11 @@ export function VocabularyLibrary({ words }: { words: Word[] }) {
               .includes(query.toLowerCase()),
           )
           .map((word) => (
-            <li className="flex flex-wrap items-start gap-2 p-4" key={word.id}>
+            <li
+              className={`flex scroll-mt-32 flex-wrap items-start gap-2 p-4 ${focusedWord === word.id ? "bg-accent" : ""}`}
+              key={word.id}
+              id={`study-word-${word.id}`}
+            >
               <div className="min-w-0 flex-1">
                 <p dir="auto" className="font-medium wrap-break-word">
                   {word.term}
@@ -571,20 +893,29 @@ export function VocabularyLibrary({ words }: { words: Word[] }) {
                   </p>
                 ) : null}
               </div>
+              {word.origin ? <StudyOriginLink origin={word.origin} /> : null}
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => {
-                  void putStudyRecords({
-                    id: studyId(),
-                    kind: "card",
-                    front: word.term,
-                    back: word.translation || word.context,
-                    tags: [word.language || "Vocabulary"],
-                    updatedAt: Date.now(),
-                    schedule: freshSchedule(),
-                  })
-                    .then(() => toast.success("Flashcard created"))
+                  void saveStudyCard(
+                    {
+                      origin: { kind: "word", wordId: word.id },
+                      notebookId: word.notebookId,
+                      front: word.term,
+                      back: word.translation || word.context,
+                      tags: [word.language || "Vocabulary"],
+                    },
+                    `word-card-${word.id}`,
+                  )
+                    .then((card) =>
+                      toast.success("Flashcard saved", {
+                        action: {
+                          label: "View flashcard",
+                          onClick: () => navigate(studyHref("cards", { card: card.id })),
+                        },
+                      }),
+                    )
                     .catch((error: Error) => toast.error(error.message));
                 }}
                 disabled={!word.translation && !word.context}

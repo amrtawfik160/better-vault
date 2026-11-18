@@ -1,6 +1,11 @@
 import { ArrowUpRight01Icon } from "@hugeicons/core-free-icons";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useNavigate } from "react-router";
+import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
+import { Button } from "@/components/panelui/button";
+import { studyBookForSource } from "@/lib/db/study";
+import { studyHref } from "@/lib/study/links";
 import { Icon } from "@/components/icon";
 import { Markdown } from "@/components/chat/markdown";
 import { Dialog } from "@/components/panelui/dialog";
@@ -35,6 +40,8 @@ export function SourceReader({ reading, onClose }: SourceReaderProps) {
 function ReaderBody({ sourceId, passage }: { sourceId: string; passage?: string }) {
   const { t, i18n } = useTranslation("sources");
   const read = useSourceWithChunks(sourceId);
+  const navigate = useNavigate();
+  const [opening, setOpening] = useState(false);
   const source = read?.source;
   const chunks = read?.chunks;
   const highlighted = useRef<HTMLDivElement>(null);
@@ -57,6 +64,23 @@ function ReaderBody({ sourceId, passage }: { sourceId: string; passage?: string 
         title={source.title}
         description={`${t(`kinds.${source.kind}`)} · ${t("words", { count: words, formattedCount: words.toLocaleString(i18n.language) })}`}
       >
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-fit"
+          disabled={opening}
+          onClick={() => {
+            setOpening(true);
+            void studyBookForSource(source.id)
+              .then((book) => navigate(studyHref("library", { book: book.id })))
+              .catch((error: Error) => {
+                toast.error(error.message);
+                setOpening(false);
+              });
+          }}
+        >
+          {t("openStudy")}
+        </Button>
         {source.url ? (
           <a
             href={source.url}

@@ -4,8 +4,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
-import { deleteNotebook } from "@/lib/db/notebooks";
-import { addStudyBook, renameStudyBook } from "@/lib/db/study";
+import { addStudyBook, deleteStudyBook, renameStudyBook } from "@/lib/db/study";
 import { readStudyFile } from "@/lib/study/read-file";
 import type { StudyBook } from "@/lib/study/records";
 
@@ -198,10 +197,14 @@ export function StudyLibrary({
           if (!open) setDeleting(null);
         }}
         title="Delete document?"
-        body="This also deletes its notebook, reading position, and associated study items."
+        body={
+          deleting?.attachedToNotebook
+            ? "This removes its reading position, bookmarks, and highlights from Study. The source stays in the notebook."
+            : "This also deletes its notebook, reading position, and associated study items."
+        }
         confirmLabel="Delete document"
         onConfirm={async () => {
-          if (deleting) await deleteNotebook(deleting.notebookId);
+          if (deleting) await deleteStudyBook(deleting);
           setDeleting(null);
         }}
       />

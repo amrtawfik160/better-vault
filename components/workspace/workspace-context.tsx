@@ -1,4 +1,5 @@
-import { useContext, useMemo, useState, type ReactNode } from "react";
+import { useSearchParams } from "react-router";
+import { useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { subscriptionConnectionsAllowed } from "@/lib/ai/cliproxyapi-client";
 import { stableContext } from "@/lib/context";
 import type { Conversation, Notebook, StudioOutput } from "@/lib/db/database";
@@ -69,8 +70,24 @@ export function WorkspaceProvider({
   notebook: Notebook;
   children: ReactNode;
 }) {
-  const [tab, setTab] = useState<WorkspaceTab>("chat");
-  const [openOutputId, setOpenOutputId] = useState<string | null>(null);
+  const [params, setParams] = useSearchParams();
+  const openOutputId = params.get("output");
+  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>(() =>
+    params.has("output") ? "studio" : "chat",
+  );
+  const tab = openOutputId ? "studio" : workspaceTab;
+  const setTab = useCallback(
+    (next: WorkspaceTab) => {
+      setWorkspaceTab(next);
+      if (next !== "studio" && openOutputId)
+        setParams((current) => {
+          const updated = new URLSearchParams(current);
+          updated.delete("output");
+          return updated;
+        });
+    },
+    [openOutputId, setParams],
+  );
   const [studioOpen, setStudioOpen] = useState(false);
   const [settingsOpen, showSettings] = useState(false);
   const [settingsPage, setSettingsPage] = useState<WorkspaceState["settingsPage"]>(null);
@@ -88,11 +105,18 @@ export function WorkspaceProvider({
       setTab,
       openOutputId,
       openOutput: (id) => {
-        setOpenOutputId(id);
         setStudioOpen(false);
-        setTab("studio");
+        setWorkspaceTab("studio");
+        setParams({ output: id });
       },
-      closeOutput: () => setOpenOutputId(null),
+      closeOutput: () => {
+        setWorkspaceTab("studio");
+        setParams((current) => {
+          const updated = new URLSearchParams(current);
+          updated.delete("output");
+          return updated;
+        });
+      },
       studioOpen,
       setStudioOpen,
       settingsOpen,
@@ -144,6 +168,8 @@ export function WorkspaceProvider({
       activeTool,
       outputAction,
       reading,
+      setParams,
+      setTab,
     ],
   );
 

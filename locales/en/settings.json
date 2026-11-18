@@ -263,9 +263,7 @@
     "signOut": "Sign out",
     "signIn": "Sign in",
     "createAccount": "Create account",
-    "popupBlocked": "Allow pop-ups for this page to sign in.",
-    "managePlan": "Manage existing plan",
-    "billingUnavailable": "Could not open billing. Try again."
+    "popupBlocked": "Allow pop-ups for this page to sign in."
   },
   "storage": {
     "title": "Storage",

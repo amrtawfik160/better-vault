@@ -19,6 +19,7 @@
   "select": "Use {{title}}",
   "menu": "Options for {{title}}",
   "read": "Read",
+  "openStudy": "Read in Study",
   "openPage": "Open page",
   "rename": {
     "title": "Rename source",

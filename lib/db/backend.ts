@@ -1,4 +1,4 @@
-import type { StudyBook, StudyRecord } from "@/lib/study/records";
+import type { StudyBook, StudyRecord, StudyReviewWrite } from "@/lib/study/records";
 import type {
   Chunk,
   Conversation,
@@ -130,6 +130,8 @@ export interface Backend {
   listStudy(): Promise<StudyRecord[]>;
   getStudy(id: string): Promise<StudyRecord | undefined>;
   putStudy(rows: StudyRecord[]): Promise<void>;
+  insertStudy(rows: StudyRecord[]): Promise<number>;
+  applyStudyReview(write: StudyReviewWrite): Promise<boolean>;
   replaceStudyText(book: StudyBook, source: Source, chunks: Chunk[]): Promise<void>;
   deleteStudy(id: string): Promise<void>;
 
@@ -232,6 +234,8 @@ export const writes = {
   deleteOutput: ["outputs", "blobs"],
   putBlob: ["blobs"],
   putStudy: ["study"],
+  insertStudy: ["study"],
+  applyStudyReview: ["study"],
   replaceStudyText: ["study", "sources", "chunks", "notebooks"],
   deleteStudy: ["study"],
   putSetting: ["settings"],
@@ -332,6 +336,8 @@ export const backendMethods = [
   "listStudy",
   "getStudy",
   "putStudy",
+  "insertStudy",
+  "applyStudyReview",
   "replaceStudyText",
   "deleteStudy",
   "getSetting",

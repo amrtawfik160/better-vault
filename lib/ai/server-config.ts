@@ -35,6 +35,20 @@ export function isDesktopRuntime(): boolean {
   return desktopRuntime;
 }
 
+export function isLocalAppRequest(request: Request): boolean {
+  const url = new URL(request.url);
+  const desktop = desktopRuntime && url.protocol === "app:" && url.host === "better-vault";
+  const web = loopbackRuntime && url.protocol === "http:" && isLoopbackHost(url.hostname);
+  const origin = request.headers.get("origin");
+  const fetchSite = request.headers.get("sec-fetch-site");
+  return (
+    (desktop || web) &&
+    (origin === null || origin === (desktop ? "app://better-vault" : url.origin)) &&
+    fetchSite !== "cross-site" &&
+    fetchSite !== "same-site"
+  );
+}
+
 /**
  * Sign in with ChatGPT works in the desktop app only. Its tokens are kept by
  * the server, so on a web server, even one on your own computer, they would

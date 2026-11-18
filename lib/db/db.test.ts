@@ -1,6 +1,9 @@
 import "fake-indexeddb/auto";
 import {
   addStudyBook,
+  addStudioFlashcards,
+  deleteStudyBook,
+  studyBookForSource,
   freshSchedule,
   putStudyRecords,
   rateStudyItem,
@@ -499,6 +502,60 @@ describe.each(backends)("%s store", (name, create) => {
   });
 
   describe("study", () => {
+    it("reads a notebook source in Study without copying or deleting the notebook", async () => {
+      const notebookId = await createNotebook("Notebook");
+      const source = await addSource({
+        notebookId,
+        title: "Source",
+        kind: "text",
+        text: "Read this",
+      });
+      const [first, second] = await Promise.all([
+        studyBookForSource(source.id),
+        studyBookForSource(source.id),
+      ]);
+      expect(first.id).toBe(second.id);
+      expect(await store().listStudy()).toHaveLength(1);
+      expect(first).toMatchObject({ notebookId, sourceId: source.id, attachedToNotebook: true });
+      await deleteStudyBook(first);
+      expect(await store().getNotebook(notebookId)).toBeDefined();
+      expect(await store().getSource(source.id)).toBeDefined();
+      expect(await store().listStudy()).toEqual([]);
+    });
+
+    it("adds a Studio set once and commits only one review for a due card", async () => {
+      const notebookId = await createNotebook("Notebook");
+      const output = {
+        id: "output",
+        notebookId,
+        title: "Practice",
+        toolId: "flashcards",
+        status: "ready",
+        createdAt: 0,
+        updatedAt: 0,
+        options: {},
+        sourceIds: [],
+        data: { cards: [{ front: "Why?", back: "Because." }] },
+      } satisfies import("./types").StudioOutput;
+      const counts = await Promise.all([addStudioFlashcards(output), addStudioFlashcards(output)]);
+      expect(counts.sort()).toEqual([0, 1]);
+      const grades = await Promise.all([
+        rateStudyItem("studio-output-0", "easy", 1),
+        rateStudyItem("studio-output-0", "good", 1),
+      ]);
+      expect(grades.sort()).toEqual([false, true]);
+      const reviewed = await store().getStudy("studio-output-0");
+      expect(await addStudioFlashcards(output)).toBe(0);
+      expect(await store().getStudy("studio-output-0")).toEqual(reviewed);
+      expect((await store().listStudy()).filter(({ kind }) => kind === "session")).toHaveLength(1);
+      const backup = await exportBackup();
+      await deleteAllData();
+      await importBackup(backup);
+      expect(await store().getStudy("studio-output-0")).toMatchObject({
+        origin: { kind: "studio", outputId: "output", notebookId },
+      });
+    });
+
     it("stores a study card without a linked notebook", async () => {
       await putStudyRecords({
         id: "standalone",
@@ -532,7 +589,9 @@ describe.each(backends)("%s store", (name, create) => {
         notebookId: book.notebookId,
       });
       await rateStudyItem("study-card", "good", 25);
-      expect(await store().getStudy("study-card")).toMatchObject({ schedule: { repetitions: 1 } });
+      expect(await store().getStudy("study-card")).toMatchObject({
+        schedule: { state: "learning", step: 1, repetitions: 0 },
+      });
       const backup = await exportBackup();
       expect(backup.study).toHaveLength(3);
       await deleteAllData();

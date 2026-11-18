@@ -18,6 +18,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { openCommandPalette } from "@/lib/command";
 import { createNote, renameNote, saveNoteBody } from "@/lib/db/notes";
 import type { Note, NoteLink } from "@/lib/db/types";
+import { startNoteTutor } from "@/lib/db/study";
+import { studyHref } from "@/lib/study/links";
+import { Button } from "@/components/panelui/button";
 import { useCurrentVault } from "@/lib/db/vaults";
 import { formatRelativeTime } from "@/lib/format";
 import type { GraphNode } from "@/lib/notes/graph";
@@ -535,6 +538,20 @@ export default function NotesWorkspace() {
                 {t("updated", { time: formatRelativeTime(note.updatedAt, i18n.language) })} ·{" "}
                 {t("words", { count: note.body.trim() ? note.body.trim().split(/\s+/).length : 0 })}
               </p>
+              <div className="mx-auto flex w-full max-w-[46rem] px-6 pt-2">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={!note.body.trim()}
+                  onClick={() => {
+                    void startNoteTutor(note)
+                      .then((thread) => navigate(studyHref("tutor", { thread: thread.id })))
+                      .catch((error: Error) => toast.error(error.message));
+                  }}
+                >
+                  {t("askTutor")}
+                </Button>
+              </div>
               {mode === "edit" ? (
                 <div className="min-h-0 flex-1">
                   <EditorPane

@@ -1,13 +1,24 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { toast } from "sonner";
+import { StudyOriginLink } from "./study-origin-link";
+import { queryIndex, studyHref } from "@/lib/study/links";
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/panelui/button";
 import { SettingsSheet } from "@/components/settings/settings-sheet";
-import { subscriptionConnectionsAllowed } from "@/lib/ai/cliproxyapi-client";
-import { putStudyRecords, studyId, useStudyRecords } from "@/lib/db/study";
+import {
+  putStudyRecords,
+  studyConversationDefaults,
+  studyId,
+  useStudyRecords,
+} from "@/lib/db/study";
 import { routes } from "@/lib/routes";
-import type { StudyBook, StudyRecord, StudyThread } from "@/lib/study/records";
+import {
+  studyRatings,
+  type StudyBook,
+  type StudyRecord,
+  type StudyThread,
+} from "@/lib/study/records";
 import { StudyLibrary } from "./study-library";
 import { StudyReader } from "./study-reader";
 import { CardLibrary, HighlightsLibrary, StudyReview, VocabularyLibrary } from "./study-review";
@@ -51,7 +62,10 @@ function DailyStudy({
   const dueHighlights = rows.filter(
     (item) => item.kind === "highlight" && item.schedule.dueAt <= now,
   ).length;
-  const lastRead = books[0];
+  const lastRead =
+    books
+      .filter((entry) => entry.lastReadAt !== undefined)
+      .toSorted((a, b) => (b.lastReadAt ?? 0) - (a.lastReadAt ?? 0))[0] ?? books[0];
   const dates = new Set(sessions.map((item) => new Date(item.updatedAt).toDateString()));
   let streak = 0;
   const cursor = new Date(today);
@@ -118,6 +132,7 @@ function DailyStudy({
           </p>
         </div>
       ) : null}
+      <StudyProgress rows={rows} books={books} now={now} />
       <div className="space-y-2">
         <h3 className="font-semibold">Recent activity</h3>
         {sessions.length ? (
@@ -128,6 +143,7 @@ function DailyStudy({
                   {session.activity}
                   {session.rating ? ` · ${session.rating}` : ""}
                 </span>
+                {session.origin ? <StudyOriginLink origin={session.origin} /> : null}
                 <span className="text-muted-foreground">
                   {new Intl.DateTimeFormat(undefined, {
                     dateStyle: "medium",
@@ -147,6 +163,114 @@ function DailyStudy({
   );
 }
 
+function StudyProgress({
+  rows,
+  books,
+  now,
+}: {
+  rows: StudyRecord[];
+  books: StudyBook[];
+  now: number;
+}) {
+  const cutoff = new Date(now);
+  cutoff.setHours(0, 0, 0, 0);
+  cutoff.setDate(cutoff.getDate() - 29);
+  const cards = rows.filter((item) => item.kind === "card");
+  const currentCards = new Set(cards.map((item) => item.id));
+  const sessions = rows
+    .filter((item) => item.kind === "session")
+    .filter((item) => item.updatedAt >= cutoff.getTime());
+  const reviews = sessions.filter((item) => item.activity === "review");
+  const speaking = sessions.filter((item) => item.activity === "speaking");
+  const recentRecall = reviews
+    .filter((item) => item.itemId && currentCards.has(item.itemId))
+    .slice(0, 20);
+  const totals = [
+    { label: "Flashcards", value: cards.length, tab: "cards" },
+    { label: "Documents", value: books.length, tab: "library" },
+    {
+      label: "Highlights",
+      value: rows.filter((item) => item.kind === "highlight").length,
+      tab: "highlights",
+    },
+    {
+      label: "Reviews",
+      value: reviews.reduce((total, item) => total + item.count, 0),
+      tab: "review",
+    },
+    {
+      label: "Speaking sessions",
+      value: speaking.reduce((total, item) => total + item.count, 0),
+      tab: "tutor",
+    },
+    {
+      label: "Speaking minutes",
+      value: Math.round(speaking.reduce((total, item) => total + item.seconds, 0) / 60),
+      tab: "tutor",
+    },
+  ];
+  const reading = books.filter((book) => book.lastReadAt !== undefined || book.section > 0);
+  return (
+    <section className="space-y-3" aria-label="Study progress">
+      <h3 className="font-semibold">Study progress</h3>
+      <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-3">
+        {totals.map(({ label, value, tab }, index) => (
+          <div key={label} className="space-y-1 bg-card p-3">
+            <dt className="text-sm text-muted-foreground">
+              <Link to={studyHref(tab)} className="hover:underline">
+                {label}
+              </Link>
+            </dt>
+            <dd className="text-lg font-semibold tabular-nums">{value}</dd>
+            {index >= 3 ? <p className="text-xs text-muted-foreground">Last 30 days</p> : null}
+          </div>
+        ))}
+      </dl>
+      {recentRecall.length ? (
+        <div className="space-y-2 rounded-xl border p-3 text-sm">
+          <h4 className="font-medium">Last {recentRecall.length} flashcard reviews</h4>
+          <ul className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
+            {studyRatings.map((rating) => (
+              <li key={rating}>
+                {recentRecall.filter((item) => item.rating === rating).length} {rating}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {reading.length ? (
+        <div className="space-y-2 rounded-xl border p-3">
+          <h4 className="text-sm font-medium">Reading progress</h4>
+          <ul className="space-y-3">
+            {reading.map((book) => (
+              <li key={book.id} className="space-y-1">
+                <div className="flex items-center justify-between gap-2 text-sm">
+                  <Link
+                    dir="auto"
+                    to={studyHref("library", { book: book.id })}
+                    className="truncate hover:underline"
+                  >
+                    {book.title}
+                  </Link>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {Math.round(((book.section + 1) / book.sections.length) * 100)}%
+                  </span>
+                </div>
+                <progress
+                  max={book.sections.length}
+                  value={book.section + 1}
+                  aria-label={`Reading progress for ${book.title}`}
+                  className="block h-1 w-full accent-primary"
+                />
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 export function StudyWorkspace() {
   const [params, setParams] = useSearchParams();
   const [settings, setSettings] = useState(false);
@@ -160,8 +284,22 @@ export function StudyWorkspace() {
   const words = rows.filter((row) => row.kind === "word");
   const book = books.find((entry) => entry.id === params.get("book"));
   const thread = threads.find((entry) => entry.id === params.get("thread"));
-  const pageValue = params.get("page");
-  const page = pageValue && /^\d+$/.test(pageValue) ? Number(pageValue) : undefined;
+  const page = queryIndex(params.get("page"));
+  const at = queryIndex(params.get("at"));
+  const length = queryIndex(params.get("length"));
+  const focusedRange = at !== undefined && length ? { offset: at, length } : undefined;
+  const output = params.get("output");
+  const cardId = params.get("card");
+  const filteredCards = cards.filter(
+    (row) =>
+      (!book || (row.origin?.kind === "book" && row.origin.bookId === book.id)) &&
+      (!output || (row.origin?.kind === "studio" && row.origin.outputId === output)) &&
+      (!cardId || row.id === cardId),
+  );
+  const filteredHighlights = book
+    ? highlights.filter((item) => item.bookId === book.id)
+    : highlights;
+  const bookFilter = book ? { book: book.id } : undefined;
   const locate = (bookId: string, section: number) =>
     go("library", { book: bookId, page: String(section) });
 
@@ -178,7 +316,7 @@ export function StudyWorkspace() {
     what: StudyBook,
     scope: StudyThread["scope"],
     section: number,
-    quote?: string,
+    selection?: { text: string; offset: number },
     goal: StudyThread["goal"] = "book",
   ) {
     const item: StudyThread = {
@@ -187,17 +325,18 @@ export function StudyWorkspace() {
       title: goal === "teach-back" ? `Teach it back · ${what.title}` : what.title,
       goal,
       scope,
-      corrections: "off",
       notebookId: what.notebookId,
       bookId: what.id,
       section,
-      quote,
+      quote: selection?.text,
+      offset: selection?.offset,
       messages: [],
       updatedAt: Date.now(),
     };
     try {
-      await putStudyRecords(item);
-      openThread(item);
+      const created = { ...item, ...(await studyConversationDefaults(goal)) };
+      await putStudyRecords(created);
+      openThread(created);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     }
@@ -218,9 +357,7 @@ export function StudyWorkspace() {
             <SettingsSheet
               open={settings}
               onOpenChange={setSettings}
-              page={
-                settings ? (subscriptionConnectionsAllowed() ? "subscriptions" : "providers") : null
-              }
+              page={settings ? "providers" : undefined}
             />
           </div>
           <nav aria-label="Study sections" className="flex w-full gap-1 overflow-x-auto pb-1">
@@ -262,41 +399,65 @@ export function StudyWorkspace() {
               book={book}
               requestedPage={page}
               focusedHighlight={params.get("highlight") ?? undefined}
+              focusedRange={focusedRange}
               highlights={highlights.filter((highlight) => highlight.bookId === book.id)}
               back={() => go("library")}
               openPage={(section) => locate(book.id, section)}
-              startChat={(scope, section, quote) => void createThread(book, scope, section, quote)}
+              startChat={(scope, section, selection) =>
+                void createThread(book, scope, section, selection)
+              }
             />
           ) : (
             <StudyLibrary books={books} openBook={read} />
           )
         ) : null}
-        {saved && tab === "cards" ? <CardLibrary cards={cards} /> : null}
+        {saved && tab === "cards" ? (
+          <CardLibrary
+            cards={filteredCards}
+            filter={
+              book?.title ??
+              (output ? "Studio flashcards" : cardId ? "Selected flashcard" : undefined)
+            }
+            clearFilter={() => go("cards")}
+            review={() =>
+              go("review", {
+                ...bookFilter,
+                ...(output ? { output } : {}),
+                ...(cardId ? { card: cardId } : {}),
+              })
+            }
+          />
+        ) : null}
         {saved && tab === "review" ? (
           <StudyReview
-            key={params.get("kind")}
-            cards={cards}
-            highlights={highlights}
+            key={params.toString()}
+            cards={filteredCards}
+            highlights={filteredHighlights}
             useHighlights={params.get("kind") === "highlights"}
           />
         ) : null}
         {saved && tab === "highlights" ? (
           <HighlightsLibrary
-            highlights={highlights}
+            highlights={filteredHighlights}
+            filter={book?.title}
+            clearFilter={() => go("highlights")}
             locate={(item) =>
               go("library", { book: item.bookId, page: String(item.section), highlight: item.id })
             }
-            review={() => go("review", { kind: "highlights" })}
+            review={() => go("review", { kind: "highlights", ...bookFilter })}
           />
         ) : null}
-        {saved && tab === "vocabulary" ? <VocabularyLibrary words={words} /> : null}
+        {saved && tab === "vocabulary" ? (
+          <VocabularyLibrary words={words} focusedWord={params.get("word") ?? undefined} />
+        ) : null}
         {saved && tab === "tutor" ? (
           thread ? (
             <StudyTutor
-              key={thread.id}
+              key={`${thread.id}:${params.get("report") ?? ""}`}
               thread={thread}
               book={books.find((item) => item.id === thread.bookId)}
-              locate={locate}
+              openReport={params.get("report") === "1"}
+              focusMessage={queryIndex(params.get("message"))}
               back={() => go("tutor")}
               setup={() => setSettings(true)}
             />

@@ -2,12 +2,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { wrapLanguageModel } from "ai";
 import { z } from "zod";
 import type { ProviderId } from "./catalog";
-import {
-  isDesktopRuntime,
-  isLoopbackHost,
-  isLoopbackRuntime,
-  localProvidersAllowed,
-} from "./server-config";
+import { isLocalAppRequest, isLoopbackHost, localProvidersAllowed } from "./server-config";
 
 import { subscriptionRoute } from "./cliproxyapi-oauth";
 import { cliProxyConnection, ensureCliProxy, usesManagedCliProxy } from "./cliproxyapi-runtime";
@@ -15,22 +10,8 @@ import { cliProxyConnection, ensureCliProxy, usesManagedCliProxy } from "./clipr
 export function rejectCliProxyRequest(request: Request, provider: ProviderId = "cliproxyapi") {
   if (provider !== "cliproxyapi") return;
 
-  const url = new URL(request.url);
-  const desktop = isDesktopRuntime() && url.protocol === "app:" && url.host === "better-vault";
-  const web = isLoopbackRuntime() && url.protocol === "http:" && isLoopbackHost(url.hostname);
-  const expectedOrigin = desktop ? "app://better-vault" : url.origin;
-  const origin = request.headers.get("origin");
-  const fetchSite = request.headers.get("sec-fetch-site");
   const json = request.headers.get("content-type")?.split(";")[0].trim() === "application/json";
-  if (
-    (desktop || web) &&
-    json &&
-    (origin === null || origin === expectedOrigin) &&
-    fetchSite !== "cross-site" &&
-    fetchSite !== "same-site"
-  ) {
-    return;
-  }
+  if (json && isLocalAppRequest(request)) return;
 
   return Response.json(
     { error: "AI subscription connections are available on this computer only." },

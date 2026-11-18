@@ -1,3 +1,4 @@
+import type { StudyRecord } from "@/lib/study/records";
 import type { Backend } from "./backend";
 import { BetterVaultDatabase } from "./database";
 import type { Source, StudioOutput } from "./types";
@@ -234,6 +235,27 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
     putStudy: async (rows) => {
       await db.study.bulkPut(rows);
     },
+    insertStudy: (rows) =>
+      db.transaction("rw", db.study, async () => {
+        const unique = [...new Map(rows.map((row) => [row.id, row])).values()];
+        const existing = await db.study.bulkGet(unique.map(({ id }) => id));
+        const pending = unique.filter((_, index) => !existing[index]);
+        await db.study.bulkAdd(pending);
+        return pending.length;
+      }),
+    applyStudyReview: ({ id, previousDueAt, schedule, activity }) =>
+      db.transaction("rw", db.study, async () => {
+        const item = await db.study.get(id);
+        if (
+          (item?.kind !== "card" && item?.kind !== "highlight") ||
+          item.schedule.dueAt !== previousDueAt
+        )
+          return false;
+        const reviewed: StudyRecord = { ...item, schedule, updatedAt: activity.updatedAt };
+        await db.study.put(reviewed);
+        await db.study.add(activity);
+        return true;
+      }),
     replaceStudyText: (book, source, chunks) =>
       db.transaction("rw", [db.study, db.sources, db.chunks, db.notebooks], async () => {
         if (
@@ -249,7 +271,18 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
         await db.chunks.bulkPut(chunks);
         await db.notebooks.update(book.notebookId, { updatedAt: book.updatedAt });
       }),
-    deleteStudy: (id) => db.study.delete(id),
+    deleteStudy: (id) =>
+      db.transaction("rw", db.study, async () => {
+        const row = await db.study.get(id);
+        if (row?.kind === "book") {
+          await db.study
+            .where("notebookId")
+            .equals(row.notebookId)
+            .filter((item) => item.kind === "highlight" && item.bookId === id)
+            .delete();
+        }
+        await db.study.delete(id);
+      }),
 
     exportAll: async () => {
       const [

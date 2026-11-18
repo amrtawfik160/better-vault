@@ -9,6 +9,7 @@ import {
   WhiteboardIcon,
 } from "@hugeicons/core-free-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Icon } from "@/components/icon";
@@ -16,6 +17,8 @@ import { Button } from "@/components/panelui/button";
 import { Menu } from "@/components/panelui/menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useWorkspace } from "@/components/workspace/workspace-context";
+import { addStudioFlashcards } from "@/lib/db/study";
+import { studyHref } from "@/lib/study/links";
 import { updateOutputData, useOutput } from "@/lib/db/outputs";
 import { formatRelativeTime } from "@/lib/format";
 import { storageIds, storages } from "@/lib/storage/catalog";
@@ -34,8 +37,10 @@ import { useExporter } from "./use-exporter";
 export function OutputViewer({ id }: { id: string }) {
   const { t, i18n } = useTranslation("studio");
   const { t: tCommon } = useTranslation();
-  const { closeOutput, openOutput, readSource, requestOutputAction } = useWorkspace();
+  const { notebook, closeOutput, openOutput, readSource, requestOutputAction } = useWorkspace();
   const runner = useStudioRunner();
+  const navigate = useNavigate();
+  const [addingCards, setAddingCards] = useState(false);
   const output = useOutput(id);
   const scrollRef = useRef<HTMLDivElement>(null);
   const saveData = useCallback(
@@ -48,14 +53,16 @@ export function OutputViewer({ id }: { id: string }) {
   const exporter = useExporter();
   const storage = useStorageSettings();
   const connected = storage ? storageIds.filter((id) => isStorageReady(storage, id)) : [];
-  const gone = output === null || (output !== undefined && !isStudioToolId(output.toolId));
+  const gone =
+    output === null ||
+    (output !== undefined && (output.notebookId !== notebook.id || !isStudioToolId(output.toolId)));
 
   // A deleted output, here or in another tab, goes back to the list.
   useEffect(() => {
     if (gone) closeOutput();
   }, [gone, closeOutput]);
 
-  if (!output || !isStudioToolId(output.toolId)) return null;
+  if (!output || output.notebookId !== notebook.id || !isStudioToolId(output.toolId)) return null;
 
   const tool = studioTools[output.toolId];
   const client = toolClients[output.toolId];
@@ -181,6 +188,26 @@ export function OutputViewer({ id }: { id: string }) {
                   <h2 className="truncate text-xl font-semibold tracking-tight">{output.title}</h2>
                   <p className="truncate text-xs text-muted-foreground">{meta}</p>
                 </div>
+                {parsed?.success && output.toolId === "flashcards" ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    disabled={addingCards}
+                    onClick={() => {
+                      setAddingCards(true);
+                      void addStudioFlashcards(output)
+                        .then((count) => {
+                          if (count > 0) toast.success(t("viewer.studyCardsAdded", { count }));
+                          navigate(studyHref("cards", { output: output.id }));
+                        })
+                        .catch((error: Error) => toast.error(error.message))
+                        .finally(() => setAddingCards(false));
+                    }}
+                  >
+                    {t("viewer.addToStudy")}
+                  </Button>
+                ) : null}
                 {parsed?.success && definition?.exports?.length ? (
                   <DownloadMenu
                     title={output.title}

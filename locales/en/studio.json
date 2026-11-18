@@ -399,6 +399,9 @@
     }
   },
   "viewer": {
+    "addToStudy": "Add to review",
+    "studyCardsAdded_one": "Added {{count}} flashcard to Study",
+    "studyCardsAdded_other": "Added {{count}} flashcards to Study",
     "back": "All outputs",
     "download": "Download",
     "copy": "Copy",

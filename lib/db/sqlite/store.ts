@@ -514,6 +514,28 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
       transaction(db, () => {
         for (const row of rows) put("study", row);
       }),
+    insertStudy: (rows) =>
+      transaction(db, () => {
+        let count = 0;
+        for (const row of rows) {
+          if (get<StudyRecord>("study", row.id)) continue;
+          add("study", row);
+          count++;
+        }
+        return count;
+      }),
+    applyStudyReview: ({ id, previousDueAt, schedule, activity }) =>
+      transaction(db, () => {
+        const item = get<StudyRecord>("study", id);
+        if (
+          (item?.kind !== "card" && item?.kind !== "highlight") ||
+          item.schedule.dueAt !== previousDueAt
+        )
+          return false;
+        put("study", { ...item, schedule, updatedAt: activity.updatedAt });
+        add("study", activity);
+        return true;
+      }),
     replaceStudyText: (book, source, chunks) =>
       transaction(db, () => {
         if (
@@ -529,9 +551,16 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
         for (const chunk of chunks) put("chunks", chunk);
         touch(book.notebookId, book.updatedAt);
       }),
-    deleteStudy: (id) => {
-      deleteWhere("study", "id", id);
-    },
+    deleteStudy: (id) =>
+      transaction(db, () => {
+        const row = get<StudyRecord>("study", id);
+        if (row?.kind === "book") {
+          db.prepare(
+            "DELETE FROM study WHERE notebook_id = ? AND json_extract(doc, '$.kind') = 'highlight' AND json_extract(doc, '$.bookId') = ?",
+          ).run(row.notebookId, id);
+        }
+        deleteWhere("study", "id", id);
+      }),
 
     exportAll: (): StoreContent => ({
       study: docs(db.prepare("SELECT doc FROM study").all()),

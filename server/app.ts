@@ -9,6 +9,7 @@ import { POST as models } from "./routes/models";
 import { POST as opencode } from "./routes/opencode";
 import { POST as sourcesParse } from "./routes/sources-parse";
 import { POST as study } from "./routes/study";
+import { status as studyVoiceStatus, transcribe as studyVoice } from "./routes/study-voice";
 import { POST as studio } from "./routes/studio";
 import { POST as studioSuggest } from "./routes/studio-suggest";
 import { POST as storageOAuth } from "./routes/storage-oauth";
@@ -42,6 +43,8 @@ export function createApi({
   api.post("/opencode/detect", () => opencode());
   api.post("/sources/parse", (c) => sourcesParse(c.req.raw));
   api.post("/study", (c) => study(c.req.raw));
+  api.get("/study/voice", (c) => studyVoiceStatus(c.req.raw));
+  api.post("/study/voice", (c) => studyVoice(c.req.raw));
   api.post("/studio", (c) => studio(c.req.raw));
   api.post("/studio/suggest", (c) => studioSuggest(c.req.raw));
   api.post("/voices", (c) => voices(c.req.raw));

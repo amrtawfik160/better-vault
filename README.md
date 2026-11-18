@@ -31,7 +31,7 @@ Chat with your sources, and turn them into reports, flashcards, quizzes, tables 
 
 ## ✨ What it does
 
-better-vault is a free, open-source alternative to Google NotebookLM (now Gemini Notebook). It is a research notebook: you add **sources** such as PDFs, web pages, notes and text files to a **notebook**, and work with them using the AI model you choose.
+deepLe is a local research and study workspace. Add **sources** such as PDFs, web pages, notes, and text files to a **notebook** and work with them using your chosen AI model.
 
 **Chat with your sources** and get answers that cite the passages they came from. Switch to **Web** mode to let the model search the internet with its provider's built-in search.
 
@@ -59,7 +59,7 @@ Audio and video overviews are out of scope.
 
 ### Desktop app
 
-Download the installer for macOS, Windows or Linux from [better-vault.dev/download](https://better-vault.dev/download) or the [latest release](https://github.com/better-vault/better-vault/releases/latest), install it and open it. It updates itself when a new version comes out. The [desktop docs](https://better-vault.dev/docs/desktop) cover installing and moving your notebooks over.
+From this checkout, run `bun run setup` to install dependencies and `bun run desktop:dev` to open the desktop app. Use `bun run desktop:pack` to build the unpacked app in `desktop/release`.
 
 ### Run from source
 
@@ -71,7 +71,7 @@ bun install
 bun run dev
 ```
 
-Open <http://localhost:3000>, then **Settings → AI providers** and paste an API key, or point it at a local model. No `.env` file is needed.
+Open <http://localhost:3000> and choose **Use without an account**. In **Settings → AI providers**, connect an AI subscription or choose a local model.
 
 ### Production build
 
@@ -83,14 +83,22 @@ bun run start
 ### Local models (Ollama, LM Studio)
 
 1. Install [Ollama](https://ollama.com) or [LM Studio](https://lmstudio.ai) and download a model (for example `ollama pull llama3.2`).
-2. In better-vault, open **Settings → AI providers**, enable Ollama or LM Studio and check the address (`http://localhost:11434` for Ollama, `http://localhost:1234` for LM Studio).
+2. In deepLe, open **Settings → AI providers**, enable Ollama or LM Studio and check the address (`http://localhost:11434` for Ollama, `http://localhost:1234` for LM Studio).
 3. Pick the model in the prompt bar.
 
-Local models work when better-vault runs on the same machine as the model server. Web search is only available with providers that have it built in (OpenAI, Anthropic, Google).
+Local models work when deepLe runs on the same machine as the model server. Web search is only available with providers that have it built in (OpenAI, Anthropic, Google).
 
 ### Study
 
-Open **Study** from the sidebar to import PDF, EPUB, Markdown, and text documents. Study documents have a linked notebook for standard Chat and Studio tools. The Study area saves your place, bookmarks, highlights, vocabulary, flashcards, review schedule, and activity locally. Use Tutor for selected passages, a chapter or page, a whole book, notes, or general practice. It uses the AI model selected in deepLe. Where your browser supports speech recognition, you can dictate turns and have replies read aloud.
+Open **Study** from the sidebar to import PDF, EPUB, Markdown, and text documents. Study documents have a linked notebook for standard Chat and Studio tools. The Study area saves your place, bookmarks, highlights, vocabulary, flashcards, review schedule, and activity locally. Use Tutor for selected passages, a chapter or page, a whole book, notes, or general practice. It uses the AI model selected in deepLe.
+
+Select a passage to save it as a highlight, a note, a flashcard, or a vocabulary entry. Open a saved item's source to return to that passage. Open an existing notebook source in Study or add a Studio flashcard set to spaced review. Reopening the same Studio set preserves its review schedules.
+
+Open a note in Tutor to get answers that cite it. Session reports can save corrections as flashcards and suggested terms to Vocabulary. Reading, reviewing, and speaking time appear in Today. The local library and review work without an account. AI requests use the model you choose in **Settings → AI providers**, including a local provider when you want to work without an AI subscription.
+
+For voice practice in the desktop app or on localhost, install [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and place its [multilingual tiny model](https://huggingface.co/ggerganov/whisper.cpp/blob/main/ggml-tiny.bin) at `~/.cache/deeple/whisper/ggml-tiny.bin`. deepLe looks for `whisper-cli` on your system path, including the standard Homebrew locations on macOS. You can also set `DEEPLE_WHISPER_BIN` and `DEEPLE_WHISPER_MODEL` to absolute paths before launching. **Dictate** adds a transcript to your draft. **Speak to tutor** sends the transcript to your selected model and uses an installed system voice to read its reply. Use a local AI model as well to keep the entire conversation on your computer.
+
+Temporary voice turns clear after a report or when you leave the conversation. Enable transcript retention or select a default correction mode under **Study → Tutor → Tutor preferences**.
 
 deepLe builds on [Better Vault](https://github.com/better-vault/better-vault). The study workflows were adapted from [MemoFlash](https://github.com/amrtawfik160/memoflash).
 

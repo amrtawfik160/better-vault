@@ -47,25 +47,29 @@ function WorkspaceLayout() {
     activeTool,
     closeTool,
     readSource,
-    openOutput,
   } = useWorkspace();
   const { t } = useTranslation();
   const [params, setParams] = useSearchParams();
 
-  // Links from the command palette: open a source at a passage, an output, a tab or Add source.
+  // The studio output stays in the URL. Source and Add source links are one-shot commands.
   useEffect(() => {
-    if (params.size === 0) return;
     const source = params.get("source");
-    const output = params.get("output");
     const view = params.get("tab");
+    const addSource = params.get("add") === "source";
     if (source) {
       setTab("sources");
       readSource(source, params.get("passage") ?? undefined);
-    } else if (output) openOutput(output);
-    else if (view === "chat" || view === "sources" || view === "studio") setTab(view);
-    if (params.get("add") === "source") setAddSourceOpen(true);
-    setParams({}, { replace: true });
-  }, [params, setParams, setTab, readSource, openOutput, setAddSourceOpen]);
+    } else if (view === "chat" || view === "sources" || view === "studio") {
+      setTab(view);
+    }
+    if (addSource) setAddSourceOpen(true);
+    if (source || view || addSource) {
+      const rest = new URLSearchParams(params);
+      for (const key of ["source", "passage", "add", "tab"]) rest.delete(key);
+      if (source || view === "chat" || view === "sources") rest.delete("output");
+      setParams(rest, { replace: true });
+    }
+  }, [params, setParams, setTab, readSource, setAddSourceOpen]);
 
   useEffect(() => {
     document.title = `${notebook.title} · ${t("appName")}`;

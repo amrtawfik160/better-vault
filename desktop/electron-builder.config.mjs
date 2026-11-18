@@ -48,6 +48,10 @@ const config = {
   mac: {
     extraResources: [proxyResource("darwin")],
     category: "public.app-category.productivity",
+    extendInfo: {
+      NSMicrophoneUsageDescription:
+        "deepLe uses the microphone to transcribe Tutor practice on this device.",
+    },
     target: [
       { target: "dmg", arch: ["arm64", "x64"] },
       // macOS updates download the zip.

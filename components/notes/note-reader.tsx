@@ -2,6 +2,7 @@ import { useMemo, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Root, Element, ElementContent } from "hast";
+import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
 import type { NoteLink } from "@/lib/db/types";
 import { resolveLink, type LinkWorld } from "@/lib/notes/resolve";
@@ -182,6 +183,7 @@ export function NoteReader({
             </Embed>
           );
         }
+        if (href.startsWith("/study?")) return <Link to={href}>{children}</Link>;
         return (
           <a href={href} target="_blank" rel="noreferrer noopener">
             {children}

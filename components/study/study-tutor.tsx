@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useNavigate } from "react-router";
+import { StudySessionReport } from "./study-session-report";
+import { StudyOriginLink } from "./study-origin-link";
+import { originHref, studyHref } from "@/lib/study/links";
 import { Button } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
 import { modelKey, parseModelKey } from "@/lib/ai/catalog";
@@ -11,22 +15,28 @@ import {
   useSettings,
 } from "@/lib/db/settings";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
-import { createNote, useNotes } from "@/lib/db/notes";
+import { useNotes } from "@/lib/db/notes";
 import {
-  freshSchedule,
+  saveStudyCard,
+  saveStudyWord,
+  saveStudyNote,
   putStudyRecords,
   recordStudyActivity,
   removeStudyRecord,
+  studyConversationDefaults,
   studyId,
+  updateStudyThread,
 } from "@/lib/db/study";
 import { currentVaultId } from "@/lib/db/vaults";
 import { askStudyModel, passagesFor } from "@/lib/study/client";
+import { recordStudyVoice, transcribeStudyVoice } from "@/lib/study/voice";
 import {
   studyCorrections,
   studyGoals,
   studyScopes,
   type StudyBook,
   type StudyThread,
+  type StudyOrigin,
 } from "@/lib/study/records";
 
 const goalLabels = {
@@ -44,18 +54,10 @@ const scopeLabels = {
 };
 const correctionLabels = { live: "During the conversation", report: "At the end", off: "Off" };
 const optionClass = "rounded-lg border bg-background p-2 text-sm";
-
-type Recognition = {
-  lang: string;
-  onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
-  onerror: ((event: { error: string }) => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-};
-type SpeechWindow = Window & {
-  SpeechRecognition?: new () => Recognition;
-  webkitSpeechRecognition?: new () => Recognition;
+type VoiceCapture = {
+  abort: AbortController;
+  stop?: () => void;
+  mute?: (muted: boolean) => void;
 };
 
 export function TutorIndex({
@@ -72,6 +74,7 @@ export function TutorIndex({
   const [bookId, setBookId] = useState("");
   const [query, setQuery] = useState("");
   const [deleting, setDeleting] = useState<StudyThread | null>(null);
+  const savedSettings = useSettings();
 
   return (
     <section className="space-y-5">
@@ -87,13 +90,14 @@ export function TutorIndex({
             title: book ? `${goalLabels[goal]} · ${book.title}` : goalLabels[goal],
             goal,
             scope,
-            corrections: goal === "language" ? "live" : "off",
             messages: [],
+            vaultId: currentVaultId(),
             bookId: book?.id,
             notebookId: scope === "book" || scope === "chapter" ? book?.notebookId : undefined,
             updatedAt: Date.now(),
           };
-          void putStudyRecords(thread)
+          void studyConversationDefaults(goal)
+            .then((defaults) => putStudyRecords({ ...thread, ...defaults }))
             .then(() => open(thread))
             .catch((error: Error) => toast.error(error.message));
         }}
@@ -150,6 +154,44 @@ export function TutorIndex({
           <Button type="submit">Start conversation</Button>
         </div>
       </form>
+      <details className="rounded-xl border p-3 text-sm">
+        <summary className="cursor-pointer font-medium">Tutor preferences</summary>
+        <div className="mt-3 grid gap-3">
+          <label className="flex flex-wrap items-center gap-2">
+            Default corrections
+            <select
+              className={optionClass}
+              value={savedSettings?.study?.corrections ?? ""}
+              onChange={(event) => {
+                const corrections = studyCorrections.find((value) => value === event.target.value);
+                void updateSettings((saved) => {
+                  saved.study = { ...saved.study, corrections };
+                });
+              }}
+            >
+              <option value="">Based on the goal</option>
+              {studyCorrections.map((value) => (
+                <option key={value} value={value}>
+                  {correctionLabels[value]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={savedSettings?.study?.keepVoiceTranscripts ?? false}
+              onChange={(event) => {
+                const keepVoiceTranscripts = event.target.checked;
+                void updateSettings((saved) => {
+                  saved.study = { ...saved.study, keepVoiceTranscripts };
+                });
+              }}
+            />
+            Keep voice transcripts in new conversations
+          </label>
+        </div>
+      </details>
       {threads.length > 0 ? (
         <Input
           type="search"
@@ -171,6 +213,9 @@ export function TutorIndex({
               >
                 {thread.title}
               </button>
+              {thread.report ? (
+                <StudyOriginLink origin={{ kind: "report", threadId: thread.id }} />
+              ) : null}
               <Button size="sm" variant="ghost" onClick={() => setDeleting(thread)}>
                 Delete
               </Button>
@@ -197,13 +242,15 @@ export function TutorIndex({
 export function StudyTutor({
   thread,
   book,
-  locate,
+  openReport,
+  focusMessage,
   back,
   setup,
 }: {
   thread: StudyThread;
   book?: StudyBook;
-  locate: (bookId: string, section: number) => void;
+  openReport?: boolean;
+  focusMessage?: number;
   back: () => void;
   setup: () => void;
 }) {
@@ -211,74 +258,97 @@ export function StudyTutor({
   const [busy, setBusy] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState(thread.title);
-  const [showReport, setShowReport] = useState(false);
-  const [speaking, setSpeaking] = useState(false);
+  const [showReport, setShowReport] = useState(openReport ?? false);
+  const navigate = useNavigate();
+  const [voiceState, setVoiceState] = useState<"opening" | "recording" | "transcribing" | null>(
+    null,
+  );
+  const [voicePractice, setVoicePractice] = useState(false);
+  const [temporaryTurns, setTemporaryTurns] = useState<StudyThread["messages"]>([]);
+  const [micMuted, setMicMuted] = useState(false);
+  const [voiceAvailable, setVoiceAvailable] = useState<boolean>();
   const [readAloud, setReadAloud] = useState(false);
-  const [language, setLanguage] = useState("");
+  const [language, setLanguage] = useState(thread.practiceLanguage ?? "");
+  const workPending = busy || voiceState !== null;
   const controller = useRef<AbortController | null>(null);
-  const mic = useRef<Recognition | null>(null);
+  const voice = useRef<VoiceCapture | null>(null);
   const notes = useNotes();
   const settings = useSettings();
   const model = settings ? activeModel(settings) : null;
   const models = settings ? availableModels(settings) : [];
-  const vaultId = currentVaultId();
+  const vaultId = thread.vaultId ?? currentVaultId();
   const vaultNotes = (notes ?? []).filter((note) => note.vaultId === vaultId);
+  const conversation = [
+    ...thread.messages.map((entry, index) => ({ entry, index })),
+    ...temporaryTurns.map((entry) => ({ entry, index: undefined })),
+  ].sort((a, b) => (a.entry.at ?? 0) - (b.entry.at ?? 0));
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    const probe = new AbortController();
+    void fetch("/api/study/voice", { signal: probe.signal })
+      .then((response) => response.json())
+      .then((status) => setVoiceAvailable(status.available === true))
+      .catch(() => {
+        if (!probe.signal.aborted) setVoiceAvailable(false);
+      });
+    return () => {
+      probe.abort();
       controller.current?.abort();
-      mic.current?.stop();
+      voice.current?.abort.abort();
       window.speechSynthesis?.cancel();
-    },
-    [],
-  );
+    };
+  }, []);
+
+  useEffect(() => {
+    if (focusMessage !== undefined)
+      document.getElementById(`study-message-${focusMessage}`)?.scrollIntoView({ block: "center" });
+    if (openReport)
+      document.getElementById("study-session-report")?.scrollIntoView({ block: "start" });
+  }, [focusMessage, openReport, showReport]);
 
   async function save(change: Partial<StudyThread>) {
-    await putStudyRecords({ ...thread, ...change, updatedAt: Date.now() });
+    await updateStudyThread(thread, change);
   }
 
-  async function send(message: string, submittedAt: number, aloud = readAloud) {
+  async function send(message: string, submittedAt: number, spoken = false) {
     const text = message.trim();
-    if (!text || busy) return;
-    if (thread.scope === "notes" && !thread.noteIds?.length) {
-      toast.error("Choose at least one note first.");
+    if (!text || controller.current) return;
+    const passages = passagesFor(thread, book, text, vaultNotes);
+    if (thread.scope !== "general" && !passages.length) {
+      toast.error(
+        thread.scope === "notes"
+          ? "Choose a note with text first."
+          : "This scope has no readable text. Choose another context.",
+      );
       return;
     }
     setBusy(true);
     const abort = new AbortController();
     controller.current = abort;
-    const pending: StudyThread = {
-      ...thread,
-      messages: [...thread.messages, { role: "user", text }],
-      updatedAt: submittedAt,
-    };
-    const passages = passagesFor(thread, book, text);
-    const grounding =
-      thread.scope === "notes"
-        ? vaultNotes
-            .filter((note) => thread.noteIds?.includes(note.id))
-            .map(({ title, body }) => ({ title, text: body }))
-        : passages;
+    const practiceLanguage = language.trim() || undefined;
     try {
-      const answer = await askStudyModel("chat", text, grounding, thread, abort.signal);
+      const answer = await askStudyModel({
+        action: "chat",
+        input: text,
+        passages,
+        thread: { ...thread, practiceLanguage, messages: conversation.map(({ entry }) => entry) },
+        signal: abort.signal,
+      });
       if (abort.signal.aborted) return;
       const citations = [...new Set(answer.citations ?? [])].flatMap((index) => {
         const passage = passages[index - 1];
-        return passage
-          ? [{ index, bookId: passage.bookId, section: passage.section, title: passage.title }]
-          : [];
+        return passage ? [{ index, origin: passage.origin, title: passage.title }] : [];
       });
-      const next: StudyThread = {
-        ...pending,
-        messages: [...pending.messages, { role: "assistant", text: answer.text, citations }],
-      };
-      await putStudyRecords(next);
+      const turns: StudyThread["messages"] = [
+        { role: "user", text, at: submittedAt },
+        { role: "assistant", text: answer.text, citations, at: submittedAt },
+      ];
+      if (spoken && !thread.keepVoiceTranscripts)
+        setTemporaryTurns((value) => [...value, ...turns]);
+      else await save({ practiceLanguage, messages: [...thread.messages, ...turns] });
+      if (spoken) setVoicePractice(true);
       setInput("");
-      if (aloud && "speechSynthesis" in window) {
-        const phrase = new SpeechSynthesisUtterance(answer.text);
-        if (language) phrase.lang = language;
-        window.speechSynthesis.speak(phrase);
-      }
+      if (spoken || readAloud) speakReply(answer.text);
     } catch (error) {
       if (!abort.signal.aborted)
         toast.error(error instanceof Error ? error.message : String(error));
@@ -288,56 +358,109 @@ export function StudyTutor({
     }
   }
 
-  function dictate(started: number, sendTurn = false) {
-    const platform = window as SpeechWindow;
-    const SpeechRecognition = platform.SpeechRecognition ?? platform.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      toast.error("Speech recognition is unavailable in this browser.");
+  function speakReply(text: string) {
+    const synthesis = window.speechSynthesis;
+    if (!synthesis) return;
+    const lang = language.trim() || navigator.language;
+    const deviceVoices = synthesis.getVoices().filter((voice) => voice.localService);
+    const best =
+      deviceVoices.find((voice) => voice.lang.toLowerCase() === lang.toLowerCase()) ??
+      deviceVoices.find((voice) => voice.lang.split("-")[0] === lang.toLowerCase().split("-")[0]);
+    if (!best) {
+      if (deviceVoices.length) toast.info("No installed voice matches the speech language.");
       return;
     }
-    if (mic.current) {
-      mic.current.stop();
-      return;
-    }
-    const recognition = new SpeechRecognition();
-    if (language) recognition.lang = language;
-    recognition.onresult = ({ results }) => {
-      const transcript = results[0]?.[0]?.transcript?.trim();
-      if (transcript) {
-        if (sendTurn) void send(transcript, Date.now(), true);
-        else setInput((value) => (value ? `${value} ${transcript}` : transcript));
-        void recordStudyActivity("speaking", (Date.now() - started) / 1000, thread.notebookId);
-      }
-    };
-    recognition.onerror = ({ error }) => toast.error(`Could not transcribe speech (${error}).`);
-    recognition.onend = () => {
-      mic.current = null;
-      setSpeaking(false);
-    };
+    const phrase = new SpeechSynthesisUtterance(text);
+    phrase.lang = best.lang;
+    phrase.voice = best;
+    synthesis.cancel();
+    synthesis.speak(phrase);
+  }
+
+  async function dictate(sendTurn: boolean, startedAt: number) {
+    if (voice.current || controller.current) return;
+    const capture: VoiceCapture = { abort: new AbortController() };
+    voice.current = capture;
+    const signal = capture.abort.signal;
+    setVoiceState("opening");
+    window.speechSynthesis?.cancel();
     try {
-      recognition.start();
-      mic.current = recognition;
-      setSpeaking(true);
-    } catch {
-      toast.error("Could not start the microphone.");
+      const status = await fetch("/api/study/voice", { signal }).then((response) =>
+        response.json(),
+      );
+      setVoiceAvailable(status.available === true);
+      if (!status.available) throw new Error("Local voice needs whisper-cli and a Whisper model.");
+      const recording = await recordStudyVoice(signal);
+      capture.stop = recording.stop;
+      capture.mute = recording.mute;
+      setVoiceState("recording");
+      const { audio, seconds } = await recording.result;
+      signal.throwIfAborted();
+      setVoiceState("transcribing");
+      const transcript = await transcribeStudyVoice(audio, language, signal);
+      signal.throwIfAborted();
+      const activity = recordStudyActivity("speaking", seconds, thread.notebookId, {
+        kind: "tutor",
+        threadId: thread.id,
+      });
+      if (sendTurn) {
+        setInput(transcript);
+        await Promise.all([
+          activity,
+          send(transcript, startedAt + Math.round(seconds * 1000), true),
+        ]);
+      } else {
+        setInput((value) => (value ? `${value} ${transcript}` : transcript));
+        await activity;
+      }
+    } catch (error) {
+      if (!signal.aborted) toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      voice.current = null;
+      setVoiceState(null);
+      setMicMuted(false);
     }
   }
 
-  async function report() {
+  async function report(generatedAt: number) {
+    if (controller.current) return;
     setBusy(true);
     const abort = new AbortController();
     controller.current = abort;
     try {
-      const result = await askStudyModel(
-        "report",
-        "Write a report on the study conversation.",
-        [],
-        thread,
-        abort.signal,
-      );
+      const result = await askStudyModel({
+        action: "report",
+        input: "Write a report on the study conversation.",
+        thread: {
+          ...thread,
+          practiceLanguage: language.trim() || undefined,
+          messages: conversation.map(({ entry }) => entry),
+        },
+        signal: abort.signal,
+      });
       if (!abort.signal.aborted && result.report) {
-        await save({ report: result.report });
+        const requested = thread.corrections && thread.corrections !== "off";
+        const hasLanguageEvidence = conversation.some(
+          ({ entry }) => entry.role === "user" && entry.text.trim().split(/\s+/).length >= 5,
+        );
+        const languageStatus = requested
+          ? hasLanguageEvidence
+            ? "reviewed"
+            : "insufficient"
+          : "not-requested";
+        await save({
+          practiceLanguage: language.trim() || undefined,
+          report: {
+            ...result.report,
+            generatedAt,
+            languageStatus,
+            languageFeedback: languageStatus === "reviewed" ? result.report.languageFeedback : [],
+            vocabulary: languageStatus === "reviewed" ? result.report.vocabulary : [],
+          },
+        });
         setShowReport(true);
+        setVoicePractice(false);
+        setTemporaryTurns([]);
       }
     } catch (error) {
       if (!abort.signal.aborted)
@@ -348,9 +471,38 @@ export function StudyTutor({
     }
   }
 
-  function saveNote(text: string) {
-    void createNote({ vaultId, notebookId: thread.notebookId, title: thread.title, body: text })
-      .then(() => toast.success("Saved to Notes"))
+  function saveNote(text: string, origin: StudyOrigin) {
+    void saveStudyNote({
+      notebookId: thread.notebookId,
+      vaultId,
+      title: thread.title,
+      body: text,
+      origin,
+    })
+      .then((note) =>
+        toast.success("Saved to Notes", {
+          action: {
+            label: "Open note",
+            onClick: () => navigate(originHref({ kind: "note", noteId: note.id })),
+          },
+        }),
+      )
+      .catch((error: Error) => toast.error(error.message));
+  }
+
+  function makeCard(front: string, back: string, origin: StudyOrigin, id: string) {
+    void saveStudyCard(
+      { front, back, tags: [thread.title], notebookId: thread.notebookId, origin },
+      id,
+    )
+      .then((card) =>
+        toast.success("Flashcard saved", {
+          action: {
+            label: "View flashcard",
+            onClick: () => navigate(studyHref("cards", { card: card.id })),
+          },
+        }),
+      )
       .catch((error: Error) => toast.error(error.message));
   }
 
@@ -386,6 +538,9 @@ export function StudyTutor({
           </h2>
         )}
         <div className="flex flex-wrap gap-2">
+          {book && (
+            <StudyOriginLink origin={{ kind: "book", bookId: book.id, section: thread.section }} />
+          )}
           <Button variant="ghost" size="sm" disabled={busy} onClick={() => setRenaming(!renaming)}>
             Rename
           </Button>
@@ -398,8 +553,9 @@ export function StudyTutor({
         <label className="grid gap-1">
           AI model
           <select
+            aria-label="AI model"
             className={optionClass}
-            disabled={busy || !models.length}
+            disabled={workPending || !models.length}
             value={model ? modelKey(model) : ""}
             onChange={(event) => {
               const chosen = parseModelKey(event.target.value);
@@ -420,8 +576,9 @@ export function StudyTutor({
         <label className="grid gap-1">
           Context
           <select
+            aria-label="Context"
             className={optionClass}
-            disabled={busy}
+            disabled={workPending}
             value={thread.scope}
             onChange={(event) => void save({ scope: event.target.value as StudyThread["scope"] })}
           >
@@ -442,8 +599,9 @@ export function StudyTutor({
         <label className="grid gap-1">
           Corrections
           <select
+            aria-label="Corrections"
             className={optionClass}
-            disabled={busy}
+            disabled={workPending}
             value={thread.corrections ?? "off"}
             onChange={(event) =>
               void save({ corrections: event.target.value as StudyThread["corrections"] })
@@ -469,7 +627,7 @@ export function StudyTutor({
                   <input
                     type="checkbox"
                     checked={chosen}
-                    disabled={busy}
+                    disabled={workPending}
                     onChange={() => {
                       const ids = thread.noteIds ?? [];
                       void save({
@@ -484,12 +642,13 @@ export function StudyTutor({
           </fieldset>
         ) : null}
       </div>
-      {thread.messages.length ? (
+      {conversation.length ? (
         <div className="space-y-3" aria-label="Conversation">
-          {thread.messages.map((entry, index) => (
+          {conversation.map(({ entry, index }, position) => (
             <div
-              key={index}
-              className={`max-w-3xl space-y-2 rounded-2xl border p-4 ${entry.role === "user" ? "ms-auto w-fit bg-muted" : "bg-card"}`}
+              key={index === undefined ? `temporary-${entry.at}-${entry.role}` : index}
+              id={index === undefined ? undefined : `study-message-${index}`}
+              className={`max-w-3xl scroll-mt-32 space-y-2 rounded-2xl border p-4 ${entry.role === "user" ? "ms-auto w-fit bg-muted" : "bg-card"}`}
             >
               <p className="text-xs font-semibold text-muted-foreground">
                 {entry.role === "user" ? "You" : "Tutor"}
@@ -499,19 +658,42 @@ export function StudyTutor({
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {entry.citations?.map((citation) => (
-                  <Button
-                    variant="outline"
-                    size="sm"
+                  <StudyOriginLink
                     key={citation.index}
-                    onClick={() => locate(citation.bookId, citation.section)}
-                  >
-                    [{citation.index}] {citation.title}
-                  </Button>
+                    origin={
+                      "origin" in citation
+                        ? citation.origin
+                        : { kind: "book", bookId: citation.bookId, section: citation.section }
+                    }
+                    label={`[${citation.index}] ${citation.title}`}
+                  />
                 ))}
                 {entry.role === "assistant" ? (
-                  <Button variant="ghost" size="sm" onClick={() => saveNote(entry.text)}>
-                    Save to Notes
-                  </Button>
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        saveNote(entry.text, { kind: "tutor", threadId: thread.id, message: index })
+                      }
+                    >
+                      Save to Notes
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        makeCard(
+                          conversation[position - 1]?.entry.text ?? thread.title,
+                          entry.text,
+                          { kind: "tutor", threadId: thread.id, message: index },
+                          `tutor-card-${thread.id}-${index ?? entry.at}`,
+                        )
+                      }
+                    >
+                      Make flashcard
+                    </Button>
+                  </>
                 ) : null}
               </div>
             </div>
@@ -554,29 +736,64 @@ export function StudyTutor({
           maxLength={12000}
         />
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="submit" disabled={!input.trim() || busy}>
+          <Button type="submit" disabled={!input.trim() || workPending}>
             {busy ? "Working…" : "Send"}
           </Button>
           {busy ? (
-            <Button variant="ghost" onClick={() => controller.current?.abort()}>
+            <Button type="button" variant="ghost" onClick={() => controller.current?.abort()}>
               Stop
             </Button>
           ) : null}
-          <Button variant="outline" onClick={() => dictate(Date.now())} disabled={busy}>
-            {speaking ? "Stop recording" : "Dictate"}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => dictate(Date.now(), true)}
-            disabled={busy || speaking}
-          >
-            Speak to tutor
-          </Button>
+          {voiceState === "recording" ? (
+            <>
+              <Button type="button" variant="outline" onClick={() => voice.current?.stop?.()}>
+                Stop recording
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                aria-pressed={micMuted}
+                onClick={() => {
+                  voice.current?.mute?.(!micMuted);
+                  setMicMuted(!micMuted);
+                }}
+              >
+                {micMuted ? "Unmute microphone" : "Mute microphone"}
+              </Button>
+            </>
+          ) : null}
+          {voiceState && !busy ? (
+            <Button type="button" variant="ghost" onClick={() => voice.current?.abort.abort()}>
+              Cancel recording
+            </Button>
+          ) : null}
+          {!voiceState ? (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void dictate(false, Date.now())}
+                disabled={busy}
+              >
+                Dictate
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void dictate(true, Date.now())}
+                disabled={busy || !model}
+              >
+                {voicePractice ? "Record next turn" : "Speak to tutor"}
+              </Button>
+            </>
+          ) : null}
           <Input
             className="w-32"
             aria-label="Speech language code"
-            placeholder="Language code"
+            placeholder="Auto language"
             value={language}
+            maxLength={35}
+            disabled={workPending}
             onChange={(event) => setLanguage(event.target.value)}
           />
           <label className="flex items-center gap-1.5 text-sm">
@@ -591,8 +808,39 @@ export function StudyTutor({
             Read replies aloud
           </label>
         </div>
+        {voiceAvailable ? (
+          <label className="flex items-center gap-1.5 text-sm">
+            <input
+              type="checkbox"
+              checked={thread.keepVoiceTranscripts ?? false}
+              disabled={workPending}
+              onChange={(event) => void save({ keepVoiceTranscripts: event.target.checked })}
+            />
+            Keep new voice turns in this conversation
+          </label>
+        ) : null}
+        {temporaryTurns.length ? (
+          <p className="text-sm text-muted-foreground">
+            Temporary voice turns clear after the report or when you leave this conversation.
+          </p>
+        ) : null}
+        {voiceState ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            {voiceState === "opening"
+              ? "Opening microphone…"
+              : voiceState === "recording"
+                ? micMuted
+                  ? "Microphone muted"
+                  : "Recording on this device"
+                : "Transcribing on this device…"}
+          </p>
+        ) : voiceAvailable === false ? (
+          <p className="text-sm text-muted-foreground">
+            Local voice needs whisper-cli and a Whisper model. You can still type a message.
+          </p>
+        ) : null}
       </form>
-      {thread.messages.length ? (
+      {conversation.length || thread.report ? (
         <div className="space-y-3">
           <div className="flex flex-wrap gap-2">
             {thread.report ? (
@@ -600,79 +848,82 @@ export function StudyTutor({
                 {showReport ? "Hide report" : "Show report"}
               </Button>
             ) : null}
-            <Button variant="outline" disabled={busy} onClick={() => void report()}>
-              {thread.report ? "Regenerate report" : "Generate session report"}
+            <Button
+              variant="outline"
+              disabled={workPending || !model || !conversation.length}
+              onClick={() => void report(Date.now())}
+            >
+              {voicePractice
+                ? "Finish voice practice and generate report"
+                : thread.report
+                  ? "Regenerate report"
+                  : "Generate session report"}
             </Button>
           </div>
           {showReport && thread.report ? (
-            <div className="space-y-3 rounded-2xl border bg-card p-4">
-              <h3 className="font-semibold">Session report</h3>
-              <p dir="auto" className="whitespace-pre-wrap">
-                {thread.report.summary}
-              </p>
-              <ul className="space-y-2">
-                {thread.report.corrections.map((text, index) => (
-                  <li className="flex flex-wrap items-center gap-2" key={index}>
-                    <p className="flex-1" dir="auto">
-                      {text}
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        void putStudyRecords({
-                          id: studyId(),
-                          kind: "card",
-                          front: "What should I correct from this study session?",
-                          back: text,
-                          tags: ["Session report"],
-                          updatedAt: Date.now(),
-                          schedule: freshSchedule(),
-                        })
-                          .then(() => toast.success("Flashcard created"))
-                          .catch((error: Error) => toast.error(error.message));
-                      }}
-                    >
-                      Save flashcard
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-              <ul className="list-disc space-y-1 ps-5">
-                {thread.report.nextSteps.map((text, index) => (
-                  <li key={index} dir="auto">
-                    {text}
-                  </li>
-                ))}
-              </ul>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    saveNote(
-                      [
-                        thread.report?.summary,
-                        ...thread.report!.corrections,
-                        ...thread.report!.nextSteps,
-                      ].join("\n\n"),
-                    )
-                  }
-                >
-                  Save report to Notes
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-pressed={thread.report.helpful ?? false}
-                  onClick={() =>
-                    void save({ report: { ...thread.report!, helpful: !thread.report?.helpful } })
-                  }
-                >
-                  Helpful
-                </Button>
-              </div>
-            </div>
+            <StudySessionReport
+              report={thread.report}
+              onFeedback={(key, value) => {
+                const report = thread.report;
+                if (report)
+                  void save({
+                    report: { ...report, feedback: { ...report.feedback, [key]: value } },
+                  });
+              }}
+              onSaveCard={(front, back, key) =>
+                makeCard(
+                  front,
+                  back,
+                  { kind: "report", threadId: thread.id },
+                  `report-card-${thread.id}-${thread.report?.generatedAt ?? 0}-${key}`,
+                )
+              }
+              onSaveWord={(word, key) => {
+                void saveStudyWord(
+                  {
+                    term: word.term,
+                    language: word.language,
+                    translation: word.translation,
+                    context: word.example,
+                    note: word.definition,
+                    notebookId: thread.notebookId,
+                    origin: { kind: "report", threadId: thread.id },
+                  },
+                  `report-word-${thread.id}-${thread.report?.generatedAt ?? 0}-${key}`,
+                )
+                  .then((saved) =>
+                    toast.success("Saved to vocabulary", {
+                      action: {
+                        label: "View word",
+                        onClick: () => navigate(originHref({ kind: "word", wordId: saved.id })),
+                      },
+                    }),
+                  )
+                  .catch((error: Error) => toast.error(error.message));
+              }}
+              onSaveNote={() => {
+                const report = thread.report;
+                if (!report) return;
+                saveNote(
+                  [
+                    report.summary,
+                    ...report.corrections,
+                    ...(report.technicalFeedback ?? []).map(({ text }) => text),
+                    ...(report.languageFeedback ?? []).map(
+                      ({ original, suggestion, reason }) =>
+                        `${original} → ${suggestion}. ${reason}`,
+                    ),
+                    ...(report.vocabulary ?? []).map(({ term, definition, translation }) =>
+                      [term, definition, translation].filter(Boolean).join(" · "),
+                    ),
+                    ...report.nextSteps,
+                  ]
+                    .filter(Boolean)
+                    .join("\n\n"),
+                  { kind: "report", threadId: thread.id },
+                );
+              }}
+            />
           ) : null}
         </div>
       ) : null}

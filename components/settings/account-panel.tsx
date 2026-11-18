@@ -17,7 +17,7 @@ import { ProviderIcon } from "@/components/provider-icon";
 import { Button } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
 import { Sheet } from "@/components/panelui/sheet";
-import { manageExistingPlan, signIn, signOut, useAccount } from "@/lib/account/account";
+import { signIn, signOut, useAccount } from "@/lib/account/account";
 import {
   subscriptionConnectionsAllowed,
   useSubscriptionConnections,
@@ -181,19 +181,6 @@ export function AccountPanel() {
                   label={t("account.username")}
                   value={user.username ? `@${user.username}` : t("account.noUsername")}
                 />
-                {account?.account.plan ? (
-                  <Button
-                    className="self-start"
-                    variant="outline"
-                    onClick={() => {
-                      void manageExistingPlan().catch(() =>
-                        toast.error(t("account.billingUnavailable")),
-                      );
-                    }}
-                  >
-                    {t("account.managePlan")}
-                  </Button>
-                ) : null}
               </div>
             ) : (
               <div className="flex flex-col gap-3 rounded-2xl bg-muted/50 p-4">

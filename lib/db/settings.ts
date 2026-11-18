@@ -8,6 +8,7 @@ import {
   type ProviderId,
 } from "@/lib/ai/catalog";
 import { subscriptionRoute } from "@/lib/ai/cliproxyapi-oauth";
+import type { StudyThread } from "@/lib/study/records";
 import { useStoreQuery } from "./live";
 import { store } from "./store";
 
@@ -42,6 +43,7 @@ export interface AppSettings {
   model: ModelRef | null;
   /** Models starred in the model picker, as `provider:modelId`. */
   favoriteModels: string[];
+  study?: Pick<StudyThread, "corrections" | "keepVoiceTranscripts">;
 }
 
 const SETTINGS_KEY = "app";
@@ -78,6 +80,7 @@ function withDefaults(saved: Partial<AppSettings> | undefined): AppSettings {
   base.providers.cliproxyapi.apiKey = "";
   base.model = saved.model ?? null;
   base.favoriteModels = saved.favoriteModels ?? [];
+  base.study = saved.study;
   return base;
 }
 

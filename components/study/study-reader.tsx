@@ -1,20 +1,27 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/panelui/button";
+import { StudyEpubChapter, type StudyEpubTheme } from "./study-epub-chapter";
+import { StudyPdfPage } from "./study-pdf-page";
+import { renderedSelection } from "./study-rendered-text";
 import { Input } from "@/components/panelui/input";
 import { loadBlob } from "@/lib/db/blobs";
 import {
   freshSchedule,
   putStudyRecords,
   recordStudyActivity,
+  saveStudyCard,
+  saveStudyNote,
   saveStudyText,
   studyId,
   updateStudyBook,
 } from "@/lib/db/study";
 import { routes } from "@/lib/routes";
 import { askStudyModel } from "@/lib/study/client";
-import type { StudyBook, StudyRecordOf } from "@/lib/study/records";
+import { locateStudyQuote } from "@/lib/study/locators";
+import { originHref, studyHref, studyNotesHref } from "@/lib/study/links";
+import type { StudyBook, StudyOrigin, StudyRecordOf } from "@/lib/study/records";
 import type { StudyAction } from "@/lib/study/ai";
 
 const colors = {
@@ -24,10 +31,43 @@ const colors = {
   pink: "bg-pink-200 text-pink-950 dark:bg-pink-900 dark:text-pink-100",
 };
 
-function highlighted(text: string, highlights: StudyRecordOf<"highlight">[]) {
+type Selection = { text: string; offset: number };
+type AssistResult = {
+  action: "explain" | "translate";
+  text: string;
+  selection: Selection;
+  language: string;
+};
+
+function highlighted(
+  text: string,
+  highlights: StudyRecordOf<"highlight">[],
+  focus?: { offset: number; length: number },
+) {
   const nodes: ReactNode[] = [];
   let at = 0;
-  for (const highlight of highlights.toSorted((a, b) => a.offset - b.offset)) {
+  const ranges = highlights
+    .map((highlight) => ({
+      ...highlight,
+      offset: locateStudyQuote(text, highlight.quote, highlight.offset),
+    }))
+    .filter(
+      (highlight) =>
+        highlight.offset >= 0 &&
+        (!focus ||
+          highlight.offset >= focus.offset + focus.length ||
+          highlight.offset + highlight.quote.length <= focus.offset),
+    );
+  for (const highlight of ranges.toSorted((a, b) => a.offset - b.offset)) {
+    if (focus && at <= focus.offset && highlight.offset >= focus.offset + focus.length) {
+      nodes.push(
+        text.slice(at, focus.offset),
+        <mark key="focused-passage" id="focused-passage" className={colors.blue}>
+          {text.slice(focus.offset, focus.offset + focus.length)}
+        </mark>,
+      );
+      at = focus.offset + focus.length;
+    }
     const end = highlight.offset + highlight.quote.length;
     if (highlight.offset < at || text.slice(highlight.offset, end) !== highlight.quote) continue;
     nodes.push(text.slice(at, highlight.offset));
@@ -38,62 +78,24 @@ function highlighted(text: string, highlights: StudyRecordOf<"highlight">[]) {
     );
     at = end;
   }
+  if (focus && at <= focus.offset) {
+    nodes.push(
+      text.slice(at, focus.offset),
+      <mark key="focused-passage" id="focused-passage" className={colors.blue}>
+        {text.slice(focus.offset, focus.offset + focus.length)}
+      </mark>,
+    );
+    at = focus.offset + focus.length;
+  }
   nodes.push(text.slice(at));
   return nodes;
-}
-
-function PdfPage({ fileId, page }: { fileId: string; page: number }) {
-  const canvas = useRef<HTMLCanvasElement>(null);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    let live = true;
-    let destroy: (() => Promise<void>) | undefined;
-    void (async () => {
-      const blob = await loadBlob(fileId);
-      if (!blob || !live) return;
-      const { getDocumentProxy } = await import("unpdf");
-      if (!live) return;
-      const pdf = await getDocumentProxy(new Uint8Array(await blob.arrayBuffer()));
-      destroy = () => pdf.loadingTask.destroy();
-      if (!live) {
-        await destroy();
-        return;
-      }
-      const current = await pdf.getPage(page + 1);
-      const element = canvas.current;
-      if (!element || !live) return;
-      const viewport = current.getViewport({ scale: 1.3 });
-      element.width = Math.ceil(viewport.width);
-      element.height = Math.ceil(viewport.height);
-      await current.render({ canvas: element, viewport }).promise;
-    })().catch(() => {
-      if (live) setFailed(true);
-    });
-    return () => {
-      live = false;
-      void destroy?.().catch(() => {});
-    };
-  }, [fileId, page]);
-  if (failed)
-    return (
-      <p className="text-sm text-muted-foreground">
-        Could not render the original page. The extracted text is below.
-      </p>
-    );
-  return (
-    <canvas
-      ref={canvas}
-      className="mx-auto h-auto max-w-full rounded-lg border"
-      role="img"
-      aria-label={`Original PDF page ${page + 1}`}
-    />
-  );
 }
 
 export function StudyReader({
   book,
   requestedPage,
   focusedHighlight,
+  focusedRange,
   highlights,
   openPage,
   startChat,
@@ -102,34 +104,85 @@ export function StudyReader({
   book: StudyBook;
   requestedPage?: number;
   focusedHighlight?: string;
+  focusedRange?: { offset: number; length: number };
   highlights: StudyRecordOf<"highlight">[];
   openPage: (section: number) => void;
-  startChat: (scope: "passage" | "chapter" | "book", section: number, quote?: string) => void;
+  startChat: (
+    scope: "passage" | "chapter" | "book",
+    section: number,
+    selection?: Selection,
+  ) => void;
   back: () => void;
 }) {
   const index = Math.min(Math.max(0, requestedPage ?? book.section), book.sections.length - 1);
   const section = book.sections[index];
+  const navigate = useNavigate();
+  const focus =
+    focusedRange &&
+    focusedRange.length > 0 &&
+    focusedRange.offset + focusedRange.length <= section.text.length
+      ? focusedRange
+      : undefined;
+  const focusStart = focus?.offset;
+  const focusLength = focus?.length;
   const textBody = useRef<HTMLElement>(null);
-  const [selection, setSelection] = useState<{ text: string; offset: number } | null>(null);
+  const [selection, setSelection] = useState<Selection | null>(null);
+  const [cardFront, setCardFront] = useState<string | null>(null);
   const [language, setLanguage] = useState("");
   const [color, setColor] = useState<keyof typeof colors>("yellow");
   const [search, setSearch] = useState("");
   const [edit, setEdit] = useState<string | null>(null);
   const [font, setFont] = useState(18);
+  const [zoom, setZoom] = useState(100);
+  const [epubTheme, setEpubTheme] = useState<StudyEpubTheme>("system");
   const [viewPdf, setViewPdf] = useState(false);
-  const [result, setResult] = useState("");
+  const [viewEpub, setViewEpub] = useState(false);
+  const [result, setResult] = useState<AssistResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [fileUrl, setFileUrl] = useState<string>();
+  const pendingAssist = useRef<AbortController | null>(null);
   const started = useRef(0);
   const latestInteraction = useRef(0);
+  const pageHighlights = highlights.filter((item) => item.section === index);
+  const bookmarkPlaces = book.bookmarkPlaces ?? [];
 
   useEffect(() => {
     void updateStudyBook(book.id, { section: index });
     started.current = Date.now();
     latestInteraction.current = started.current;
+    const checkpoint = () => {
+      const now = Date.now();
+      const end = Math.min(now, latestInteraction.current + 60_000);
+      const seconds = (end - started.current) / 1000;
+      started.current = now;
+      if (seconds >= 1) {
+        void recordStudyActivity("reading", seconds, book.notebookId, {
+          kind: "book",
+          bookId: book.id,
+          section: index,
+        });
+      }
+    };
+    function visibility() {
+      if (document.visibilityState === "hidden") {
+        checkpoint();
+      } else {
+        started.current = Date.now();
+        latestInteraction.current = started.current;
+      }
+    }
+    function whileReading() {
+      if (document.visibilityState === "visible") checkpoint();
+    }
+    const heartbeat = window.setInterval(whileReading, 30_000);
+    document.addEventListener("visibilitychange", visibility);
+    window.addEventListener("pagehide", whileReading);
     return () => {
-      const seconds = Math.min(Date.now(), latestInteraction.current + 60_000) - started.current;
-      if (seconds >= 1000) void recordStudyActivity("reading", seconds / 1000, book.notebookId);
+      pendingAssist.current?.abort();
+      window.clearInterval(heartbeat);
+      document.removeEventListener("visibilitychange", visibility);
+      window.removeEventListener("pagehide", whileReading);
+      whileReading();
     };
   }, [book.id, book.notebookId, index]);
 
@@ -149,14 +202,15 @@ export function StudyReader({
   }, [book.fileId]);
 
   useEffect(() => {
-    if (focusedHighlight)
-      document.getElementById(focusedHighlight)?.scrollIntoView({ block: "center" });
-  }, [focusedHighlight, index, highlights.length]);
+    const target = focusedHighlight ?? (focusStart === undefined ? undefined : "focused-passage");
+    if (target) document.getElementById(target)?.scrollIntoView({ block: "center" });
+  }, [focusedHighlight, index, highlights.length, focusStart, focusLength]);
 
   function go(page: number) {
     setSelection(null);
+    setCardFront(null);
     setEdit(null);
-    setResult("");
+    setResult(null);
     setSearch("");
     openPage(page);
   }
@@ -172,41 +226,105 @@ export function StudyReader({
     prefix.setEnd(range.startContainer, range.startOffset);
     const raw = range.toString();
     if (!raw.trim()) return;
+    setCardFront(null);
+    setResult(null);
+    pendingAssist.current?.abort();
     setSelection({
       text: raw.trim().slice(0, 3000),
       offset: prefix.toString().length + raw.length - raw.trimStart().length,
     });
   }
 
-  async function assist(action: StudyAction) {
-    setBusy(true);
-    setResult("");
-    const quote = selection?.text ?? section.text.slice(0, 12_000);
-    try {
-      const response = await askStudyModel(
-        action,
-        action === "translate" ? `Language: ${language}\nText: ${quote}` : quote,
-      );
-      if (action === "cards") {
-        await putStudyRecords(
-          ...(response.cards ?? []).map(({ front, back }): StudyRecordOf<"card"> => ({
-            id: studyId(),
-            kind: "card",
-            front,
-            back,
-            tags: [book.title],
-            notebookId: book.notebookId,
-            updatedAt: Date.now(),
-            schedule: freshSchedule(),
-          })),
-        );
-        toast.success(`${response.cards?.length ?? 0} cards added`);
-      } else setResult(response.text);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
+  function captureRendered(root: HTMLElement) {
+    const selected = renderedSelection(root, section.text);
+    if (selected === undefined) return;
+    if (selected === null) {
+      toast.error("Select this passage in the extracted text below to use it in Study.");
+      return;
     }
+    latestInteraction.current = Date.now();
+    setCardFront(null);
+    setResult(null);
+    pendingAssist.current?.abort();
+    setSelection(selected);
+  }
+
+  function sourceOf(selected?: Selection | null): StudyOrigin {
+    return selected
+      ? {
+          kind: "book",
+          bookId: book.id,
+          section: index,
+          offset: selected.offset,
+          length: selected.text.length,
+        }
+      : { kind: "book", bookId: book.id, section: index };
+  }
+
+  async function assist(action: StudyAction) {
+    const selected = selection;
+    if (action !== "cards" && !selected) return;
+    const controller = new AbortController();
+    pendingAssist.current?.abort();
+    pendingAssist.current = controller;
+    setBusy(true);
+    setResult(null);
+    const quote = selected?.text ?? section.text.slice(0, 12_000);
+    try {
+      const response = await askStudyModel({
+        action,
+        input: action === "translate" ? `Language: ${language}\nText: ${quote}` : quote,
+        signal: controller.signal,
+      });
+      if (controller.signal.aborted) return;
+      if (action === "cards") {
+        await Promise.all(
+          (response.cards ?? []).map(({ front, back }) =>
+            saveStudyCard({
+              front,
+              back,
+              tags: [book.title],
+              notebookId: book.notebookId,
+              origin: sourceOf(selected),
+            }),
+          ),
+        );
+        toast.success(`${response.cards?.length ?? 0} cards added`, {
+          action: {
+            label: "View flashcards",
+            onClick: () => navigate(studyHref("cards", { book: book.id })),
+          },
+        });
+      } else if (selected && (action === "translate" || action === "explain")) {
+        setResult({ action, text: response.text, selection: selected, language });
+      }
+    } catch (error) {
+      if (!controller.signal.aborted)
+        toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      if (pendingAssist.current === controller) {
+        pendingAssist.current = null;
+        setBusy(false);
+      }
+    }
+  }
+
+  function makeNote(selected: Selection) {
+    void saveStudyNote({
+      title: `${book.title} · ${section.title}`,
+      body: selected.text,
+      origin: sourceOf(selected),
+      notebookId: book.notebookId,
+    })
+      .then((note) =>
+        toast.success("Saved to Notes", {
+          action: {
+            label: "Open note",
+            onClick: () => navigate(originHref({ kind: "note", noteId: note.id })),
+          },
+        }),
+      )
+      .catch((error: Error) => toast.error(error.message));
   }
 
   return (
@@ -227,6 +345,24 @@ export function StudyReader({
           >
             Open notebook
           </Link>
+          <Link
+            className="rounded-lg border px-3 py-2 text-sm hover:bg-accent"
+            to={studyNotesHref(book.notebookId)}
+          >
+            Notes
+          </Link>
+          <Link
+            className="rounded-lg border px-3 py-2 text-sm hover:bg-accent"
+            to={studyHref("cards", { book: book.id })}
+          >
+            Flashcards
+          </Link>
+          <Link
+            className="rounded-lg border px-3 py-2 text-sm hover:bg-accent"
+            to={studyHref("highlights", { book: book.id })}
+          >
+            Highlights
+          </Link>
           {fileUrl ? (
             <a
               href={fileUrl}
@@ -239,6 +375,11 @@ export function StudyReader({
           {book.format === "pdf" && book.fileId ? (
             <Button variant="outline" onClick={() => setViewPdf(!viewPdf)}>
               {viewPdf ? "Hide original page" : "Show original page"}
+            </Button>
+          ) : null}
+          {book.format === "epub" && book.fileId ? (
+            <Button variant="outline" onClick={() => setViewEpub(!viewEpub)}>
+              {viewEpub ? "Hide book layout" : "Show book layout"}
             </Button>
           ) : null}
         </div>
@@ -292,7 +433,7 @@ export function StudyReader({
             />
           </label>
         </div>
-        {book.bookmarks.length ? (
+        {book.bookmarks.length || bookmarkPlaces.length ? (
           <div className="flex flex-wrap gap-2 text-sm">
             <span>Bookmarks</span>
             {book.bookmarks.map((at) => (
@@ -305,6 +446,36 @@ export function StudyReader({
                 {book.sections[at]?.title ?? at + 1}
               </button>
             ))}
+            {bookmarkPlaces.map(({ id, section, quote, offset }) => {
+              const at = locateStudyQuote(book.sections[section]?.text ?? "", quote, offset);
+              return (
+                <div key={id} className="flex items-center gap-1 rounded-md bg-muted ps-2">
+                  <Link
+                    className="max-w-56 truncate underline"
+                    to={originHref({
+                      kind: "book",
+                      bookId: book.id,
+                      section,
+                      ...(at === -1 ? {} : { offset: at, length: quote.length }),
+                    })}
+                  >
+                    {quote}
+                  </Link>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`Remove bookmark for ${quote}`}
+                    onClick={() =>
+                      void updateStudyBook(book.id, {
+                        bookmarkPlaces: bookmarkPlaces.filter((place) => place.id !== id),
+                      })
+                    }
+                  >
+                    Remove
+                  </Button>
+                </div>
+              );
+            })}
           </div>
         ) : null}
         <Input
@@ -381,7 +552,60 @@ export function StudyReader({
         )
       ) : null}
       <div className="space-y-4 rounded-2xl border bg-card p-5 sm:p-8">
-        {viewPdf && book.fileId ? <PdfPage key={index} fileId={book.fileId} page={index} /> : null}
+        {viewPdf && book.fileId ? (
+          <>
+            <label className="flex items-center gap-2 text-sm">
+              PDF zoom
+              <input
+                type="range"
+                min={75}
+                max={200}
+                step={25}
+                value={zoom}
+                onChange={(event) => setZoom(Number(event.target.value))}
+              />
+              <span>{zoom}%</span>
+            </label>
+            <StudyPdfPage
+              key={index}
+              fileId={book.fileId}
+              page={index}
+              sectionText={section.text}
+              marks={pageHighlights}
+              zoom={zoom}
+              onSelect={captureRendered}
+            />
+          </>
+        ) : null}
+        {viewEpub && book.fileId ? (
+          <>
+            <label className="flex items-center gap-2 text-sm">
+              Reading theme
+              <select
+                value={epubTheme}
+                className="rounded-lg border bg-background p-2"
+                onChange={(event) => setEpubTheme(event.target.value as StudyEpubTheme)}
+              >
+                <option value="system">System</option>
+                <option value="light">Light</option>
+                <option value="sepia">Sepia</option>
+                <option value="dark">Dark</option>
+              </select>
+            </label>
+            <StudyEpubChapter
+              key={index}
+              fileId={book.fileId}
+              section={section}
+              index={index}
+              sections={book.sections}
+              marks={pageHighlights}
+              font={font}
+              theme={epubTheme}
+              go={go}
+              onSelect={captureRendered}
+            />
+          </>
+        ) : null}
         <article
           ref={textBody}
           tabIndex={0}
@@ -396,10 +620,7 @@ export function StudyReader({
           }}
         >
           {section.text
-            ? highlighted(
-                section.text,
-                highlights.filter((item) => item.section === index),
-              )
+            ? highlighted(section.text, pageHighlights, focus)
             : "This page has no selectable text."}
         </article>
       </div>
@@ -447,6 +668,37 @@ export function StudyReader({
             <Button
               size="sm"
               variant="outline"
+              onClick={() => {
+                const exists = bookmarkPlaces.some(
+                  (place) =>
+                    place.section === index &&
+                    place.offset === selection.offset &&
+                    place.quote === selection.text,
+                );
+                if (exists) {
+                  toast.info("This passage is already bookmarked.");
+                  return;
+                }
+                void updateStudyBook(book.id, {
+                  bookmarkPlaces: [
+                    ...bookmarkPlaces,
+                    {
+                      id: studyId(),
+                      section: index,
+                      offset: selection.offset,
+                      quote: selection.text,
+                    },
+                  ],
+                })
+                  .then(() => toast.success("Passage bookmarked"))
+                  .catch((error: Error) => toast.error(error.message));
+              }}
+            >
+              Bookmark selection
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
               disabled={busy}
               onClick={() => void assist("explain")}
             >
@@ -455,9 +707,15 @@ export function StudyReader({
             <Button
               size="sm"
               variant="outline"
-              onClick={() => startChat("passage", index, selection.text)}
+              onClick={() => startChat("passage", index, selection)}
             >
               Ask about selection
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => makeNote(selection)}>
+              Save to Notes
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setCardFront("")}>
+              Make flashcard
             </Button>
             <Input
               className="w-32"
@@ -478,30 +736,82 @@ export function StudyReader({
               size="sm"
               variant="ghost"
               onClick={() => {
+                const translation =
+                  result?.action === "translate" && result.selection === selection ? result : null;
+                const id = studyId();
                 void putStudyRecords({
-                  id: studyId(),
+                  id,
                   kind: "word",
+                  origin: sourceOf(selection),
                   term: selection.text,
-                  translation: result,
+                  translation: translation?.text ?? "",
                   context: section.text.slice(
                     Math.max(0, selection.offset - 100),
                     selection.offset + selection.text.length + 100,
                   ),
-                  language,
+                  language: translation?.language ?? language,
                   note: "",
+                  notebookId: book.notebookId,
                   bookId: book.id,
                   updatedAt: Date.now(),
                 })
-                  .then(() => toast.success("Saved to vocabulary"))
+                  .then(() =>
+                    toast.success("Saved to vocabulary", {
+                      action: {
+                        label: "View word",
+                        onClick: () => navigate(originHref({ kind: "word", wordId: id })),
+                      },
+                    }),
+                  )
                   .catch((error: Error) => toast.error(error.message));
               }}
             >
               Save vocabulary
             </Button>
           </div>
-          {result ? (
+          {cardFront !== null ? (
+            <form
+              className="flex flex-wrap gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!cardFront.trim()) return;
+                void saveStudyCard({
+                  front: cardFront.trim(),
+                  back: selection.text,
+                  tags: [book.title],
+                  notebookId: book.notebookId,
+                  origin: sourceOf(selection),
+                })
+                  .then(() => {
+                    setCardFront(null);
+                    toast.success("Flashcard created", {
+                      action: {
+                        label: "View flashcards",
+                        onClick: () => navigate(studyHref("cards", { book: book.id })),
+                      },
+                    });
+                  })
+                  .catch((error: Error) => toast.error(error.message));
+              }}
+            >
+              <Input
+                value={cardFront}
+                onChange={(event) => setCardFront(event.target.value)}
+                aria-label="Front of flashcard"
+                placeholder="Question to review"
+                className="max-w-sm"
+              />
+              <Button type="submit" size="sm" disabled={!cardFront.trim()}>
+                Save flashcard
+              </Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setCardFront(null)}>
+                Cancel
+              </Button>
+            </form>
+          ) : null}
+          {result && result.selection === selection ? (
             <p dir="auto" className="text-sm whitespace-pre-wrap">
-              {result}
+              {result.text}
             </p>
           ) : null}
         </div>
