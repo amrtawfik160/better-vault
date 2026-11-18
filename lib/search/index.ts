@@ -1,7 +1,9 @@
 import MiniSearch, { type SearchResult } from "minisearch";
 import { store } from "@/lib/db/store";
 import { listVaults } from "@/lib/db/vaults";
-import type { Folder, Notebook, Source, StudioOutput, Vault } from "@/lib/db/types";
+import type { Folder, Note, Notebook, Source, StudioOutput, Vault } from "@/lib/db/types";
+import { noteEditorText, type NoteMatch } from "@/lib/notes/search-match";
+import { readFrontmatter } from "@/lib/notes/syntax";
 import { originHref } from "@/lib/study/links";
 import { studyTextRevision } from "@/lib/study/text-edits";
 import { studyTextWindows } from "@/lib/study/text-windows";
@@ -10,12 +12,12 @@ import { studySearchCatalogue, type StudySearchLink } from "./study";
 /**
  * One search index over everything in the app: vaults, folders, notebooks,
  * sources (by title), every passage of every source (the full text, PDFs
- * included), Studio outputs, and saved Study material. Linked Study documents
+ * included), notes, Studio outputs, and saved Study material. Linked Study documents
  * use their own page and chapter boundaries. The index lives in memory
  * and follows changes while the command palette is open.
  */
 
-export type HitKind = "vault" | "folder" | "notebook" | "source" | "passage" | "study-passage" | "output" | "study";
+export type HitKind = "vault" | "folder" | "notebook" | "source" | "passage" | "study-passage" | "output" | "note" | "study";
 
 type StudyAnchor = { bookId: string; section: number; offset: number; revision: number };
 
@@ -24,6 +26,9 @@ interface Doc {
   kind: HitKind;
   title: string;
   text: string;
+  keywords?: string;
+  noteId?: string;
+  textOffset?: number;
   notebookId?: string;
   sourceId?: string;
   chunkId?: string;
@@ -34,12 +39,13 @@ interface Doc {
   studyAnchor?: StudyAnchor;
 }
 
-export interface Hit extends Omit<Doc, "text"> {
+export interface Hit extends Omit<Doc, "text" | "keywords" | "textOffset"> {
   score: number;
   /** Around the first match in the indexed body. */
   snippet?: string;
   /** The words that matched, to mark in the snippet. */
   terms: string[];
+  noteMatch?: NoteMatch;
 }
 
 type CatalogueSource = Pick<Source, "id" | "notebookId" | "title" | "studyRevision">;
@@ -48,6 +54,7 @@ export interface Catalogue {
   vaults: Vault[];
   folders: Folder[];
   notebooks: Notebook[];
+  notes: Note[];
   sources: CatalogueSource[];
   outputs: StudioOutput[];
   study: ReturnType<typeof studySearchCatalogue>;
@@ -56,11 +63,13 @@ export interface Catalogue {
 type StudyDocument = Catalogue["study"]["documents"][number];
 
 const options = {
-  fields: ["title", "text"],
+  fields: ["title", "text", "keywords"],
   storeFields: [
     "kind",
     "title",
     "text",
+    "textOffset",
+    "noteId",
     "notebookId",
     "sourceId",
     "chunkId",
@@ -108,10 +117,31 @@ function snippetOf(text: string, terms: string[]): string {
 
 const escapePattern = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-function studyMatch(text: string, query: string, terms: string[]) {
+function textMatch(text: string, query: string, terms: string[] = []) {
   const phrase = query.trim().split(/\s+/u).map(escapePattern).join("\\s+");
-  return new RegExp(phrase, "iu").exec(text) ??
-    new RegExp(terms.toSorted((a, b) => b.length - a.length).map(escapePattern).join("|"), "iu").exec(text);
+  const exact = new RegExp(phrase, "iu").exec(text);
+  if (exact || !terms.length) return exact;
+  return new RegExp(terms.toSorted((a, b) => b.length - a.length).map(escapePattern).join("|"), "iu").exec(text);
+}
+
+function matchedText(result: SearchResult & Doc, query: string) {
+  const terms = result.terms.filter((term) => result.match[term]?.includes("text"));
+  return terms.length ? textMatch(result.text, query, terms) : null;
+}
+
+function noteDocument(note: Note): Doc {
+  const { content, length } = readFrontmatter(noteEditorText(note.body));
+  return {
+    id: `note:${note.id}`,
+    kind: "note",
+    noteId: note.id,
+    title: note.title,
+    text: content,
+    textOffset: length,
+    keywords: [...note.tags, ...note.aliases].join(" "),
+    vaultId: note.vaultId,
+    notebookId: note.notebookId ?? undefined,
+  };
 }
 
 function sameStudyDocument(left: StudyDocument, right: StudyDocument) {
@@ -208,6 +238,7 @@ class SearchIndex {
         notebookId: notebook.id,
         vaultId: notebook.vaultId,
       })),
+      ...catalogue.notes.map(noteDocument),
       ...catalogue.sources.map((source) => ({
         id: `source:${source.id}`,
         kind: "source" as const,
@@ -239,6 +270,8 @@ class SearchIndex {
       return (
         previous?.title !== doc.title ||
         previous.text !== doc.text ||
+        previous.textOffset !== doc.textOffset ||
+        previous.keywords !== doc.keywords ||
         previous.vaultId !== doc.vaultId ||
         previous.notebookId !== doc.notebookId ||
         previous.study?.context !== doc.study?.context
@@ -306,21 +339,19 @@ class SearchIndex {
     for (const result of results) {
       const count = taken.get(result.kind) ?? 0;
       if (count >= limit) continue;
-      const { text, ...doc } = result;
+      const { text, textOffset, ...doc } = result;
       if (doc.studyAnchor) {
         const { bookId, section, offset, revision } = doc.studyAnchor;
         const key = JSON.stringify([bookId, section]);
         if (studySections.has(key)) continue;
-        const terms = result.terms.filter((term) => result.match[term]?.includes("text"));
-        if (!terms.length) continue;
-        const match = studyMatch(text, query, terms);
+        const match = matchedText(result, query);
         if (!match) continue;
         studySections.add(key);
         taken.set(result.kind, count + 1);
         hits.push({
           ...doc,
           score: result.score,
-          terms: [...new Set([match[0], ...terms])],
+          terms: [...new Set([match[0], ...result.terms])],
           snippet: snippetAt(text, match.index),
           study: {
             type: "passage",
@@ -330,6 +361,17 @@ class SearchIndex {
         continue;
       }
       taken.set(result.kind, count + 1);
+      if (doc.noteId) {
+        const match = textMatch(doc.title, query) ? null : matchedText(result, query);
+        hits.push({
+          ...doc,
+          id: result.id as string,
+          snippet: match ? snippetAt(text, match.index) : undefined,
+          terms: match ? [...new Set([match[0], ...result.terms])] : result.terms,
+          noteMatch: match ? { offset: (textOffset ?? 0) + match.index, quote: match[0] } : undefined,
+        });
+        continue;
+      }
       hits.push({
         ...doc,
         id: result.id as string,
@@ -375,6 +417,7 @@ export async function readCatalogue(): Promise<Catalogue> {
     vaults,
     folders,
     notebooks,
+    notes,
     sources: sources.map(({ id, notebookId, title, studyRevision }) => ({
       id,
       notebookId,

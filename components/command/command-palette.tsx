@@ -15,6 +15,7 @@ import {
   InformationCircleIcon,
   LanguageSkillIcon,
   Moon02Icon,
+  Note01Icon,
   Notebook01Icon,
   PaintBoardIcon,
   QuoteDownIcon,
@@ -37,6 +38,7 @@ import { notebookIcon } from "@/lib/notebooks/icons";
 import { shortcutKeys } from "@/lib/platform";
 import { routes } from "@/lib/routes";
 import { readCatalogue, searchIndex, type Catalogue, type Hit } from "@/lib/search/index";
+import { originHref } from "@/lib/study/links";
 
 interface Action {
   id: string;
@@ -77,12 +79,13 @@ function Marked({ text, terms }: { text: string; terms: string[] }) {
 
 /**
  * The command palette (⌘K, or Ctrl K on Windows and Linux): search every
- * notebook, source, Studio output, and saved Study item, and run
+ * notebook, note, source, Studio output, and saved Study item, and run
  * actions or open a settings page. Mounted once, around every page.
  */
 export function CommandPalette() {
   const { t } = useTranslation();
   const { t: tHome } = useTranslation("home");
+  const { t: tNotes } = useTranslation("notes");
   const { t: tSettings } = useTranslation("settings");
   const navigate = useNavigate();
   const inNotebook = useMatch(routes.notebook(":id"));
@@ -144,6 +147,12 @@ export function CommandPalette() {
           "pdf",
         ],
         run: () => go(routes.study),
+      },
+      {
+        id: "notes",
+        label: tNotes("title"),
+        icon: Note01Icon,
+        run: () => go(`${routes.home}?view=notes`),
       },
       {
         id: "calendar",
@@ -220,7 +229,7 @@ export function CommandPalette() {
     return list;
     // `go` and `setTheme` are stable enough; the list follows the page and language.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notebookId, t, tHome, tSettings]);
+  }, [notebookId, t, tHome, tNotes, tSettings]);
 
   const settingsActions: Action[] = [
     {
@@ -284,6 +293,14 @@ export function CommandPalette() {
         );
       case "output":
         return go(`${routes.notebook(hit.notebookId!)}?output=${hit.outputId}`);
+      case "note":
+        if (hit.noteId) {
+          setCurrentVault(hit.vaultId ?? DEFAULT_VAULT);
+          navigate(originHref({ kind: "note", noteId: hit.noteId }), {
+            state: hit.noteMatch ? { noteMatch: hit.noteMatch } : undefined,
+          });
+        }
+        return;
       case "study-passage":
       case "study":
         if (hit.study) return go(hit.study.href);
@@ -312,6 +329,7 @@ export function CommandPalette() {
 
   const groups: { kind: Hit["kind"]; heading: string }[] = [
     { kind: "notebook", heading: t("command.groups.notebooks") },
+    { kind: "note", heading: tNotes("title") },
     { kind: "source", heading: t("command.groups.sources") },
     { kind: "study", heading: tHome("vaults.study") },
     { kind: "study-passage", heading: t("command.groups.studyPassages") },
@@ -351,6 +369,24 @@ export function CommandPalette() {
       </Command.Item>
     );
   };
+
+  const renderNoteHit = (hit: Hit) => (
+    <Command.Item
+      key={hit.id}
+      value={hit.id}
+      icon={<Icon icon={Note01Icon} size={18} />}
+      subtitle={
+        hit.snippet
+          ? <Marked text={hit.snippet} terms={hit.terms} />
+          : hit.notebookId && notebookTitle.get(hit.notebookId)
+      }
+      kind={vaultName(hit.vaultId ?? DEFAULT_VAULT)}
+      textValue={hit.title}
+      onSelect={() => openHit(hit)}
+    >
+      <Marked text={hit.title} terms={hit.terms} />
+    </Command.Item>
+  );
 
   const renderAction = (action: Action) => (
     <Command.Item
@@ -394,7 +430,9 @@ export function CommandPalette() {
                 return (
                   <Command.Group key={kind} heading={heading}>
                     {items.map((hit) =>
-                      hit.study ? (
+                      hit.kind === "note" ? (
+                        renderNoteHit(hit)
+                      ) : hit.study ? (
                         renderStudyHit(hit, hit.study)
                       ) : (
                         <Command.Item

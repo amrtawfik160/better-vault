@@ -17,6 +17,7 @@ import {
 } from "@codemirror/view";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import type { NoteLink } from "@/lib/db/types";
+import { locateNoteMatch, type NoteMatch } from "@/lib/notes/search-match";
 import { linkCompletion, tagCompletion, type CompletionWorld } from "./completion";
 import { notesKeymap } from "./keymap";
 import { livePreview } from "./live-preview";
@@ -26,6 +27,7 @@ export interface NoteEditorHandle {
   focus: () => void;
   /** Puts the cursor at a character offset and scrolls it into view. */
   reveal: (offset: number) => void;
+  revealMatch: (match: NoteMatch) => void;
 }
 
 interface NoteEditorProps {
@@ -63,6 +65,17 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
       if (!current) return;
       const at = Math.min(offset, current.state.doc.length);
       current.dispatch({ selection: { anchor: at }, scrollIntoView: true });
+      current.focus();
+    },
+    revealMatch: (match) => {
+      const current = view.current;
+      if (!current) return;
+      const from = locateNoteMatch(current.state.doc.toString(), match);
+      if (from === undefined) return;
+      current.dispatch({
+        selection: { anchor: from, head: from + match.quote.length },
+        effects: EditorView.scrollIntoView(from, { y: "center" }),
+      });
       current.focus();
     },
   }));

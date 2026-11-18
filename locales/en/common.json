@@ -59,7 +59,7 @@
   },
   "command": {
     "label": "Command menu",
-    "placeholder": "Search notebooks, sources, Study, and settings…",
+    "placeholder": "Search notebooks, notes, sources, Study, and settings…",
     "lead": "to open anywhere",
     "open": "Open",
     "empty": "Nothing matches “{{query}}”.",

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { deleteAllData } from "@/lib/db/backup";
 import { createDexieBackend } from "@/lib/db/dexie-backend";
 import { createNotebook } from "@/lib/db/notebooks";
+import { createNote, deleteNote, renameNote, saveNoteBody, updateNote } from "@/lib/db/notes";
 import { addSource, deleteSource } from "@/lib/db/sources";
 import { setStoreForTests } from "@/lib/db/store";
 import {
@@ -12,7 +13,7 @@ import {
   removeStudyRecord,
   saveStudyText,
 } from "@/lib/db/study";
-import { createVault } from "@/lib/db/vaults";
+import { createVault, DEFAULT_VAULT } from "@/lib/db/vaults";
 import { originHref } from "@/lib/study/links";
 import type { StudyOrigin, StudyRecordOf } from "@/lib/study/records";
 import { readCatalogue, searchIndex } from "./index";
@@ -181,5 +182,42 @@ describe("search index", () => {
     await deleteSource(book.sourceId);
     await searchIndex.sync(await readCatalogue());
     expect(searchIndex.search("overlapping majorites").filter(({ kind }) => kind === "study-passage")).toHaveLength(2);
+  });
+
+  it("finds notes by title, tags, aliases, and text and follows note changes", async () => {
+    const vaultId = await createVault({ name: "Algorithms" });
+    const quote = "partial synchrony";
+    const body = `---\r\ntags: [consensus]\r\naliases: [Network invariants]\r\n---\r\n🧪 Timing assumptions include ${quote}.`;
+    const note = await createNote({ title: "Distributed timing", body, vaultId });
+    const noteHit = (query: string) => searchIndex.search(query).find(({ kind }) => kind === "note");
+    await searchIndex.sync(await readCatalogue());
+
+    expect(noteHit("distributed timing")).toMatchObject({ noteId: note.id, vaultId });
+    expect(noteHit("distributed timing")?.noteMatch).toBeUndefined();
+    for (const query of ["#consensus", "network invariants"]) {
+      expect(noteHit(query)?.noteId).toBe(note.id);
+      expect(noteHit(query)?.noteMatch).toBeUndefined();
+    }
+    expect(noteHit("partial synchr")).toMatchObject({
+      noteId: note.id,
+      vaultId,
+      snippet: `🧪 Timing assumptions include ${quote}.`,
+      noteMatch: { offset: body.replaceAll("\r\n", "\n").indexOf(quote), quote: "partial synchr" },
+    });
+    await saveNoteBody(note.id, "Bounded message delay is an assumption.");
+    await renameNote(note.id, "Delivery guarantees");
+    await updateNote(note.id, { vaultId: DEFAULT_VAULT });
+    await searchIndex.sync(await readCatalogue());
+    expect(noteHit("network invariants")).toBeUndefined();
+    expect(noteHit(quote)).toBeUndefined();
+    expect(noteHit("bounded message delay")).toMatchObject({
+      title: "Delivery guarantees",
+      vaultId: DEFAULT_VAULT,
+      noteMatch: { offset: 0, quote: "Bounded message delay" },
+    });
+
+    await deleteNote(note.id);
+    await searchIndex.sync(await readCatalogue());
+    expect(noteHit("bounded message delay")).toBeUndefined();
   });
 });

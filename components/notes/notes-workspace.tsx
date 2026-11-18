@@ -26,6 +26,7 @@ import { useCurrentVault } from "@/lib/db/vaults";
 import { formatRelativeTime } from "@/lib/format";
 import type { GraphNode } from "@/lib/notes/graph";
 import { resolveLink } from "@/lib/notes/resolve";
+import { readNoteMatch } from "@/lib/notes/search-match";
 import { extractHeadings, sameName } from "@/lib/notes/syntax";
 import { routes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
@@ -79,7 +80,9 @@ export default function NotesWorkspace() {
   const notebookFilter = params.get("notebook");
 
   const [tabs, setTabs] = useState<string[]>(() => read<string[]>(TABS_KEY, []));
+  const [lastActiveNote, setLastActiveNote] = useState<string | null>(null);
   const [mode, setMode] = useState<"edit" | "read">(() => read(MODE_KEY, "edit"));
+  const [dismissedMatch, setDismissedMatch] = useState<string | null>(null);
   const [details, setDetails] = useState<boolean>(() => read(DETAILS_KEY, true));
   const [query, setQuery] = useState("");
   const [switcher, setSwitcher] = useState(false);
@@ -95,6 +98,24 @@ export default function NotesWorkspace() {
   const notes = world?.notes;
   const byId = useMemo(() => new Map((notes ?? []).map((note) => [note.id, note])), [notes]);
   const note = activeId ? (byId.get(activeId) ?? null) : null;
+  const noteId = note?.id ?? null;
+  // A note opened through search or a citation bypasses the tab switcher.
+  if (lastActiveNote !== noteId) {
+    setLastActiveNote(noteId);
+    if (noteId && !tabs.includes(noteId)) setTabs([...tabs, noteId]);
+  }
+  const searchMatch = useMemo(() => readNoteMatch(state), [state]);
+  const showingMatch = Boolean(searchMatch && !graphOpen && dismissedMatch !== routeKey);
+  const displayedMode = showingMatch ? "edit" : mode;
+  const toggleMode = useCallback(() => {
+    if (showingMatch) setDismissedMatch(routeKey);
+    setMode(displayedMode === "edit" ? "read" : "edit");
+  }, [displayedMode, showingMatch, routeKey]);
+  useEffect(() => {
+    if (!noteId || !showingMatch || !searchMatch) return;
+    const frame = requestAnimationFrame(() => editor.current?.revealMatch(searchMatch));
+    return () => cancelAnimationFrame(frame);
+  }, [noteId, routeKey, searchMatch, showingMatch]);
   const listNotes = useMemo(
     () =>
       (notes ?? []).filter((each) =>
@@ -151,19 +172,15 @@ export default function NotesWorkspace() {
 
   const closeTab = useCallback(
     (id: string) => {
-      setTabs((current) => {
-        const at = current.indexOf(id);
-        const next = current.filter((each) => each !== id);
-        const isActive = id === (graphOpen ? GRAPH_TAB : activeId);
-        if (isActive) {
-          const neighbour = next[Math.min(at, next.length - 1)];
-          if (neighbour === GRAPH_TAB) show({ graph: true }, false);
-          else show({ note: neighbour ?? null }, false);
-        }
-        return next;
-      });
+      const at = tabs.indexOf(id);
+      const next = tabs.filter((each) => each !== id);
+      setTabs(next);
+      if (id !== (graphOpen ? GRAPH_TAB : activeId)) return;
+      const neighbour = next[Math.min(at, next.length - 1)];
+      if (neighbour === GRAPH_TAB) show({ graph: true }, false);
+      else show({ note: neighbour ?? null }, false);
     },
-    [activeId, graphOpen, show],
+    [activeId, graphOpen, show, tabs],
   );
 
   const newNote = useCallback(
@@ -280,7 +297,7 @@ export default function NotesWorkspace() {
         searchRef.current?.focus();
       } else if (mod && !event.shiftKey && key === "e") {
         event.preventDefault();
-        setMode((current) => (current === "edit" ? "read" : "edit"));
+        toggleMode();
       } else if (mod && !event.shiftKey && key === "g") {
         event.preventDefault();
         if (graphOpen) show({ note: activeId });
@@ -301,7 +318,7 @@ export default function NotesWorkspace() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [newNote, openGraph, show, go, closeTab, graphOpen, activeId]);
+  }, [newNote, openGraph, show, go, closeTab, graphOpen, activeId, toggleMode]);
 
   const completion = useCallback((): CompletionWorld => {
     if (!world) return { notes: [], notebooks: [], sources: [], tags: [] };
@@ -467,12 +484,12 @@ export default function NotesWorkspace() {
           {note && !graphOpen ? (
             <button
               type="button"
-              onClick={() => setMode((current) => (current === "edit" ? "read" : "edit"))}
+              onClick={toggleMode}
               aria-label={t("modes.toggle")}
-              title={`${mode === "edit" ? t("modes.edit") : t("modes.read")} · ${t("modes.toggle")} (${keyLabel("Mod+E")})`}
+              title={`${displayedMode === "edit" ? t("modes.edit") : t("modes.read")} · ${t("modes.toggle")} (${keyLabel("Mod+E")})`}
               className="flex size-8 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <Icon icon={mode === "edit" ? Edit02Icon : BookOpen01Icon} size={16} />
+              <Icon icon={displayedMode === "edit" ? Edit02Icon : BookOpen01Icon} size={16} />
             </button>
           ) : null}
           <button
@@ -571,7 +588,7 @@ export default function NotesWorkspace() {
                   {t("askTutor")}
                 </Button>
               </div>
-              {mode === "edit" ? (
+              {displayedMode === "edit" ? (
                 <div className="min-h-0 flex-1">
                   <EditorPane
                     note={note}
