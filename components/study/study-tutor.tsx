@@ -730,9 +730,11 @@ export function StudyTutor({
       setVoiceState("transcribing");
       const transcript = await transcribeStudyVoice(audio, language, signal);
       signal.throwIfAborted();
-      const activity = recordStudyActivity("speaking", seconds, thread.notebookId, {
-        kind: "tutor",
-        threadId: thread.id,
+      const activity = recordStudyActivity({
+        activity: "speaking",
+        seconds,
+        notebookId: thread.notebookId,
+        origin: { kind: "tutor", threadId: thread.id },
       });
       if (sendTurn) {
         await Promise.all([
@@ -756,6 +758,7 @@ export function StudyTutor({
     if (voice.current || live.current || controller.current || !model || !contextReady) return;
     const abort = new AbortController();
     const { signal } = abort;
+    const activitySessionId = studyId();
     let replyFailed = false;
     setLivePhase("opening");
     window.speechSynthesis?.cancel();
@@ -767,9 +770,12 @@ export function StudyTutor({
       speechUnavailable: () => toast.info(t("study.voice.speechUnavailable")),
       noSpeech: () => toast.info(t("study.voice.noSpeech")),
       respond: async (transcript, seconds) => {
-        const activity = recordStudyActivity("speaking", seconds, thread.notebookId, {
-          kind: "tutor",
-          threadId: thread.id,
+        const activity = recordStudyActivity({
+          activity: "speaking",
+          seconds,
+          notebookId: thread.notebookId,
+          origin: { kind: "tutor", threadId: thread.id },
+          activitySessionId,
         }).catch((error: Error) => toast.error(error.message));
         try {
           const reply = await send(transcript, Date.now(), { spoken: true, session: signal });

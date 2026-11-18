@@ -146,6 +146,21 @@
     "sections": "Study sections",
     "today": {
       "resumeReview": "Resume review",
+      "resumeReading": "Continue reading",
+      "activityTitle": "Recent activity",
+      "activityEmpty": "Reading, reviews, and speaking practice appear here as you study.",
+      "activity": {
+        "reading": "Reading",
+        "review": "Review",
+        "speaking": "Speaking practice"
+      },
+      "underMinute": "Under a minute",
+      "minutes": "{{count}} min",
+      "reviewCount_one": "{{count}} review",
+      "reviewCount_other": "{{count}} reviews",
+      "lastRating": "Last rated {{rating}}",
+      "recentRecall_one": "Last flashcard review",
+      "recentRecall_other": "Last {{count}} flashcard reviews",
       "readingProgress": "Reading progress",
       "readingProgressFor": "Reading progress for {{title}}",
       "streak_one": "{{count}} day study streak",
@@ -211,7 +226,9 @@
       "practiceWeakHighlights_other": "Practice {{count}} difficult highlights",
       "rating": {
         "again": "Again",
-        "hard": "Hard"
+        "hard": "Hard",
+        "good": "Good",
+        "easy": "Easy"
       },
       "reviewSelected_one": "Review {{count}} selected card",
       "reviewSelected_other": "Review {{count}} selected cards",

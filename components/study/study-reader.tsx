@@ -204,6 +204,7 @@ export function StudyReader({
   const [fileUrl, setFileUrl] = useState<string>();
   const pendingAssist = useRef<AbortController | null>(null);
   const started = useRef(0);
+  const [readingSessionId] = useState(studyId);
   const latestInteraction = useRef(0);
   const restoredLayout = useStudyReadingPlace({
     book,
@@ -238,10 +239,12 @@ export function StudyReader({
       const seconds = (end - started.current) / 1000;
       started.current = now;
       if (seconds >= 1) {
-        void recordStudyActivity("reading", seconds, book.notebookId, {
-          kind: "book",
-          bookId: book.id,
-          section: index,
+        void recordStudyActivity({
+          activity: "reading",
+          seconds,
+          notebookId: book.notebookId,
+          origin: { kind: "book", bookId: book.id, section: index },
+          activitySessionId: readingSessionId,
         });
       }
     };
@@ -266,7 +269,7 @@ export function StudyReader({
       window.removeEventListener("pagehide", whileReading);
       whileReading();
     };
-  }, [book.id, book.notebookId, index]);
+  }, [book.id, book.notebookId, index, readingSessionId]);
 
   useEffect(() => {
     let live = true;

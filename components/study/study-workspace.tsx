@@ -4,10 +4,12 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { StudyOriginLink } from "./study-origin-link";
 import { StudyFollowUps } from "./study-follow-ups";
+import { StudyActivity } from "./study-activity";
 import { originHref, queryIndex, studyHighlightOrigin, studyHref } from "@/lib/study/links";
 import { tutorBookOrigin } from "@/lib/study/passages";
 import { difficultStudyItems, studyHighlightPreview } from "@/lib/study/recall";
 import { studyReadingProgress } from "@/lib/study/reading-progress";
+import { studyActivityGroups } from "@/lib/study/activity";
 import { studyReportKey } from "@/lib/study/reports";
 import {
   directReviewSession,
@@ -165,7 +167,7 @@ function DailyStudy({
           variant={resume || dueCards || dueHighlights ? "outline" : "default"}
           onClick={() => (lastRead ? read(lastRead) : go("library"))}
         >
-          {lastRead ? "Continue reading" : "Add a document"}
+          {lastRead ? t("study.today.resumeReading") : "Add a document"}
         </Button>
         {lastRead ? (
           <Button variant="outline" onClick={() => teachBack(lastRead)}>
@@ -186,27 +188,23 @@ function DailyStudy({
       <StudyFollowUps threads={threads} today={today.getTime()} vaultId={vaultId} />
       {activity.length ? (
         <div className="grid gap-3 sm:grid-cols-3">
-          {(
-            [
-              ["Reading", "reading"],
-              ["Review", "review"],
-              ["Speaking", "speaking"],
-            ] as const
-          ).map(([label, key]) => (
-            <Card size="sm" key={key}>
-              <Card.Content>
-                <p className="text-sm text-muted-foreground">{label}</p>
-                <p className="mt-1 text-xl font-semibold tabular-nums">
-                  {Math.floor(
-                    activity
-                      .filter((item) => item.activity === key)
-                      .reduce((n, item) => n + item.seconds, 0) / 60,
-                  )}{" "}
-                  min
-                </p>
-              </Card.Content>
-            </Card>
-          ))}
+          {(["reading", "review", "speaking"] as const).map((key) => {
+            const seconds = activity
+              .filter((item) => item.activity === key)
+              .reduce((n, item) => n + item.seconds, 0);
+            return (
+              <Card size="sm" key={key}>
+                <Card.Content>
+                  <p className="text-sm text-muted-foreground">{t(`study.today.activity.${key}`)}</p>
+                  <p className="mt-1 text-xl font-semibold tabular-nums">
+                    {seconds > 0 && seconds < 60
+                      ? t("study.today.underMinute")
+                      : t("study.today.minutes", { count: Math.floor(seconds / 60) })}
+                  </p>
+                </Card.Content>
+              </Card>
+            );
+          })}
         </div>
       ) : null}
       {lastRead ? (
@@ -281,32 +279,7 @@ function DailyStudy({
         </Card>
       ) : null}
       {rows.length ? <StudyProgress rows={rows} books={books} now={now} vaultId={vaultId} /> : null}
-      <div className="space-y-2">
-        <h3 className="font-semibold">Recent activity</h3>
-        {sessions.length ? (
-          <ul className="divide-y rounded-2xl border">
-            {sessions.slice(0, 10).map((session) => (
-              <li key={session.id} className="flex flex-wrap justify-between gap-2 p-3 text-sm">
-                <span className="capitalize">
-                  {session.activity}
-                  {session.rating ? ` · ${session.rating}` : ""}
-                </span>
-                {session.origin ? <StudyOriginLink origin={session.origin} /> : null}
-                <span className="text-muted-foreground">
-                  {new Intl.DateTimeFormat(undefined, {
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                  }).format(session.updatedAt)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Reading time and reviews appear here as you study.
-          </p>
-        )}
-      </div>
+      <StudyActivity rows={rows} sessions={sessions} />
     </section>
   );
 }
@@ -334,7 +307,7 @@ function StudyProgress({
   const reviews = sessions.filter((item) => item.activity === "review");
   const speaking = sessions.filter((item) => item.activity === "speaking");
   const recentRecall = reviews
-    .filter((item) => item.itemId && currentCards.has(item.itemId))
+    .filter((item) => item.rating && item.itemId && currentCards.has(item.itemId))
     .slice(0, 20);
   const totals = [
     { label: "Flashcards", value: cards.length, tab: "cards" },
@@ -351,7 +324,7 @@ function StudyProgress({
     },
     {
       label: "Speaking sessions",
-      value: speaking.reduce((total, item) => total + item.count, 0),
+      value: studyActivityGroups(speaking).length,
       tab: "tutor",
     },
     {
@@ -371,7 +344,7 @@ function StudyProgress({
         {totals.map(({ label, value, tab }, index) => (
           <div key={label} className="space-y-1 bg-card p-3">
             <dt className="text-sm text-muted-foreground">
-              <Link to={studyHref(tab)} className="hover:underline">
+              <Link to={studyHref(tab, { vault: vaultId })} className="hover:underline">
                 {label}
               </Link>
             </dt>
@@ -382,7 +355,9 @@ function StudyProgress({
       </dl>
       {recentRecall.length ? (
         <div className="space-y-2 rounded-xl border p-3 text-sm">
-          <h4 className="font-medium">Last {recentRecall.length} flashcard reviews</h4>
+          <h4 className="font-medium">
+            {t("study.today.recentRecall", { count: recentRecall.length })}
+          </h4>
           <ul className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
             {studyRatings.map((rating) => (
               <li key={rating}>

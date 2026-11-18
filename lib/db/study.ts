@@ -826,12 +826,15 @@ export async function rateStudyItem(
   });
 }
 
-export async function recordStudyActivity(
-  activity: "reading" | "speaking",
-  seconds: number,
-  notebookId?: string,
-  origin?: StudyOrigin,
-) {
+export async function recordStudyActivity({
+  activity,
+  seconds,
+  notebookId,
+  origin,
+  activitySessionId,
+}: Pick<StudyRecordOf<"session">, "seconds" | "notebookId" | "origin" | "activitySessionId"> & {
+  activity: "reading" | "speaking";
+}) {
   if (seconds < 1) return;
   await putStudyRecords({
     id: studyId(),
@@ -839,6 +842,7 @@ export async function recordStudyActivity(
     activity,
     seconds,
     count: 1,
+    activitySessionId,
     notebookId,
     origin,
     updatedAt: Date.now(),
