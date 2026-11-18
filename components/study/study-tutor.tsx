@@ -1572,6 +1572,7 @@ export function StudyTutor({
                     context: word.example,
                     note: word.definition,
                     notebookId: thread.notebookId,
+                    vaultId,
                     origin: { kind: "report", threadId: thread.id, reportId },
                   },
                   `report-word-${thread.id}-${visibleReport.id ?? visibleReport.generatedAt ?? 0}-${key}`,

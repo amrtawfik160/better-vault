@@ -10,7 +10,9 @@ import {
   rateStudyItem,
   readStudyThread,
   readStudyTutorSources,
+  removeStudyRecord,
   saveStudyCard,
+  saveStudyWord,
   saveStudyReadingPlace,
   saveStudyText,
   startSourceTutor,
@@ -19,9 +21,11 @@ import {
   startHighlightTutor,
   startStudyFollowUp,
   StudyTextConflict,
+  studyVocabularyCards,
   updateStudyBook,
   updateStudyReport,
   updateStudyThread,
+  updateStudyWord,
 } from "./study";
 import { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -733,6 +737,63 @@ describe.each(backends)("%s store", (name, create) => {
       expect((await store().listStudy()).filter(({ kind }) => kind === "session")).toMatchObject([
         { reviewSessionId: review.sessionId, itemId: card.id },
       ]);
+    });
+
+    it("pairs vocabulary with one scheduled card and keeps the sources and card edits", async () => {
+      const vaultId = await createVault({ name: "Systems" });
+      const otherVault = await createVault({ name: "Languages" });
+      const notebookId = await createNotebook("Distributed systems", { vaultId });
+      const origin = { kind: "source" as const, notebookId, sourceId: "replicas", chunkId: "replicas:0" };
+      const second = { ...origin, chunkId: "replicas:1" };
+      const fields = {
+        term: "Quorum",
+        language: "English",
+        translation: "",
+        note: "",
+        context: "A quorum is needed to elect a leader.",
+        notebookId,
+        vaultId,
+        origin,
+      };
+      const word = await saveStudyWord(fields);
+      const [extra, same] = await Promise.all([
+        saveStudyWord({ ...fields, term: " QUORUM ", origin: second, context: "The write quorum must overlap the read quorum." }),
+        saveStudyWord(fields),
+      ]);
+      expect([extra.id, same.id]).toEqual([word.id, word.id]);
+      const otherWord = await saveStudyWord({ ...fields, vaultId: otherVault, notebookId: undefined, origin: undefined });
+      expect(otherWord.id).not.toBe(word.id);
+      await expect(saveStudyWord({ ...fields, vaultId: otherVault })).rejects.toThrow("no longer available");
+      const [cardId] = await studyVocabularyCards([word.id, otherWord.id, word.id], vaultId);
+      expect(await studyVocabularyCards([otherWord.id], vaultId)).toEqual([]);
+      if (!cardId) throw new Error("Expected the vocabulary flashcard");
+      const card = await store().getStudy(cardId);
+      if (card?.kind !== "card") throw new Error("Expected a scheduled flashcard");
+      expect(card).toMatchObject({ front: "A […] is needed to elect a leader.", back: fields.context });
+      expect(await rateStudyItem(cardId, "easy", 4)).toBe(true);
+      const graded = await store().getStudy(cardId);
+      if (graded?.kind !== "card") throw new Error("Expected the reviewed flashcard");
+
+      const saved = await store().getStudy(word.id);
+      if (saved?.kind !== "word") throw new Error("Expected the merged word");
+      expect(saved.examples).toEqual([{ context: "The write quorum must overlap the read quorum.", origin: second }]);
+      await updateStudyWord({ ...saved, note: "Minimum group required for an operation." }, vaultId);
+      const synced = await store().getStudy(cardId);
+      if (synced?.kind !== "card") throw new Error("Expected the updated flashcard");
+      expect(synced.front).toBe(fields.term);
+      expect(synced.back).toContain("Minimum group required for an operation.");
+      expect(synced.schedule).toEqual(graded.schedule);
+
+      await putStudyRecords({ ...synced, back: "My own explanation" });
+      await updateStudyWord({ ...saved, note: "An edited definition" }, vaultId);
+      expect(await store().getStudy(cardId)).toMatchObject({ back: "My own explanation", schedule: graded.schedule });
+      const backup = JSON.parse(JSON.stringify(await exportBackup()));
+      await deleteAllData();
+      await importBackup(backup);
+      expect(await store().getStudy(word.id)).toMatchObject({ examples: saved.examples });
+      await removeStudyRecord(word.id);
+      expect(await store().getStudy(cardId)).toMatchObject({ origin, back: "My own explanation", schedule: graded.schedule });
+      expect(await studyVocabularyCards([word.id], vaultId)).toEqual([]);
     });
 
     it("stores a study card without a linked notebook", async () => {

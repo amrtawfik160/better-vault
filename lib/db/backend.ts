@@ -4,6 +4,8 @@ import type {
   StudyRecord,
   StudyReviewWrite,
   StudyThreadWrite,
+  StudyWordResult,
+  StudyWordWrite,
 } from "@/lib/study/records";
 import type {
   Chunk,
@@ -139,6 +141,7 @@ export interface Backend {
   insertStudy(rows: StudyRecord[]): Promise<number>;
   patchStudyBook(write: StudyBookWrite): Promise<void>;
   patchStudyThread(write: StudyThreadWrite): Promise<boolean>;
+  writeStudyVocabulary(write: StudyWordWrite): Promise<StudyWordResult>;
   applyStudyReview(write: StudyReviewWrite): Promise<boolean>;
   replaceStudyText(
     write: StudyBookTextWrite,
@@ -249,6 +252,7 @@ export const writes = {
   insertStudy: ["study"],
   patchStudyBook: ["study"],
   patchStudyThread: ["study"],
+  writeStudyVocabulary: ["study"],
   applyStudyReview: ["study"],
   replaceStudyText: ["study", "sources", "chunks", "notebooks"],
   deleteStudy: ["study"],
@@ -353,6 +357,7 @@ export const backendMethods = [
   "insertStudy",
   "patchStudyBook",
   "patchStudyThread",
+  "writeStudyVocabulary",
   "applyStudyReview",
   "replaceStudyText",
   "deleteStudy",

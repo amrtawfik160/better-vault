@@ -191,6 +191,7 @@ export const studyRecordSchema = z.discriminatedUnion("kind", [
     origin: studyOriginSchema.optional(),
     note: z.string(),
     bookId: z.string().optional(),
+    examples: z.array(z.object({ context: z.string(), origin: studyOriginSchema.optional() })).optional(),
   }),
   base.extend({
     kind: z.literal("session"),
@@ -230,6 +231,14 @@ export type StudyOrigin = z.infer<typeof studyOriginSchema>;
 export type StudyCitation = z.infer<typeof citation>;
 export type StudyRecord = z.infer<typeof studyRecordSchema>;
 export type StudyRecordOf<K extends StudyRecord["kind"]> = Extract<StudyRecord, { kind: K }>;
+export type StudyWord = StudyRecordOf<"word">;
+export type StudyWordWrite =
+  | { kind: "capture" | "edit"; word: StudyWord; vaultId: string }
+  | { kind: "cards"; ids: string[]; vaultId: string; updatedAt: number };
+export type StudyWordResult =
+  | { kind: "word"; word: StudyWord }
+  | { kind: "cards"; cardIds: string[] }
+  | { kind: "duplicate" | "unavailable" };
 export type StudyBook = StudyRecordOf<"book">;
 export type StudyReadingPlace = z.infer<typeof readingPlace>;
 export type StudyTextEdit = z.infer<typeof textEdit>;

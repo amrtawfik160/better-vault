@@ -26,6 +26,7 @@ import type {
   StudyReportChange,
   StudyReadingPlace,
   StudyTutorDraftChange,
+  StudyWord,
 } from "@/lib/study/records";
 import { createNote } from "./notes";
 import type { Note, Source, StudioOutput } from "./types";
@@ -333,17 +334,30 @@ export async function saveStudyCard(content: CardContent, id?: string) {
 }
 
 export async function saveStudyWord(
-  content: Omit<StudyRecordOf<"word">, "id" | "updatedAt" | "kind">,
+  content: Omit<StudyWord, "id" | "updatedAt" | "kind">,
   id = studyId(),
 ) {
-  const word: StudyRecordOf<"word"> = withCurrentStudyVault({
-    ...content,
-    id,
-    kind: "word",
-    updatedAt: Date.now(),
+  const notebook = content.notebookId && await store().getNotebook(content.notebookId);
+  const vaultId = content.vaultId ?? (notebook ? vaultOf(notebook) : currentVaultId());
+  const result = await store().writeStudyVocabulary({
+    kind: "capture",
+    vaultId,
+    word: { ...content, id, kind: "word", vaultId, updatedAt: Date.now() },
   });
-  await store().insertStudy([word]);
-  return word;
+  if (result.kind !== "word") throw new Error("This vocabulary entry is no longer available.");
+  return result.word;
+}
+
+export async function updateStudyWord(word: StudyWord, vaultId: string) {
+  const result = await store().writeStudyVocabulary({ kind: "edit", word: { ...word, updatedAt: Date.now() }, vaultId });
+  if (result.kind === "duplicate") throw new Error("That word is already saved for this language.");
+  if (result.kind !== "word") throw new Error("This vocabulary entry is no longer available.");
+  return result.word;
+}
+
+export async function studyVocabularyCards(ids: string[], vaultId: string) {
+  const result = await store().writeStudyVocabulary({ kind: "cards", ids, vaultId, updatedAt: Date.now() });
+  return result.kind === "cards" ? result.cardIds : [];
 }
 
 export async function addStudioFlashcards(output: StudioOutput) {

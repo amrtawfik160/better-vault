@@ -1,6 +1,7 @@
 import type { StudyRecord } from "@/lib/study/records";
 import { patchedStudyThread } from "@/lib/study/reports";
 import { patchedStudyBook, revisedStudyBook } from "@/lib/study/text-edits";
+import { detachedVocabularyCard, vocabularyCardId, vocabularyChanges } from "@/lib/study/vocabulary";
 import type { Backend, StoreContent, TableName } from "../backend";
 import type {
   Chunk,
@@ -532,6 +533,16 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
         const book = get<StudyRecord>("study", write.id);
         if (book?.kind === "book") put("study", patchedStudyBook(book, write));
       }),
+    writeStudyVocabulary: (write) =>
+      transaction(db, () => {
+        const rows = docs<StudyRecord>(db.prepare("SELECT doc FROM study").all());
+        const notebooks = docs<Notebook>(db.prepare("SELECT doc FROM notebooks").all());
+        const vaults = docs<Vault>(db.prepare("SELECT doc FROM vaults").all());
+        const notes = docs<Note>(db.prepare("SELECT doc FROM notes").all());
+        const { result, updates } = vocabularyChanges({ rows, notebooks, vaults, notes }, write);
+        for (const row of updates) put("study", row);
+        return result;
+      }),
     patchStudyThread: (write) =>
       transaction(db, () => {
         const thread = get<StudyRecord>("study", write.id);
@@ -577,6 +588,10 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
           db.prepare(
             "DELETE FROM study WHERE notebook_id = ? AND json_extract(doc, '$.kind') = 'highlight' AND json_extract(doc, '$.bookId') = ?",
           ).run(row.notebookId, id);
+        }
+        if (row?.kind === "word") {
+          const card = detachedVocabularyCard(get<StudyRecord>("study", vocabularyCardId(id)), row);
+          if (card) put("study", card);
         }
         deleteWhere("study", "id", id);
       }),

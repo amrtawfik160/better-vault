@@ -42,7 +42,8 @@ import {
 } from "@/lib/study/records";
 import { StudyLibrary } from "./study-library";
 import { StudyReader } from "./study-reader";
-import { CardLibrary, HighlightsLibrary, StudyReview, VocabularyLibrary } from "./study-review";
+import { CardLibrary, HighlightsLibrary, StudyReview } from "./study-review";
+import { VocabularyLibrary } from "./study-vocabulary";
 import { StudyTutor, TutorIndex } from "./study-tutor";
 
 const tabs = ["today", "library", "cards", "review", "highlights", "vocabulary", "tutor"] as const;
@@ -475,6 +476,7 @@ export default function StudyWorkspace({
   const notebookId = params.get("notebook");
   const requestedReview = selection?.studyReviewIds;
   const reviewingHighlights = params.get("kind") === "highlights";
+  const reviewingVocabulary = params.get("kind") === "vocabulary";
   const weakMode = tab === "review" && !reviewingHighlights && params.get("mode") === "weak";
   const filteredCards = studyCardsInScope(cards, params, book, thread?.id ?? null);
   const reviewSessionId =
@@ -669,6 +671,7 @@ export default function StudyWorkspace({
           items={reviewCollection(rows, params, requestedReview)}
           useHighlights={reviewingHighlights}
           books={books}
+          words={words}
           threads={threads}
           practice={(item, state) => void openTutorSelection(item.kind, [item.id], state)}
           openingPractice={openingPractice}
@@ -683,16 +686,21 @@ export default function StudyWorkspace({
             ).length
           }
           libraryHref={
-            reviewingHighlights && book
+            reviewingVocabulary
+              ? studyHref("vocabulary", { vault: studyVaultId })
+              : reviewingHighlights && book
               ? studyHref("highlights", { book: book.id })
               : reportFilter
                 ? studyHref("cards", reportFilter)
                 : undefined
           }
+          libraryLabel={reviewingVocabulary ? t("study.vocabulary.open") : undefined}
           collection={
             weakMode
               ? t("study.recall.weakSet")
-              : requestedReview
+              : reviewingVocabulary
+                ? t("study.tabs.vocabulary")
+                : requestedReview
                 ? t(
                     reviewingHighlights
                       ? "study.highlights.selection"
@@ -717,7 +725,14 @@ export default function StudyWorkspace({
         />
       ) : null}
       {ready && tab === "vocabulary" ? (
-        <VocabularyLibrary words={words} focusedWord={params.get("word") ?? undefined} />
+        <VocabularyLibrary
+          key={params.get("word") ?? "vocabulary"}
+          words={words}
+          cards={cards}
+          vaultId={studyVaultId}
+          focusedWord={params.get("word") ?? undefined}
+          review={(ids) => go("review", { kind: "vocabulary" }, ids)}
+        />
       ) : null}
       {ready && tab === "tutor" ? (
         thread ? (

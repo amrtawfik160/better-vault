@@ -37,12 +37,12 @@ import {
   freshSchedule,
   putStudyRecords,
   rateStudyItem,
-  saveStudyCard,
   saveStudyNote,
   removeStudyRecord,
   studyId,
 } from "@/lib/db/study";
 import { scheduleState, studyIntervalLabel } from "@/lib/study/schedule";
+import { vocabularyOrigin } from "@/lib/study/vocabulary";
 import {
   studyRatings,
   type StudyBook,
@@ -75,6 +75,7 @@ export function StudyReview({
   items,
   useHighlights,
   books,
+  words,
   threads,
   practice,
   openingPractice,
@@ -82,12 +83,14 @@ export function StudyReview({
   initialPractice,
   vaultId,
   libraryHref,
+  libraryLabel,
   ratedInDatabase,
   sessionId,
 }: {
   items: (Card | Highlight)[];
   useHighlights: boolean;
   books: StudyBook[];
+  words: Word[];
   threads: StudyThread[];
   practice: (item: Card | Highlight, state: ReturnType<typeof reviewReturnState>) => void;
   openingPractice: boolean;
@@ -95,6 +98,7 @@ export function StudyReview({
   initialPractice?: boolean;
   vaultId: string;
   libraryHref?: string;
+  libraryLabel?: string;
   ratedInDatabase: number;
   sessionId: string;
 }) {
@@ -214,6 +218,8 @@ export function StudyReview({
   }
 
   const origin = item?.kind === "highlight" ? studyHighlightOrigin(item) : item?.origin;
+  const word = origin?.kind === "word" ? words.find(({ id }) => id === origin.wordId) : undefined;
+  const wordOrigin = word && vocabularyOrigin(word);
   const message =
     origin?.kind === "tutor" && origin.message !== undefined
       ? threads.find(({ id }) => id === origin.threadId)?.messages[origin.message]
@@ -245,7 +251,7 @@ export function StudyReview({
               {highlightBook.sections[item.kind === "highlight" ? item.section : 0]?.title}
             </p>
           ) : null}
-          <p dir="auto" className="text-xl font-medium whitespace-pre-wrap">
+          <p dir="auto" className="text-xl font-medium whitespace-pre-wrap wrap-break-word">
             {item.kind === "card" ? item.front : item.cue || "Recall why you saved this passage."}
           </p>
           {item.kind === "card" && item.image ? (
@@ -261,7 +267,7 @@ export function StudyReview({
             </Button>
           ) : (
             <div ref={answer} tabIndex={-1} className="space-y-3 outline-none">
-              <p dir="auto" className="border-t pt-4 whitespace-pre-wrap">
+              <p dir="auto" className="border-t pt-4 whitespace-pre-wrap wrap-break-word">
                 {item.kind === "card" ? item.back : item.quote}
               </p>
               {item.kind === "card" && item.backImage ? (
@@ -282,6 +288,7 @@ export function StudyReview({
                   state={returnState}
                 />
               ) : null}
+              {wordOrigin && !busy ? <StudyOriginLink origin={wordOrigin} state={returnState} /> : null}
               {citations.length && !busy ? (
                 <div>
                   <p className="text-sm text-muted-foreground">{t("study.capture.tutorAnswerSources")}</p>
@@ -375,7 +382,7 @@ export function StudyReview({
               to={libraryHref ?? studyHref(useHighlights ? "highlights" : "cards")}
               className="underline underline-offset-4"
             >
-              {useHighlights ? "Open highlights" : "Open flashcards"}
+              {libraryLabel ?? (useHighlights ? "Open highlights" : "Open flashcards")}
             </Link>
           </div>
         </div>
@@ -1020,183 +1027,6 @@ export function HighlightsLibrary({
         }}
         title="Delete highlight?"
         body="Its note and review schedule will be removed."
-        confirmLabel="Delete"
-        onConfirm={async () => {
-          if (deleting) await removeStudyRecord(deleting.id);
-          setDeleting(null);
-        }}
-      />
-    </section>
-  );
-}
-
-export function VocabularyLibrary({ words, focusedWord }: { words: Word[]; focusedWord?: string }) {
-  const navigate = useNavigate();
-  useEffect(() => {
-    if (focusedWord)
-      document.getElementById(`study-word-${focusedWord}`)?.scrollIntoView({ block: "center" });
-  }, [focusedWord, words.length]);
-  const [query, setQuery] = useState("");
-  const [editing, setEditing] = useState<Word | null>(null);
-  const [deleting, setDeleting] = useState<Word | null>(null);
-  const save = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!editing?.term.trim()) return;
-    const term = editing.term.trim();
-    if (
-      words.some(
-        (word) =>
-          word.id !== editing.id &&
-          word.term.toLowerCase() === term.toLowerCase() &&
-          word.language.toLowerCase() === editing.language.trim().toLowerCase(),
-      )
-    ) {
-      toast.error("That word is already saved for this language.");
-      return;
-    }
-    try {
-      await putStudyRecords({
-        ...editing,
-        term,
-        language: editing.language.trim(),
-        updatedAt: Date.now(),
-      });
-      setEditing(null);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
-    }
-  };
-  return (
-    <section className="space-y-5">
-      <div className="flex flex-wrap justify-between gap-2">
-        <h2 className="text-xl font-semibold">Vocabulary</h2>
-        <Button
-          onClick={() =>
-            setEditing({
-              id: studyId(),
-              kind: "word",
-              term: "",
-              translation: "",
-              context: "",
-              language: "",
-              note: "",
-              updatedAt: Date.now(),
-            })
-          }
-        >
-          Add word
-        </Button>
-      </div>
-      {editing ? (
-        <form
-          className="grid max-w-lg gap-3 rounded-2xl border p-4"
-          onSubmit={(event) => void save(event)}
-        >
-          {(["term", "translation", "language", "context", "note"] as const).map((name) => (
-            <label key={name} className="text-sm capitalize">
-              {name}
-              <Input
-                dir="auto"
-                value={editing[name]}
-                onChange={(event) => setEditing({ ...editing, [name]: event.target.value })}
-                required={name === "term"}
-              />
-            </label>
-          ))}
-          <Button type="submit" className="justify-self-start">
-            Save word
-          </Button>
-        </form>
-      ) : null}
-      <Input
-        type="search"
-        placeholder="Search vocabulary"
-        aria-label="Search vocabulary"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-      />
-      <ul className="divide-y rounded-2xl border">
-        {words
-          .filter((word) =>
-            [word.term, word.translation, word.language, word.context, word.note]
-              .join(" ")
-              .toLowerCase()
-              .includes(query.toLowerCase()),
-          )
-          .map((word) => (
-            <li
-              className={`flex scroll-mt-32 flex-wrap items-start gap-2 p-4 ${focusedWord === word.id ? "bg-accent" : ""}`}
-              key={word.id}
-              id={`study-word-${word.id}`}
-            >
-              <div className="min-w-0 flex-1">
-                <p dir="auto" className="font-medium wrap-break-word">
-                  {word.term}
-                  {word.translation ? ` — ${word.translation}` : ""}
-                </p>
-                <p className="text-sm text-muted-foreground">{word.language}</p>
-                {word.context ? (
-                  <p dir="auto" className="text-sm">
-                    {word.context}
-                  </p>
-                ) : null}
-                {word.note ? (
-                  <p dir="auto" className="text-sm text-muted-foreground">
-                    {word.note}
-                  </p>
-                ) : null}
-              </div>
-              {word.origin ? <StudyOriginLink origin={word.origin} /> : null}
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  void saveStudyCard(
-                    {
-                      origin: { kind: "word", wordId: word.id },
-                      notebookId: word.notebookId,
-                      front: word.term,
-                      back: [
-                        ...new Set(
-                          [word.translation, word.note, word.context]
-                            .map((part) => part.trim())
-                            .filter(Boolean),
-                        ),
-                      ].join("\n\n"),
-                      tags: [word.language || "Vocabulary"],
-                    },
-                    `word-card-${word.id}`,
-                  )
-                    .then((card) =>
-                      toast.success("Flashcard saved", {
-                        action: {
-                          label: "View flashcard",
-                          onClick: () => navigate(studyHref("cards", { card: card.id })),
-                        },
-                      }),
-                    )
-                    .catch((error: Error) => toast.error(error.message));
-                }}
-                disabled={!word.translation.trim() && !word.note.trim() && !word.context.trim()}
-              >
-                Make flashcard
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setEditing(word)}>
-                Edit
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setDeleting(word)}>
-                Delete
-              </Button>
-            </li>
-          ))}
-      </ul>
-      <ConfirmDialog
-        open={deleting !== null}
-        onOpenChange={(open) => {
-          if (!open) setDeleting(null);
-        }}
-        title="Delete word?"
-        body="This removes the saved vocabulary entry."
         confirmLabel="Delete"
         onConfirm={async () => {
           if (deleting) await removeStudyRecord(deleting.id);

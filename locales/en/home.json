@@ -327,6 +327,17 @@
       "cardsSaved_other": "{{count}} flashcards saved",
       "viewCards": "View flashcards"
     },
+    "vocabulary": {
+      "review": "Review vocabulary",
+      "reviewMatches": "Review matching words",
+      "reviewWord": "Review word",
+      "open": "Open vocabulary",
+      "noCards": "These words have no cards to review.",
+      "examples_one": "{{count}} more example",
+      "examples_other": "{{count}} more examples",
+      "noMatches": "No vocabulary matches your search.",
+      "empty": "Save a term from a document or add a word to start your vocabulary."
+    },
     "tabs": {
       "today": "Today",
       "library": "Library",

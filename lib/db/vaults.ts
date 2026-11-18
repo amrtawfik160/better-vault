@@ -1,13 +1,12 @@
 import { generateId } from "ai";
 import { useSyncExternalStore } from "react";
 import { clearReviewCheckpoint } from "@/lib/study/review-session";
-import { studyVaultIndex } from "@/lib/study/vault";
+import { DEFAULT_VAULT, studyVaultIndex } from "@/lib/study/vault";
 import { useStoreQuery } from "./live";
 import { store } from "./store";
 import type { Folder, Notebook, Vault } from "./types";
 
-/** The vault notebooks and folders saved before vaults belong to. It can't be deleted. */
-export const DEFAULT_VAULT = "default";
+export { DEFAULT_VAULT } from "@/lib/study/vault";
 
 const defaultVault = (): Vault => ({
   id: DEFAULT_VAULT,

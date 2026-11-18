@@ -81,6 +81,10 @@ export function reviewCollection(
   if (bookId && !book) return [];
   const threadId = params.get("thread");
   const reviewingHighlights = params.get("kind") === "highlights";
+  const vocabulary =
+    params.get("kind") === "vocabulary"
+      ? new Set(rows.filter((row) => row.kind === "word").map(({ id }) => id))
+      : undefined;
   const ids =
     !reviewingHighlights && params.get("mode") === "weak"
       ? new Set(weakStudyCards(rows).map(({ card }) => card.id))
@@ -93,7 +97,11 @@ export function reviewCollection(
           row.kind === "highlight" && (!book || row.bookId === book.id),
       )
     : studyCardsInScope(
-        rows.filter((row) => row.kind === "card"),
+        rows.filter(
+          (row): row is StudyRecordOf<"card"> =>
+            row.kind === "card" &&
+            (!vocabulary || (row.origin?.kind === "word" && vocabulary.has(row.origin.wordId))),
+        ),
         params,
         book,
         rows.some((row) => row.kind === "thread" && row.id === threadId) ? threadId : null,

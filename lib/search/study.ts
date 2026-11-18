@@ -76,7 +76,13 @@ export function studySearchEntries(
         add(
           { type: "word", href: originHref({ kind: "word", wordId: row.id }) },
           row.term,
-          [row.translation, row.context, row.note, row.language].join("\n"),
+          [
+            row.translation,
+            row.context,
+            row.note,
+            row.language,
+            ...(row.examples ?? []).map(({ context }) => context),
+          ].join("\n"),
         );
         break;
       case "thread": {

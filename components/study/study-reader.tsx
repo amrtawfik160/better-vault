@@ -21,6 +21,7 @@ import {
   saveStudyCard,
   saveStudyNote,
   saveStudyText,
+  saveStudyWord,
   studyId,
   StudyTextConflict,
   updateStudyBook,
@@ -417,10 +418,7 @@ export function StudyReader({
   function saveVocabulary(selected: Selection) {
     const translated =
       result?.action === "translate" && result.selection === selected ? result : null;
-    const id = studyId();
-    void putStudyRecords({
-      id,
-      kind: "word",
+    void saveStudyWord({
       origin: sourceOf(selected),
       term: selected.text,
       translation: translated?.text ?? "",
@@ -432,14 +430,14 @@ export function StudyReader({
       note: "",
       notebookId: book.notebookId,
       bookId: book.id,
-      updatedAt: Date.now(),
+      vaultId,
     })
-      .then(() =>
+      .then((word) =>
         toast.success("Saved to vocabulary", {
           action: {
             label: "View word",
             onClick: () =>
-              navigate(originHref({ kind: "word", wordId: id }), { state: returnState }),
+              navigate(originHref({ kind: "word", wordId: word.id }), { state: returnState }),
           },
         }),
       )

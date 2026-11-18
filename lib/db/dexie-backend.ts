@@ -1,6 +1,7 @@
 import type { StudyRecord } from "@/lib/study/records";
 import { patchedStudyThread } from "@/lib/study/reports";
 import { patchedStudyBook, revisedStudyBook } from "@/lib/study/text-edits";
+import { detachedVocabularyCard, vocabularyCardId, vocabularyChanges } from "@/lib/study/vocabulary";
 import type { Backend } from "./backend";
 import { BetterVaultDatabase } from "./database";
 import type { Source, StudioOutput } from "./types";
@@ -251,6 +252,15 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
         const book = await db.study.get(write.id);
         if (book?.kind === "book") await db.study.put(patchedStudyBook(book, write));
       }),
+    writeStudyVocabulary: (write) =>
+      db.transaction("rw", [db.study, db.notebooks, db.vaults, db.notes], async () => {
+        const [rows, notebooks, vaults, notes] = await Promise.all([
+          db.study.toArray(), db.notebooks.toArray(), db.vaults.toArray(), db.notes.toArray(),
+        ]);
+        const { result, updates } = vocabularyChanges({ rows, notebooks, vaults, notes }, write);
+        if (updates.length) await db.study.bulkPut(updates);
+        return result;
+      }),
     patchStudyThread: (write) =>
       db.transaction("rw", db.study, async () => {
         const thread = await db.study.get(write.id);
@@ -299,6 +309,10 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
             .equals(row.notebookId)
             .filter((item) => item.kind === "highlight" && item.bookId === id)
             .delete();
+        }
+        if (row?.kind === "word") {
+          const card = detachedVocabularyCard(await db.study.get(vocabularyCardId(id)), row);
+          if (card) await db.study.put(card);
         }
         await db.study.delete(id);
       }),

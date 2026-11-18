@@ -1,6 +1,9 @@
 import type { Notebook, Note, Vault } from "@/lib/db/types";
 import type { StudyOrigin, StudyRecord } from "./records";
 
+/** The vault for records created before vaults were introduced. */
+export const DEFAULT_VAULT = "default";
+
 export function studyOriginRecordId(origin: StudyOrigin | undefined) {
   switch (origin?.kind) {
     case "book":
