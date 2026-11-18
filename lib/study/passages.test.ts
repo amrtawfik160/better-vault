@@ -79,6 +79,24 @@ describe("Tutor grounding", () => {
     expect(new URL(originHref(evidence[0].origin), "https://deeple.test").searchParams.get("card")).toBe("second");
     expect(passagesFor(practice, { cards }, "Review", "report").map(({ title }) => title)).toEqual(["Question first"]);
     expect(passagesFor(practice, { cards: [cards[2], cards[0]] }, "Continue").map(({ title }) => title)).toEqual(["Question first"]);
+    const cardEvidence = new Map(
+      cards.map(({ id }) => [
+        id,
+        [
+          {
+            origin: { kind: "note", noteId: id } satisfies import("./records").StudyOrigin,
+            title: `Evidence ${id}`,
+            text: `Source explanation ${id}`,
+          },
+        ],
+      ]),
+    );
+    expect(
+      passagesFor(practice, { cards, cardEvidence }, "Continue").map(({ title }) => title),
+    ).toEqual(["Question second", "Evidence second"]);
+    expect(
+      passagesFor(practice, { cards, cardEvidence }, "Review", "report").map(({ title }) => title),
+    ).toEqual(["Question first", "Evidence first"]);
   });
 
   it("retrieves evidence near the end of a long chapter and links the exact source text", () => {

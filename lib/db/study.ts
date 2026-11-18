@@ -1,10 +1,12 @@
 import { generateId } from "ai";
 import type { PassageRef } from "@/lib/chat/types";
 import { freshSchedule, nextStudySchedule } from "@/lib/study/schedule";
-import { originHref } from "@/lib/study/links";
+import { originHref, studyCitationOrigin } from "@/lib/study/links";
 import { studyPdfSections } from "@/lib/study/read-file";
-import { studyTextEdit, studyTextRevision } from "@/lib/study/text-edits";
-import type { StudyTutorSources } from "@/lib/study/passages";
+import { locateStudyMark, resolveStudyRange, studyTextEdit, studyTextRevision } from "@/lib/study/text-edits";
+import { cardEvidenceLimit, type StudyPassage, type StudyTutorSources } from "@/lib/study/passages";
+import { locateCitedChunk } from "@/lib/study/locators";
+import { vocabularyOrigin } from "@/lib/study/vocabulary";
 import { recentPracticeCards, selectedStudyCards, studyHighlightPreview } from "@/lib/study/recall";
 import { studyFollowUpId, studyReportKey, studyReports } from "@/lib/study/reports";
 import { studyTutorContextSchema } from "@/lib/study/records";
@@ -13,6 +15,9 @@ import { clearTutorDraftRecovery } from "@/lib/study/tutor-draft-recovery";
 import { flashcardsData } from "@/studio/tools/flashcards/definition";
 import { quizData } from "@/studio/tools/quiz/definition";
 import { normaliseText } from "@/lib/grounding/chunk";
+import { citedNumbers } from "@/lib/grounding/passages";
+import { passageRefSchema } from "@/lib/grounding/passage-schema";
+import { sectionOf } from "@/lib/notes/syntax";
 import type {
   StudyFollowUp,
   StudyBook,
@@ -108,6 +113,146 @@ function highlightSources(rows: StudyRecord[], ids: string[]) {
   });
 }
 
+async function readFlashcardEvidence(cards: StudyCard[], vaultId: string) {
+  const backend = store();
+  const evidence = new Map<string, StudyPassage[]>();
+  if (!cards.some((card) => card.origin || card.citations?.length)) return evidence;
+  const [notebooks, vaults] = await Promise.all([backend.listNotebooks(), listVaults()]);
+  const ownership = { notebooks, vaults, rows: [], defaultVaultId: DEFAULT_VAULT };
+  const { notebookOwner } = studyVaultIndex({ ...ownership, notes: [] });
+
+  async function originsOf(card: StudyCard): Promise<StudyOrigin[]> {
+    if (card.citations?.length) return card.citations.map(studyCitationOrigin);
+    const origin = card.origin;
+    if (!origin) return [];
+    if (origin.kind === "word") {
+      const [word] = await readStudyRowsInVault([origin.wordId], vaultId);
+      const original = word?.kind === "word" ? vocabularyOrigin(word) : undefined;
+      return original ? [original] : [];
+    }
+    if (origin.kind === "tutor" && origin.message !== undefined) {
+      const [thread] = await readStudyRowsInVault([origin.threadId], vaultId);
+      const answer = thread?.kind === "thread" ? thread.messages[origin.message] : undefined;
+      return answer?.role === "assistant" ? (answer.citations ?? []).map(studyCitationOrigin) : [];
+    }
+    if (origin.kind === "notebook-answer") {
+      if (notebookOwner(origin.notebookId) !== vaultId) return [];
+      const messages = await backend.loadMessages(origin.conversationId);
+      const answer = messages.find(
+        ({ message, notebookId }) =>
+          notebookId === origin.notebookId &&
+          message.id === origin.messageId &&
+          message.role === "assistant",
+      )?.message;
+      if (!answer) return [];
+      const cited = new Set(
+        answer.parts.flatMap((part) => (part.type === "text" ? citedNumbers(part.text) : [])),
+      );
+      const passages = passageRefSchema.array().safeParse(answer.metadata?.passages);
+      return passages.success
+        ? passages.data.flatMap(({ n, chunkId, sourceId, snippet }) =>
+            cited.has(n)
+              ? [{ kind: "source", notebookId: origin.notebookId, chunkId, sourceId, snippet }]
+              : [],
+          )
+        : [];
+    }
+    return [origin];
+  }
+
+  async function readPassage(origin: StudyOrigin): Promise<StudyPassage | undefined> {
+    if (origin.kind === "source") {
+      if (notebookOwner(origin.notebookId) !== vaultId) return;
+      const source = await backend.getSource(origin.sourceId);
+      if (source?.notebookId !== origin.notebookId) return;
+      const chunks = await getChunks([source.id]);
+      const snippet = origin.snippet?.slice(0, 280);
+      const quoted = snippet?.replace(/…$/u, "").trim();
+      const chunk = locateCitedChunk(chunks, origin.chunkId, quoted);
+      if (!chunk) return;
+      // A relocated excerpt confirms the saved quote, while its new surroundings may differ.
+      const text = (chunk.id === origin.chunkId ? chunk.text : quoted)
+        ?.trim()
+        .slice(0, cardEvidenceLimit);
+      if (text)
+        return {
+          origin: { ...origin, chunkId: chunk.id, snippet },
+          title: source.title.slice(0, 500),
+          text,
+        };
+    }
+    if (origin.kind === "note") {
+      const note = await backend.getNote(origin.noteId);
+      if (!note || studyVaultIndex({ ...ownership, notes: [note] }).noteOwner(note.id) !== vaultId)
+        return;
+      const body = origin.heading ? sectionOf(note.body, origin.heading) : note.body;
+      const text = body?.trim().slice(0, cardEvidenceLimit);
+      if (text) return { origin, title: note.title.slice(0, 500), text };
+    }
+    if (origin.kind === "book") {
+      const ids = [origin.bookId, ...(origin.highlightId ? [origin.highlightId] : [])];
+      const rows = await readStudyRowsInVault(ids, vaultId);
+      const book = rows.find((row) => row.kind === "book" && row.id === origin.bookId);
+      if (book?.kind !== "book") return;
+      const highlight = rows.find(
+        (row) => row.kind === "highlight" && row.id === origin.highlightId,
+      );
+      const revision = studyTextRevision(book);
+      if (origin.highlightId) {
+        if (highlight?.kind !== "highlight" || highlight.bookId !== book.id) return;
+        const offset = locateStudyMark(book, highlight);
+        const text = highlight.quote.slice(0, cardEvidenceLimit);
+        if (offset >= 0 && text.trim())
+          return {
+            origin: {
+              ...origin,
+              section: highlight.section,
+              offset,
+              length: text.length,
+              revision,
+            },
+            title: book.title.slice(0, 500),
+            text,
+          };
+        return;
+      }
+      const { section, offset, length } = origin;
+      if (section === undefined || offset === undefined || !length) return;
+      const range = resolveStudyRange(book, section, { offset, length, revision: origin.revision });
+      if (!range) return;
+      const end = range.offset + Math.min(range.length, cardEvidenceLimit);
+      const text = book.sections[section].text.slice(range.offset, end);
+      if (text.trim())
+        return {
+          origin: { ...origin, offset: range.offset, length: text.length, revision },
+          title: book.title.slice(0, 500),
+          text,
+        };
+    }
+  }
+
+  const loaded = new Map<string, Promise<StudyPassage | undefined>>();
+  await Promise.all(
+    cards.map(async (card) => {
+      const origins = new Map(
+        (await originsOf(card)).map((origin) => [JSON.stringify(origin), origin]),
+      );
+      const passages = await Promise.all(
+        [...origins].slice(0, 3).map(([key, origin]) => {
+          const pending = loaded.get(key) ?? readPassage(origin);
+          loaded.set(key, pending);
+          return pending;
+        }),
+      );
+      evidence.set(
+        card.id,
+        passages.filter((passage) => passage !== undefined),
+      );
+    }),
+  );
+  return evidence;
+}
+
 export async function readStudyTutorSources(
   thread: StudyThread,
   vaultId: string,
@@ -116,9 +261,13 @@ export async function readStudyTutorSources(
   if (thread.scope === "general") return {};
   if (thread.scope === "cards") {
     const ids = new Set(thread.cardIds);
+    const withEvidence = async (cards: StudyCard[]) => ({
+      cards,
+      cardEvidence: await readFlashcardEvidence(cards, vaultId),
+    });
     if (purpose === "report") {
       const practiced = recentPracticeCards(thread.messages).filter((id) => ids.has(id));
-      return { cards: await readStudyCardsInVault(practiced, vaultId, thread) };
+      return withEvidence(await readStudyCardsInVault(practiced, vaultId, thread));
     }
     const first =
       thread.practiceCardId && ids.has(thread.practiceCardId)
@@ -126,9 +275,10 @@ export async function readStudyTutorSources(
         : thread.cardIds?.[0];
     if (!first) return { cards: [] };
     const active = await readStudyCardsInVault([first], vaultId, thread);
-    if (active.length) return { cards: active };
+    if (active.length) return withEvidence(active);
     ids.delete(first);
-    return { cards: await readStudyCardsInVault([...ids], vaultId, thread) };
+    const remaining = await readStudyCardsInVault([...ids], vaultId, thread);
+    return withEvidence(remaining.slice(0, 1));
   }
   const backend = store();
   const bookIds = new Set(thread.scope === "materials" ? thread.bookIds : []);

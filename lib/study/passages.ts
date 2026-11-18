@@ -2,7 +2,7 @@ import type { Chunk, Note, Source } from "@/lib/db/types";
 import { selectPassages } from "@/lib/grounding/passages";
 import { extractHeadings, sameName } from "@/lib/notes/syntax";
 import { activeStudyCard, recentPracticeCards, selectedStudyCards } from "./recall";
-import { studyHighlightOrigin } from "./links";
+import { originHref, studyHighlightOrigin } from "./links";
 import type { StudyBook, StudyOrigin, StudyRecordOf, StudyThread } from "./records";
 import { locateStudyMark, studyTextRevision } from "./text-edits";
 
@@ -20,10 +20,13 @@ export type StudyTutorSources = {
     chunks: readonly Pick<Chunk, "id" | "text">[];
   })[];
   cards?: readonly StudyRecordOf<"card">[];
+  cardEvidence?: ReadonlyMap<string, StudyPassage[]>;
   highlights?: readonly { highlight: StudyRecordOf<"highlight">; book: StudyBook }[];
 };
 
 type SourcePassage = StudyPassage & { sourceId: string };
+
+export const cardEvidenceLimit = 1400;
 
 const windowSize = 1500;
 const overlap = 180;
@@ -167,7 +170,15 @@ function highlightPassages(highlight: StudyRecordOf<"highlight">, book: StudyBoo
 
 export function passagesFor(
   thread: StudyThread,
-  { book, books = [], notes = [], notebookSources = [], cards = [], highlights = [] }: StudyTutorSources,
+  {
+    book,
+    books = [],
+    notes = [],
+    notebookSources = [],
+    cards = [],
+    highlights = [],
+    cardEvidence,
+  }: StudyTutorSources,
   input: string,
   purpose: "chat" | "report" = "chat",
 ): StudyPassage[] {
@@ -180,8 +191,16 @@ export function passagesFor(
         : active
           ? [active]
           : [];
-    const limit = purpose === "report" ? 1_300 : 10_500;
-    return material.map(({ id, front, back }) => {
+    const evidence = new Map<string, StudyPassage>();
+    for (const card of material)
+      for (const passage of cardEvidence?.get(card.id) ?? [])
+        evidence.set(originHref(passage.origin), passage);
+    const sources = [...evidence.values()].slice(0, Math.min(3, 8 - material.length));
+    const limit =
+      purpose === "report"
+        ? 1_300
+        : 10_500 - sources.reduce((total, passage) => total + passage.text.length, 0);
+    const exercises = material.map(({ id, front, back }): StudyPassage => {
       const question = front.trim().slice(0, Math.floor(limit / 3));
       return {
         origin: { kind: "card", cardId: id },
@@ -189,6 +208,7 @@ export function passagesFor(
         text: `Question: ${question}\n\nAnswer: ${back.trim().slice(0, limit - question.length - 20)}`,
       };
     });
+    return [...exercises, ...sources];
   }
   if (thread.scope === "notes" || thread.scope === "materials") {
     const originNotes = new Set(thread.noteIds);

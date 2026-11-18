@@ -1030,6 +1030,95 @@ describe.each(backends)("%s store", (name, create) => {
       expect(await store().getStudy(own.id)).toMatchObject({ schedule: own.schedule });
     });
 
+    it("grounds flashcard practice in live excerpts and drops stale or cross-vault citations", async () => {
+      const work = await createVault({ name: "Engineering" });
+      const other = await createVault({ name: "Private" });
+      const quote = "A shared replica carries the quorum evidence.";
+      const book = await addStudyBook({
+        title: "Quorums",
+        format: "text",
+        vaultId: work,
+        sections: [{ title: "Overlap", text: quote }],
+      });
+      const [chunk] = await getChunks([book.sourceId]);
+      const privateNotebook = await createNotebook("Private evidence", { vaultId: other });
+      const privateSource = await addSource({
+        notebookId: privateNotebook,
+        title: "Private proof",
+        kind: "text",
+        text: "PRIVATE DATA",
+      });
+      const [privateChunk] = await getChunks([privateSource.id]);
+      const card = await saveStudyCard({
+        front: "What carries the evidence?",
+        back: "A shared replica.",
+        vaultId: work,
+        tags: [],
+        citations: [
+          {
+            index: 1,
+            title: "Quorums",
+            origin: {
+              kind: "source",
+              notebookId: book.notebookId,
+              sourceId: book.sourceId,
+              chunkId: chunk.id,
+              snippet: quote,
+            },
+          },
+          {
+            index: 2,
+            title: "Private proof",
+            origin: {
+              kind: "source",
+              notebookId: privateNotebook,
+              sourceId: privateSource.id,
+              chunkId: privateChunk.id,
+            },
+          },
+          {
+            index: 3,
+            title: "Wrong notebook",
+            origin: {
+              kind: "source",
+              notebookId: book.notebookId,
+              sourceId: privateSource.id,
+              chunkId: privateChunk.id,
+            },
+          },
+        ],
+      });
+      const readerCard = await saveStudyCard({
+        front: "What crosses the boundary?",
+        back: "Replica evidence.",
+        vaultId: work,
+        tags: [],
+        origin: { kind: "book", bookId: book.id, section: 0, offset: 0, length: quote.length },
+      });
+      const tutor = await startCardTutor([card.id, readerCard.id], work, "Quorum practice");
+      if (!tutor) throw new Error("Expected a Tutor practice session");
+      const read = async (practiceCardId: string) =>
+        (await readStudyTutorSources({ ...tutor, practiceCardId }, work)).cardEvidence?.get(
+          practiceCardId,
+        );
+      expect(await read(card.id)).toMatchObject([{ text: quote, origin: { chunkId: chunk.id } }]);
+      const prefix = "New background outside the saved excerpt.\n\n";
+      await saveStudyText(book.id, prefix + quote, { section: 0, original: quote });
+      const [moved] = await getChunks([book.sourceId]);
+      expect(moved.id).not.toBe(chunk.id);
+      expect(await read(card.id)).toMatchObject([{ text: quote, origin: { chunkId: moved.id } }]);
+      expect(await read(readerCard.id)).toMatchObject([
+        {
+          text: quote,
+          origin: { kind: "book", offset: prefix.length, length: quote.length, revision: 1 },
+        },
+      ]);
+
+      await saveStudyText(book.id, "A different proof.", { section: 0, original: prefix + quote });
+      expect(await read(card.id)).toEqual([]);
+      expect(await read(readerCard.id)).toEqual([]);
+    });
+
     it("keeps dated reports, flashcard origins and follow-ups through regeneration and backup", async () => {
       const legacy = {
         summary: "First report",
