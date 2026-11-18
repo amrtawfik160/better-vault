@@ -6,12 +6,13 @@
   "add": "Add source",
   "empty": {
     "title": "Add your first source",
-    "body": "Upload a PDF, Markdown or text file, add a web page, or paste text."
+    "body": "Upload a PDF, EPUB, Markdown or text file, add a web page, or paste text."
   },
   "kinds": {
     "text": "Text",
     "markdown": "Markdown",
     "pdf": "PDF",
+    "epub": "EPUB",
     "url": "Web page"
   },
   "words_one": "{{formattedCount}} word",
@@ -44,7 +45,7 @@
     },
     "drop": "Drop files here",
     "choose": "Choose files",
-    "fileTypes": "PDF, Markdown or text files, up to 20 MB each.",
+    "fileTypes": "PDF, EPUB, Markdown or text files, up to 20 MB each.",
     "urlLabel": "Address",
     "urlPlaceholder": "https://example.com/article",
     "urlHint": "The page's main text is saved as a source.",

@@ -390,4 +390,18 @@ describe("notebook citation handoff", () => {
       findStudyExcerpt([{ text: "Same line" }, { text: "Same line" }], "Same line"),
     ).toBeUndefined();
   });
+
+  it("opens the first chapter of a notebook passage that spans chapters", () => {
+    const sections = [
+      { text: "Start here.\n\nA quorum needs a majority." },
+      { text: "What changes when a replica fails?" },
+    ];
+    const excerpt = "A quorum needs a majority. What changes when a replica fails?";
+    const anchor = findStudyExcerpt(sections, excerpt);
+    expect(anchor).toMatchObject({ section: 0 });
+    expect(anchor && sections[0].text.slice(anchor.offset, anchor.offset + anchor.length)).toBe(
+      "A quorum needs a majority.",
+    );
+    expect(findStudyExcerpt([...sections, ...sections], excerpt)).toBeUndefined();
+  });
 });

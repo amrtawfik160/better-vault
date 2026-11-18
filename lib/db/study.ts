@@ -4,8 +4,8 @@ import type { PassageRef } from "@/lib/chat/types";
 import { notebookAnswerEvidence } from "@/lib/chat/study";
 import { freshSchedule, nextStudySchedule } from "@/lib/study/schedule";
 import { originHref, studyCitationOrigin } from "@/lib/study/links";
-import { studyPdfSections } from "@/lib/study/read-file";
-import { studyDocumentContent } from "@/lib/study/markdown-document";
+import { epubMime, readStudyEpub, studyPdfSections } from "@/lib/study/read-file";
+import { studyDocumentContent, studyMarkdownContent } from "@/lib/study/markdown-document";
 import { clearDocumentRecoveries } from "@/lib/study/document-drafts";
 import { locateStudyMark, resolveStudyRange, studyTextEdit, studyTextRevision } from "@/lib/study/text-edits";
 import { cardEvidenceLimit, type StudyPassage, type StudyTutorSources } from "@/lib/study/passages";
@@ -38,7 +38,7 @@ import type {
   StudyWord,
 } from "@/lib/study/records";
 import { createNote } from "./notes";
-import type { Note, Source, StudioOutput } from "./types";
+import type { Note, StudioOutput } from "./types";
 import { useStoreQuery } from "./live";
 import { createNotebook, deleteNotebook, renameNotebook } from "./notebooks";
 import { addSource, chunksForSource, getChunks, renameSource } from "./sources";
@@ -411,7 +411,7 @@ export async function addStudyBook(input: {
       notebookId,
       title,
       text,
-      kind: input.format === "pdf" ? "pdf" : "text",
+      kind: input.format,
       original: input.bytes && input.mime ? { data: input.bytes, mime: input.mime } : undefined,
     });
     const book: StudyBook = {
@@ -443,37 +443,47 @@ export async function studyBookForSource(sourceId: string) {
   if (existing) return existing;
   const source = await backend.getSource(sourceId);
   if (!source) throw new Error("This source was removed.");
-  const original =
-    source.kind === "pdf" && source.originalFileId
-      ? await backend.getBlob(source.originalFileId)
-      : undefined;
-  const pages =
-    original?.mime === "application/pdf"
-      ? await studyPdfSections(original.data).catch(() => undefined)
-      : undefined;
-  const book = bookFromSource(
-    source,
-    pages && original ? { sections: pages, fileId: original.id } : undefined,
-  );
-  await backend.insertStudy([book]);
-  return book;
-}
-
-function bookFromSource(source: Source, pdf?: Pick<StudyBook, "sections" | "fileId">): StudyBook {
-  return {
+  const original = source.originalFileId ? await backend.getBlob(source.originalFileId) : undefined;
+  const book: StudyBook = {
     id: `source-${source.id}`,
     kind: "book",
     notebookId: source.notebookId,
     sourceId: source.id,
     title: source.title,
-    format: pdf ? "pdf" : "text",
-    fileId: pdf?.fileId,
-    sections: pdf?.sections ?? [{ title: source.title, text: source.text }],
+    format: "text",
+    sections: [{ title: source.title, text: source.text }],
     section: 0,
     bookmarks: [],
     attachedToNotebook: true,
     updatedAt: Date.now(),
   };
+  if (original?.mime === "application/pdf") {
+    const pages = await studyPdfSections(original.data).catch(() => undefined);
+    if (pages?.length) {
+      book.format = "pdf";
+      book.fileId = original.id;
+      book.sections = pages;
+    }
+  } else if (original?.mime === epubMime) {
+    const epub = await readStudyEpub(original.data).catch(() => undefined);
+    if (epub?.sections.length) {
+      book.format = "epub";
+      book.fileId = original.id;
+      book.sections = epub.sections;
+    }
+  } else if (source.kind === "markdown") {
+    const body = original ? new TextDecoder().decode(original.data) : source.text;
+    const content = studyMarkdownContent(body);
+    if (content.text) {
+      book.fileId = original?.id;
+      book.sections = [{ title: source.title, ...content }];
+    }
+  }
+  const inserted = await backend.insertStudy([book]);
+  if (inserted) return book;
+  const current = await backend.getStudy(book.id);
+  if (current?.kind === "book") return current;
+  throw new Error("This source is no longer available in Study.");
 }
 
 export async function deleteStudyBook(book: StudyBook) {

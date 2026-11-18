@@ -52,6 +52,7 @@ import { studyVaultIndex } from "@/lib/study/vault";
 import { studyCitationOrigin } from "@/lib/study/links";
 import { studyDocumentDraftId } from "@/lib/study/document-drafts";
 import type { StudyDocumentRecovery } from "@/lib/study/records";
+import { ingestFile } from "@/lib/sources/ingest";
 import { resolveStudyRange } from "@/lib/study/text-edits";
 import { captureReportPracticeContext, matchesStudyReport, plannedStudySteps, studyReports } from "@/lib/study/reports";
 import {
@@ -889,6 +890,33 @@ describe.each(backends)("%s store", (name, create) => {
       expect(await store().getNotebook(notebookId)).toBeDefined();
       expect(await store().getSource(source.id)).toBeDefined();
       expect(await store().listStudy()).toEqual([]);
+    });
+
+    it("reads an uploaded Markdown source with its original formatting and preserves notebook chunks", async () => {
+      const notebookId = await createNotebook("Algorithms");
+      const markdown = "# Control flow\r\n\r\n~~~python\r\nif ready:\r\n    start()\r\n~~~";
+      const source = await ingestFile(notebookId, new File([markdown], "algorithms.markdown"));
+      expect(source).toMatchObject({ kind: "markdown", fileName: "algorithms.markdown" });
+      const original = await loadBlob(source.originalFileId ?? "");
+      expect(original?.type).toBe("text/markdown");
+      expect(await original?.text()).toBe(markdown);
+      const chunks = await getChunks([source.id]);
+
+      const study = await studyBookForSource(source.id);
+      expect(study).toMatchObject({
+        sourceId: source.id,
+        notebookId,
+        fileId: source.originalFileId,
+        format: "text",
+        attachedToNotebook: true,
+        sections: [{
+          text: "Control flow\nif ready:\n    start()",
+          markdown: markdown.replaceAll("\r\n", "\n"),
+        }],
+      });
+      expect(await getChunks([source.id])).toEqual(chunks);
+      expect(await store().listNotebooks()).toHaveLength(1);
+      expect(await store().listSources(notebookId)).toHaveLength(1);
     });
 
     it("adds a Studio set once and commits only one review for a due card", async () => {

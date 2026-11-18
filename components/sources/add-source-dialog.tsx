@@ -18,6 +18,7 @@ import { Textarea } from "@/components/panelui/textarea";
 import {
   ACCEPTED_FILES,
   IngestError,
+  SOURCE_EXTENSIONS,
   ingestFile,
   ingestText,
   ingestUrl,
@@ -30,9 +31,6 @@ import { isStorageReady, useStorageSettings } from "@/lib/storage/settings";
 import { cn } from "@/lib/utils";
 
 type Mode = "file" | "cloud" | "url" | "text";
-
-/** The file types a source can be, as extensions, for the cloud browser. */
-const SOURCE_EXTENSIONS = ["pdf", "md", "markdown", "mdx", "txt", "text", "csv"] as const;
 
 interface AddSourceDialogProps {
   notebookId: string;

@@ -1,11 +1,19 @@
 import type { Source, SourceKind } from "@/lib/db/database";
 import { addSource, attachImages } from "@/lib/db/sources";
+import { epubMime, readStudyEpub } from "@/lib/study/read-file";
 
 export const MAX_FILE_BYTES = 20 * 1024 * 1024;
 
 /** What the file picker offers. */
-export const ACCEPTED_FILES =
-  ".pdf,.md,.markdown,.mdx,.txt,.text,.csv,application/pdf,text/plain,text/markdown,text/csv";
+export const SOURCE_EXTENSIONS = ["pdf", "epub", "md", "markdown", "mdx", "txt", "text", "csv"];
+export const ACCEPTED_FILES = [
+  ...SOURCE_EXTENSIONS.map((extension) => `.${extension}`),
+  "application/pdf",
+  epubMime,
+  "text/plain",
+  "text/markdown",
+  "text/csv",
+].join(",");
 
 export type IngestFailure = "type" | "tooLarge" | "empty" | "read";
 
@@ -49,7 +57,7 @@ async function postForText(body: BodyInit, headers?: HeadersInit) {
   return json as { title: string; text: string; kind: SourceKind; url?: string };
 }
 
-/** Reads a PDF, Markdown or text file and adds it to the notebook. */
+/** Reads a document and adds its text to the notebook. */
 export async function ingestFile(notebookId: string, file: File): Promise<Source> {
   if (file.size > MAX_FILE_BYTES) throw new IngestError("tooLarge", file.name);
   const ext = extension(file.name);
@@ -81,8 +89,31 @@ export async function ingestFile(notebookId: string, file: File): Promise<Source
       .catch(() => undefined);
     return source;
   }
+  if (ext === "epub" || file.type === epubMime) {
+    const data = new Uint8Array(await file.arrayBuffer());
+    const book = await readStudyEpub(data).catch((error: unknown) => {
+      throw new IngestError(
+        "read",
+        file.name,
+        error instanceof Error ? error.message : String(error),
+      );
+    });
+    return save({
+      ...base,
+      title: book.title || base.title,
+      kind: "epub",
+      text: book.sections.map(({ text }) => text).join("\n\n"),
+      original: { mime: epubMime, data },
+    });
+  }
   if (["md", "markdown", "mdx"].includes(ext) || file.type === "text/markdown") {
-    return save({ ...base, kind: "markdown", text: await file.text() });
+    const data = new Uint8Array(await file.arrayBuffer());
+    return save({
+      ...base,
+      kind: "markdown",
+      text: new TextDecoder().decode(data),
+      original: { mime: "text/markdown", data },
+    });
   }
   if (["txt", "text", "csv"].includes(ext) || file.type.startsWith("text/")) {
     return save({ ...base, kind: "text", text: await file.text() });

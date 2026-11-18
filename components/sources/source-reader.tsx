@@ -7,6 +7,7 @@ import { Button } from "@/components/panelui/button";
 import { startSourceTutor, studyBookForSource } from "@/lib/db/study";
 import { originHref } from "@/lib/study/links";
 import { findStudyExcerpt, locateCitedChunk } from "@/lib/study/locators";
+import { studyMarkdownContent } from "@/lib/study/markdown-document";
 import { studyTextRevision } from "@/lib/study/text-edits";
 import { Icon } from "@/components/icon";
 import { Markdown } from "@/components/chat/markdown";
@@ -94,12 +95,22 @@ function ReaderBody({ sourceId, passage, snippet }: NonNullable<SourceReaderProp
               void openStudy(async () => {
                 const book = await studyBookForSource(source.id);
                 const text = excerpt || cited?.text;
-                const anchor = text ? findStudyExcerpt(book.sections, text) : undefined;
-                return originHref({
-                  kind: "book",
-                  bookId: book.id,
-                  ...(anchor ? { ...anchor, revision: studyTextRevision(book) } : {}),
-                });
+                const anchor = text
+                  ? (findStudyExcerpt(book.sections, text) ??
+                    (source.kind === "markdown"
+                      ? findStudyExcerpt(book.sections, studyMarkdownContent(text).text)
+                      : undefined))
+                  : undefined;
+                const destination = new URL(
+                  originHref({
+                    kind: "book",
+                    bookId: book.id,
+                    ...(anchor ? { ...anchor, revision: studyTextRevision(book) } : {}),
+                  }),
+                  window.location.href,
+                );
+                destination.searchParams.set("notebook", source.notebookId);
+                return destination.pathname + destination.search;
               })
             }
           >

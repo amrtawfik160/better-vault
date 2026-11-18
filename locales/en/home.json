@@ -19,7 +19,7 @@
   },
   "drop": {
     "title": "Drop to start a notebook",
-    "body": "PDF, Markdown and text files become its first sources."
+    "body": "PDF, EPUB, Markdown and text files become its first sources."
   },
   "dialog": {
     "createTitle": "New notebook",
@@ -117,7 +117,7 @@
     "search": "Search",
     "importFiles": "Import files",
     "emptyTitle": "This vault is empty",
-    "emptyBody": "Start a notebook, or drop PDF, Markdown and text files anywhere on this page.",
+    "emptyBody": "Start a notebook, or drop PDF, EPUB, Markdown and text files anywhere on this page.",
     "sidebar": "Vault sidebar",
     "switch": "Switch vault",
     "appTitle": "deepLe",

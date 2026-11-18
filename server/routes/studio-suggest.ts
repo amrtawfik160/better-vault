@@ -5,23 +5,12 @@ import { describeError } from "@/lib/ai/errors";
 import { createLanguageModel } from "@/lib/ai/providers";
 import { credentialsSchema, effortSchema, modelRefSchema } from "@/lib/ai/request";
 import type { Passage } from "@/lib/grounding/passages";
+import { passageSchema } from "@/lib/grounding/passage-schema";
 import { studioSystem } from "@/studio/server/shared";
 
 const bodySchema = z.object({
   language: z.string().min(1).max(20),
-  passages: z
-    .array(
-      z.object({
-        n: z.number().int().positive(),
-        chunkId: z.string(),
-        sourceId: z.string(),
-        title: z.string(),
-        kind: z.enum(["text", "markdown", "pdf", "url"]),
-        text: z.string(),
-      }),
-    )
-    .min(1)
-    .max(200),
+  passages: z.array(passageSchema).min(1).max(200),
   model: modelRefSchema,
   credentials: credentialsSchema,
   effort: effortSchema,

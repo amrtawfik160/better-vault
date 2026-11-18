@@ -2,7 +2,7 @@ import { openStudyEpub } from "./epub";
 import { studyMarkdownContent } from "./markdown-document";
 import type { StudySection } from "./records";
 
-const epubMime = "application/epub+zip";
+export const epubMime = "application/epub+zip";
 const maxFileSize = 50 * 1024 * 1024;
 const maxTextLength = 2_000_000;
 
@@ -14,7 +14,7 @@ type ParsedDocument = {
   mime: string;
 };
 
-async function readEpub(bytes: Uint8Array) {
+export async function readStudyEpub(bytes: Uint8Array) {
   const book = await openStudyEpub(bytes);
   const sections: StudySection[] = [];
   let characters = 0;
@@ -52,8 +52,13 @@ export async function readStudyFile(file: File): Promise<ParsedDocument> {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const fallback = file.name.replace(/\.[^.]+$/, "").trim() || "Untitled";
   const extension = file.name.split(".").pop()?.toLowerCase();
+  const markdown =
+    extension === "md" ||
+    extension === "markdown" ||
+    extension === "mdx" ||
+    file.type === "text/markdown";
   let result: ParsedDocument;
-  if (extension === "pdf") {
+  if (extension === "pdf" || file.type === "application/pdf") {
     result = {
       title: fallback,
       format: "pdf",
@@ -61,18 +66,18 @@ export async function readStudyFile(file: File): Promise<ParsedDocument> {
       mime: "application/pdf",
       sections: await studyPdfSections(bytes),
     };
-  } else if (extension === "epub") {
-    const { title, sections } = await readEpub(bytes);
+  } else if (extension === "epub" || file.type === epubMime) {
+    const { title, sections } = await readStudyEpub(bytes);
     result = { title: title || fallback, format: "epub", bytes, mime: epubMime, sections };
-  } else if (extension === "txt" || extension === "md") {
+  } else if (markdown || extension === "txt" || extension === "text" || file.type === "text/plain") {
     const text = new TextDecoder().decode(bytes);
     if (text.length > maxTextLength) throw new Error("This document has too much text.");
-    const content = extension === "md" ? studyMarkdownContent(text) : { text: text.trim() };
+    const content = markdown ? studyMarkdownContent(text) : { text: text.trim() };
     result = {
       title: fallback,
       format: "text",
       bytes,
-      mime: extension === "md" ? "text/markdown" : "text/plain",
+      mime: markdown ? "text/markdown" : "text/plain",
       sections: [{ title: fallback, ...content }],
     };
   } else throw new Error("Choose a PDF, EPUB, Markdown, or text file.");

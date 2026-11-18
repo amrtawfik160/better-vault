@@ -4,18 +4,10 @@ import { describeError } from "@/lib/ai/errors";
 import { createImageModel, createLanguageModel, createSpeechModel } from "@/lib/ai/providers";
 import { credentialsSchema, effortSchema, modelRefSchema } from "@/lib/ai/request";
 import type { Passage } from "@/lib/grounding/passages";
+import { passageSchema } from "@/lib/grounding/passage-schema";
 import { toolDefinitions } from "@/studio/definitions";
 import { generators } from "@/studio/server/generators";
 import { studioToolIds } from "@/studio/tools";
-
-const passageSchema = z.object({
-  n: z.number().int().positive(),
-  chunkId: z.string(),
-  sourceId: z.string(),
-  title: z.string(),
-  kind: z.enum(["text", "markdown", "pdf", "url"]),
-  text: z.string(),
-});
 
 const bodySchema = z.object({
   tool: z.enum(studioToolIds),

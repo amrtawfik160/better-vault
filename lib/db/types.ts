@@ -195,7 +195,8 @@ export interface StoredBlob {
   createdAt: number;
 }
 
-export type SourceKind = "text" | "markdown" | "pdf" | "url";
+export const sourceKinds = ["text", "markdown", "pdf", "epub", "url"] as const;
+export type SourceKind = (typeof sourceKinds)[number];
 
 export interface Source {
   id: string;

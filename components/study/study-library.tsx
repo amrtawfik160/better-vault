@@ -8,7 +8,7 @@ import {
   PencilEdit01Icon,
   TextIcon,
 } from "@hugeicons/core-free-icons";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 import { toast } from "sonner";
@@ -20,8 +20,10 @@ import { Card } from "@/components/panelui/card";
 import { Dialog } from "@/components/panelui/dialog";
 import { Input } from "@/components/panelui/input";
 import { Menu } from "@/components/panelui/menu";
+import { sourceKindIcons } from "@/components/sources/source-kind";
 import { useNotebook } from "@/lib/db/notebooks";
-import { addStudyBook, deleteStudyBook, renameStudyBook } from "@/lib/db/study";
+import { useSources } from "@/lib/db/sources";
+import { addStudyBook, deleteStudyBook, renameStudyBook, studyBookForSource } from "@/lib/db/study";
 import { currentVaultId } from "@/lib/db/vaults";
 import { routes } from "@/lib/routes";
 import { studyHref } from "@/lib/study/links";
@@ -47,16 +49,46 @@ export function StudyLibrary({
 }) {
   const { t } = useTranslation("home");
   const { t: tNotes } = useTranslation("notes");
+  const { t: tCommon } = useTranslation();
+  const { t: tSources } = useTranslation("sources");
   const input = useRef<HTMLInputElement>(null);
+  const openingSource = useRef<AbortController>(null);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
+  const [opening, setOpening] = useState<string>();
   const [deleting, setDeleting] = useState<StudyBook | null>(null);
   const [editing, setEditing] = useState<StudyBook | null>(null);
   const [drafting, setDrafting] = useState<string>();
   const recovery = useStudyDocumentRecovery({ id: studyDocumentDraftId({ vaultId }), vaultId });
-  const matches = books.filter((book) =>
-    book.title.toLowerCase().includes(search.trim().toLowerCase()),
+  const sources = useSources(notebookId ?? "");
+  const studied = new Set(books.map(({ sourceId }) => sourceId));
+  const unread = (sources ?? []).filter(
+    (source) => source.notebookId === notebookId && !studied.has(source.id),
   );
+  const query = search.trim().toLowerCase();
+  const matches = books.filter(({ title }) => title.toLowerCase().includes(query));
+  const unreadMatches = unread.filter(({ title }) => title.toLowerCase().includes(query));
+
+  useEffect(() => () => openingSource.current?.abort(), [notebookId, vaultId]);
+
+  async function readSource(id: string) {
+    if (openingSource.current && !openingSource.current.signal.aborted) return;
+    const request = new AbortController();
+    openingSource.current = request;
+    setOpening(id);
+    try {
+      const book = await studyBookForSource(id);
+      if (!request.signal.aborted && currentVaultId() === vaultId) openBook(book);
+    } catch (error) {
+      if (!request.signal.aborted)
+        toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      if (openingSource.current === request) {
+        openingSource.current = null;
+        setOpening(undefined);
+      }
+    }
+  }
 
   async function importBooks(files: File[]) {
     setLoading(true);
@@ -113,7 +145,7 @@ export function StudyLibrary({
             <input
               ref={input}
               type="file"
-              accept=".pdf,.epub,.txt,.md"
+              accept=".pdf,.epub,.txt,.text,.md,.markdown,.mdx,application/pdf,application/epub+zip,text/plain,text/markdown"
               multiple
               hidden
               onChange={(event) => {
@@ -126,7 +158,7 @@ export function StudyLibrary({
         )}
       </div>
       {notebookId ? <NotebookLibraryScope notebookId={notebookId} /> : null}
-      {books.length ? (
+      {books.length || unread.length ? (
         <Input
           type="search"
           className="max-w-sm"
@@ -198,21 +230,62 @@ export function StudyLibrary({
             </Card>
           ))}
         </ul>
-      ) : (
+      ) : null}
+      {unreadMatches.length ? (
+        <section className="space-y-3" aria-labelledby="study-notebook-sources">
+          <h3 id="study-notebook-sources" className="text-sm font-medium text-muted-foreground">
+            {t("study.materials.sources")}
+          </h3>
+          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {unreadMatches.map((source) => (
+              <Card as="li" size="sm" key={source.id} className="min-w-0 shadow-none">
+                <Card.Header>
+                  <Card.Title as="h4">
+                    <button
+                      type="button"
+                      disabled={opening !== undefined}
+                      aria-busy={opening === source.id}
+                      className="flex w-full min-w-0 cursor-pointer items-center gap-3 rounded-xl text-start outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-60"
+                      onClick={() => void readSource(source.id)}
+                    >
+                      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground">
+                        <Icon icon={sourceKindIcons[source.kind]} size={18} />
+                      </span>
+                      <span className="truncate" dir="auto">
+                        {source.title}
+                      </span>
+                    </button>
+                  </Card.Title>
+                </Card.Header>
+                <Card.Content>
+                  <p className="text-xs text-muted-foreground">
+                    {tSources(`kinds.${source.kind}`)}
+                  </p>
+                </Card.Content>
+              </Card>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {notebookId && sources === undefined && !matches.length ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {tCommon("status.loading")}
+        </p>
+      ) : !matches.length && !unreadMatches.length ? (
         <div className="flex flex-col items-center gap-3 px-6 py-14 text-center">
           <span className="grid size-14 place-items-center rounded-2xl bg-muted text-muted-foreground">
             <Icon icon={Book02Icon} size={24} />
           </span>
           <p className="font-semibold">
-            {t(books.length ? "study.library.noMatches" : "study.library.empty")}
+            {t(books.length || unread.length ? "study.library.noMatches" : "study.library.empty")}
           </p>
-          {books.length ? null : (
+          {books.length || unread.length ? null : (
             <p className="max-w-xs text-sm text-muted-foreground">
               {t(notebookId ? "study.library.emptyNotebook" : "study.library.emptyDescription")}
             </p>
           )}
         </div>
-      )}
+      ) : null}
       {drafting === vaultId ? (
         <NewStudyDocument
           key={vaultId}

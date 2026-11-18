@@ -25,7 +25,10 @@ export function locateCitedChunk<T extends { id: string; text: string }>(
 }
 
 /** Finds an imported excerpt even when the notebook normalized its whitespace. */
-export function findStudyExcerpt(sections: { text: string }[], excerpt: string) {
+export function findStudyExcerpt(
+  sections: { text: string }[],
+  excerpt: string,
+): { section: number; offset: number; length: number } | undefined {
   const query = compact(excerpt);
   if (!query) return;
   let found: { section: number; offset: number; length: number } | undefined;
@@ -51,5 +54,17 @@ export function findStudyExcerpt(sections: { text: string }[], excerpt: string) 
     }
     found = { section, offset, length };
   }
-  return found;
+  if (found || sections.length <= 1) return found;
+
+  // A notebook chunk can contain the end of one chapter and the start of another.
+  const separator = "\n\n";
+  const combined = sections.map(({ text }) => text).join(separator);
+  const match = findStudyExcerpt([{ text: combined }], excerpt);
+  if (!match) return;
+  let offset = match.offset;
+  for (const [section, { text }] of sections.entries()) {
+    if (offset < text.length)
+      return { section, offset, length: Math.min(match.length, text.length - offset) };
+    offset -= text.length + separator.length;
+  }
 }

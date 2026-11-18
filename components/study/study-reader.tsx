@@ -595,7 +595,7 @@ export function StudyReader({
           {fileId && originalFile ? (
             <a
               href={originalFile.url}
-              download={`${book.title}.${book.format === "text" ? (originalFile.mime === "text/markdown" ? "md" : "txt") : book.format}`}
+              download={source?.fileName ?? `${book.title}.${book.format === "text" ? (originalFile.mime === "text/markdown" ? "md" : "txt") : book.format}`}
               className="rounded-lg border px-3 py-2 text-sm hover:bg-accent"
             >
               Download original

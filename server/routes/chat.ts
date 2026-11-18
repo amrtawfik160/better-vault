@@ -16,15 +16,7 @@ import { createVisualTools } from "../visual-tools";
 import { credentialsSchema, effortSchema, modelRefSchema } from "@/lib/ai/request";
 import type { ChatMessage, ChatMessageMetadata, TokenUsage } from "@/lib/chat/types";
 import { toPassageRefs, stripCitations, type Passage } from "@/lib/grounding/passages";
-
-const passageSchema = z.object({
-  n: z.number().int().positive(),
-  chunkId: z.string(),
-  sourceId: z.string(),
-  title: z.string(),
-  kind: z.enum(["text", "markdown", "pdf", "url"]),
-  text: z.string(),
-});
+import { passageSchema } from "@/lib/grounding/passage-schema";
 
 const bodySchema = z.object({
   messages: z
