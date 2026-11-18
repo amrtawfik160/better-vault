@@ -174,8 +174,8 @@
       "incorrect": "Not quite",
       "score": "You got {{score}} of {{total}} right",
       "retry": "Try again",
-      "reviewMissed_one": "Add {{count}} missed question to review",
-      "reviewMissed_other": "Add {{count}} missed questions to review",
+      "reviewMissed_one": "Review {{count}} missed question",
+      "reviewMissed_other": "Review {{count}} missed questions",
       "savedMissed_one": "{{count}} question added to review",
       "savedMissed_other": "{{count}} questions added to review",
       "missedAlreadySaved": "These questions are already in review",
@@ -404,7 +404,9 @@
     }
   },
   "viewer": {
-    "addToStudy": "Add to review",
+    "addToStudy": "Review in Study",
+    "answerSources": "Sources",
+    "noStudyCards": "This set has no flashcards to review.",
     "studyCardsAdded_one": "Added {{count}} flashcard to Study",
     "studyCardsAdded_other": "Added {{count}} flashcards to Study",
     "back": "All outputs",

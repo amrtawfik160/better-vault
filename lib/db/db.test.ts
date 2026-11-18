@@ -619,7 +619,10 @@ describe.each(backends)("%s store", (name, create) => {
           ],
         },
       } satisfies import("./types").StudioOutput;
-      expect(await addQuizMissesToStudy(output, [1, 1, 9])).toBe(1);
+      expect(await addQuizMissesToStudy(output, [1, 1, 9])).toEqual({
+        added: 1,
+        cardIds: ["quiz-quiz-1"],
+      });
       expect(await store().getStudy("quiz-quiz-0")).toBeUndefined();
       expect(await rateStudyItem("quiz-quiz-1", "easy", 1)).toBe(true);
       const card = await store().getStudy("quiz-quiz-1");
@@ -628,7 +631,7 @@ describe.each(backends)("%s store", (name, create) => {
         back: "B\n\nBecause B.",
         origin: { kind: "studio", notebookId, outputId: "quiz" },
       });
-      expect(await addQuizMissesToStudy(output, [1])).toBe(0);
+      expect(await addQuizMissesToStudy(output, [1])).toEqual({ added: 0, cardIds: ["quiz-quiz-1"] });
       expect(await store().getStudy("quiz-quiz-1")).toEqual(card);
     });
     it("keeps uploaded originals with notebook sources through a backup", async () => {
@@ -698,6 +701,13 @@ describe.each(backends)("%s store", (name, create) => {
 
     it("adds a Studio set once and commits only one review for a due card", async () => {
       const notebookId = await createNotebook("Notebook");
+      const source = await addSource({
+        notebookId,
+        title: "Lecture",
+        kind: "text",
+        text: "Evidence for why this works.",
+      });
+      const [chunk] = await getChunks([source.id]);
       const output = {
         id: "output",
         notebookId,
@@ -707,11 +717,32 @@ describe.each(backends)("%s store", (name, create) => {
         createdAt: 0,
         updatedAt: 0,
         options: {},
-        sourceIds: [],
-        data: { cards: [{ front: "Why?", back: "Because." }] },
+        sourceIds: [source.id],
+        data: {
+          cards: [
+            {
+              front: "Why?",
+              back: "Because.",
+              sources: [
+                {
+                  n: 1,
+                  sourceId: source.id,
+                  chunkId: chunk.id,
+                  title: source.title,
+                  kind: source.kind,
+                  snippet: chunk.text,
+                },
+              ],
+            },
+          ],
+        },
       } satisfies import("./types").StudioOutput;
-      const counts = await Promise.all([addStudioFlashcards(output), addStudioFlashcards(output)]);
-      expect(counts.sort()).toEqual([0, 1]);
+      const results = await Promise.all([addStudioFlashcards(output), addStudioFlashcards(output)]);
+      expect(results.map(({ added }) => added).sort()).toEqual([0, 1]);
+      expect(results.map(({ cardIds }) => cardIds)).toEqual([
+        ["studio-output-0"],
+        ["studio-output-0"],
+      ]);
       const card = await store().getStudy("studio-output-0");
       if (card?.kind !== "card") throw new Error("Expected the Studio flashcard");
       const dueAt = card.schedule.dueAt;
@@ -723,7 +754,7 @@ describe.each(backends)("%s store", (name, create) => {
       ]);
       expect(grades.sort()).toEqual([false, true]);
       const reviewed = await store().getStudy("studio-output-0");
-      expect(await addStudioFlashcards(output)).toBe(0);
+      expect(await addStudioFlashcards(output)).toEqual({ added: 0, cardIds: ["studio-output-0"] });
       expect(await store().getStudy("studio-output-0")).toEqual(reviewed);
       expect((await store().listStudy()).filter(({ kind }) => kind === "session")).toMatchObject([
         { reviewSessionId: review.sessionId, itemId: card.id },
@@ -733,6 +764,19 @@ describe.each(backends)("%s store", (name, create) => {
       await importBackup(backup);
       expect(await store().getStudy("studio-output-0")).toMatchObject({
         origin: { kind: "studio", outputId: "output", notebookId },
+        citations: [
+          {
+            index: 1,
+            title: "Lecture",
+            origin: {
+              kind: "source",
+              notebookId,
+              sourceId: source.id,
+              chunkId: chunk.id,
+              snippet: chunk.text,
+            },
+          },
+        ],
       });
       expect((await store().listStudy()).filter(({ kind }) => kind === "session")).toMatchObject([
         { reviewSessionId: review.sessionId, itemId: card.id },

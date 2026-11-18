@@ -23,10 +23,15 @@ export function StudyOriginLink({
     readerTutor && origin.kind === "book" && origin.bookId === params.get("book")
       ? `${href}&${new URLSearchParams({ readerTutor, readerView: "book" })}`
       : href;
+  const returnState = state ?? current;
   return (
     <Link
       to={destination}
-      state={state ?? current}
+      state={
+        origin.kind === "source" && origin.snippet
+          ? { ...returnState, studySourceSnippet: origin.snippet }
+          : returnState
+      }
       onClick={onClick}
       className="inline-flex rounded-lg px-2 py-1 text-sm text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring"
     >

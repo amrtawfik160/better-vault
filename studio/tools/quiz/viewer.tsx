@@ -12,12 +12,13 @@ import { textDirection } from "@/lib/text/direction";
 import { Button } from "@/components/panelui/button";
 import { cn } from "@/lib/utils";
 import type { ToolViewerProps } from "@/studio/shared/form";
+import { StudioStudySources } from "@/studio/shared/study-sources";
 import type { QuizData } from "./definition";
 
 const LETTERS = "ABCDEFGH";
 
 /** One question at a time: pick an answer, see why, and get a score at the end. */
-export function QuizViewer({ data, onReviewMissed }: ToolViewerProps<QuizData>) {
+export function QuizViewer({ data, onReviewMissed, onOpenPassage }: ToolViewerProps<QuizData>) {
   const { t } = useTranslation("studio");
   const total = data.questions.length;
   const [index, setIndex] = useState(0);
@@ -148,6 +149,7 @@ export function QuizViewer({ data, onReviewMissed }: ToolViewerProps<QuizData>) 
             {chosen === question.answer ? t("quiz.viewer.correct") : t("quiz.viewer.incorrect")}
           </p>
           <DirectionalText multiline className="mt-1" text={question.explanation} />
+          <StudioStudySources sources={question.sources} open={onOpenPassage} />
         </div>
       ) : question.hint ? (
         hint ? (

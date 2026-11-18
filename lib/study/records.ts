@@ -43,6 +43,7 @@ export const studyOriginSchema = z.discriminatedUnion("kind", [
     notebookId: z.string(),
     sourceId: z.string(),
     chunkId: z.string(),
+    snippet: z.string().max(280).optional(),
   }),
   z.object({ kind: z.literal("tutor"), threadId: z.string(), message: index.optional() }),
   z.object({
@@ -167,6 +168,7 @@ export const studyRecordSchema = z.discriminatedUnion("kind", [
     image: z.string().optional(),
     backImage: z.string().optional(),
     origin: studyOriginSchema.optional(),
+    citations: z.array(citation).optional(),
     tags: z.array(z.string()),
     schedule,
   }),

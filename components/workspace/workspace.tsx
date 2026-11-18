@@ -64,7 +64,12 @@ function WorkspaceLayout() {
     handled.current = key;
     if (source) {
       setTab("sources");
-      readSource(source, params.get("passage") ?? undefined);
+      const snippet = state?.studySourceSnippet;
+      readSource(
+        source,
+        params.get("passage") ?? undefined,
+        typeof snippet === "string" ? snippet.slice(0, 280) : undefined,
+      );
     } else if (view === "chat" || view === "sources" || view === "studio") {
       setTab(view);
     }

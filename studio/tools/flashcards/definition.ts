@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { passageRefSchema } from "@/lib/grounding/passage-schema";
 import { csvRow } from "@/studio/csv";
 import { defineTool, textBlob } from "@/studio/types";
 
@@ -11,7 +12,13 @@ export const flashcardsOptions = z.object({
 });
 
 export const flashcardsData = z.object({
-  cards: z.array(z.object({ front: z.string(), back: z.string() })),
+  cards: z.array(
+    z.object({
+      front: z.string(),
+      back: z.string(),
+      sources: z.array(passageRefSchema).optional(),
+    }),
+  ),
 });
 
 export type FlashcardsOptions = z.infer<typeof flashcardsOptions>;

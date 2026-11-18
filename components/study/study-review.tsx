@@ -245,7 +245,10 @@ export function StudyReview({
     origin?.kind === "tutor" && origin.message !== undefined
       ? threads.find(({ id }) => id === origin.threadId)?.messages[origin.message]
       : undefined;
-  const citations = message?.role === "assistant" ? (message.citations ?? []) : [];
+  const cardCitations = item?.kind === "card" ? item.citations : undefined;
+  const citations = cardCitations ?? (message?.role === "assistant" ? (message.citations ?? []) : []);
+  const library = libraryHref ?? studyHref(useHighlights ? "highlights" : "cards", { vault: vaultId });
+  const libraryName = libraryLabel ?? (useHighlights ? "Open highlights" : "Open flashcards");
   const returnState = { studyReturn: destination };
 
   return (
@@ -260,6 +263,11 @@ export function StudyReview({
             : `${queue.length} due · ${rated} reviewed this session`}
           {collection ? ` · ${collection}` : ""}
         </p>
+        {item && libraryHref ? (
+          <Link to={library} className="text-sm text-muted-foreground underline underline-offset-4">
+            {libraryName}
+          </Link>
+        ) : null}
       </div>
       {item ? (
         <div
@@ -315,7 +323,9 @@ export function StudyReview({
               {wordOrigin && !busy ? <StudyOriginLink origin={wordOrigin} state={returnState} /> : null}
               {citations.length && !busy ? (
                 <div>
-                  <p className="text-sm text-muted-foreground">{t("study.capture.tutorAnswerSources")}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {t(cardCitations ? "study.capture.cardSources" : "study.capture.tutorAnswerSources")}
+                  </p>
                   <div className="flex flex-wrap gap-1">
                     {citations.map((citation) => (
                       <StudyOriginLink
@@ -416,10 +426,10 @@ export function StudyReview({
               </Link>
             ) : null}
             <Link
-              to={libraryHref ?? studyHref(useHighlights ? "highlights" : "cards", { vault: vaultId })}
+              to={library}
               className="underline underline-offset-4"
             >
-              {libraryLabel ?? (useHighlights ? "Open highlights" : "Open flashcards")}
+              {libraryName}
             </Link>
           </div>
         </div>

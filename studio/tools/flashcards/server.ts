@@ -1,6 +1,6 @@
 import { generateText, Output } from "ai";
 import { z } from "zod";
-import { clean, studioSystem, type Generator } from "@/studio/server/shared";
+import { clean, studioSourceRefs, studioSystem, type Generator } from "@/studio/server/shared";
 import { flashcardCounts, type FlashcardsData, type FlashcardsOptions } from "./definition";
 
 const LEVEL = {
@@ -15,6 +15,7 @@ const schema = z.object({
     z.object({
       front: z.string().describe("A question or term, at most about 15 words"),
       back: z.string().describe("The answer, one to three sentences"),
+      citations: z.array(z.number()).describe("Numbers of the passages supporting the answer"),
     }),
   ),
 });
@@ -30,7 +31,7 @@ export const generateFlashcards: Generator<FlashcardsOptions, FlashcardsData> = 
     model,
     output: Output.object({ schema }),
     system: studioSystem(
-      `Create ${count} flashcards for studying the sources. ${LEVEL[options.difficulty]} Each card has a short front (a question or a term) and a concise back. Do not repeat a card.`,
+      `Create ${count} flashcards for studying the sources. ${LEVEL[options.difficulty]} Each card has a short front (a question or a term) and a concise back. Cite up to three numbered passages that support each answer in citations. Do not repeat a card.`,
       args,
     ),
     prompt: `Create the ${count} flashcards now.`,
@@ -38,7 +39,11 @@ export const generateFlashcards: Generator<FlashcardsOptions, FlashcardsData> = 
   });
   const seen = new Set<string>();
   const cards = output.cards
-    .map((card) => ({ front: clean(card.front), back: clean(card.back) }))
+    .map((card) => ({
+      front: clean(card.front),
+      back: clean(card.back),
+      sources: studioSourceRefs(args.passages, card.citations),
+    }))
     .filter(
       (card) =>
         card.front &&

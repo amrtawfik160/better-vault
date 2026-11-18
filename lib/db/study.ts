@@ -1,4 +1,5 @@
 import { generateId } from "ai";
+import type { PassageRef } from "@/lib/chat/types";
 import { freshSchedule, nextStudySchedule } from "@/lib/study/schedule";
 import { originHref } from "@/lib/study/links";
 import { studyPdfSections } from "@/lib/study/read-file";
@@ -313,7 +314,7 @@ export async function deleteStudyBook(book: StudyBook) {
 export type StudyCard = StudyRecordOf<"card">;
 type CardContent = Pick<
   StudyCard,
-  "front" | "back" | "image" | "backImage" | "tags" | "notebookId" | "origin" | "vaultId"
+  "front" | "back" | "image" | "backImage" | "tags" | "notebookId" | "origin" | "vaultId" | "citations"
 >;
 
 export function newStudyCard(content: CardContent, id = studyId()): StudyCard {
@@ -360,12 +361,31 @@ export async function studyVocabularyCards(ids: string[], vaultId: string) {
   return result.kind === "cards" ? result.cardIds : [];
 }
 
+function studioCardCitations(
+  notebookId: string,
+  sources?: readonly PassageRef[],
+): StudyCard["citations"] {
+  return sources
+    ?.filter(({ n }) => Number.isSafeInteger(n) && n > 0)
+    .slice(0, 3)
+    .map(({ n, title, sourceId, chunkId, snippet }) => ({
+      index: n,
+      title,
+      origin: { kind: "source", notebookId, sourceId, chunkId, snippet: snippet.slice(0, 280) },
+    }));
+}
+
+async function saveStudioReviewCards(cards: StudyCard[]) {
+  const added = await store().insertStudy(cards);
+  return { added, cardIds: cards.map(({ id }) => id) };
+}
+
 export async function addStudioFlashcards(output: StudioOutput) {
   if (output.status !== "ready" || output.toolId !== "flashcards")
     throw new Error("Open a completed Studio flashcard set first.");
   const parsed = flashcardsData.parse(output.data);
-  return store().insertStudy(
-    parsed.cards.map(({ front, back }, position) =>
+  return saveStudioReviewCards(
+    parsed.cards.map(({ front, back, sources }, position) =>
       newStudyCard(
         {
           front,
@@ -373,6 +393,7 @@ export async function addStudioFlashcards(output: StudioOutput) {
           tags: [output.title],
           notebookId: output.notebookId,
           origin: { kind: "studio", notebookId: output.notebookId, outputId: output.id },
+          citations: studioCardCitations(output.notebookId, sources),
         },
         `studio-${output.id}-${position}`,
       ),
@@ -393,6 +414,7 @@ export async function addQuizMissesToStudy(output: StudioOutput, missed: readonl
         {
           notebookId: output.notebookId,
           origin: { kind: "studio", notebookId: output.notebookId, outputId: output.id },
+          citations: studioCardCitations(output.notebookId, question.sources),
           front: question.question.trim(),
           back: [answer, question.explanation.trim()].filter(Boolean).join("\n\n"),
           tags: [output.title],
@@ -402,7 +424,7 @@ export async function addQuizMissesToStudy(output: StudioOutput, missed: readonl
     ];
   });
   if (!cards.length) throw new Error("This quiz has no missed questions to add.");
-  return store().insertStudy(cards);
+  return saveStudioReviewCards(cards);
 }
 
 export async function startNoteTutor(note: Pick<Note, "id" | "vaultId" | "notebookId" | "title">) {

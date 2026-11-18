@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { passageRefSchema } from "@/lib/grounding/passage-schema";
 import { amounts, difficulties } from "@/studio/tools/flashcards/definition";
 import { defineTool, textBlob } from "@/studio/types";
 
@@ -14,6 +15,7 @@ export const quizQuestion = z.object({
   answer: z.number().int(),
   explanation: z.string(),
   hint: z.string(),
+  sources: z.array(passageRefSchema).optional(),
 });
 
 export const quizData = z.object({ questions: z.array(quizQuestion) });

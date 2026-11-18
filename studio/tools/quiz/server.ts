@@ -1,6 +1,12 @@
 import { generateText, Output } from "ai";
 import { z } from "zod";
-import { clean, seededRandom, studioSystem, type Generator } from "@/studio/server/shared";
+import {
+  clean,
+  seededRandom,
+  studioSourceRefs,
+  studioSystem,
+  type Generator,
+} from "@/studio/server/shared";
 import { quizCounts, type QuizData, type QuizOptions, type QuizQuestion } from "./definition";
 
 const LEVEL = {
@@ -18,6 +24,7 @@ const schema = z.object({
       answer: z.number().int().describe("Index (0 to 3) of the correct option"),
       explanation: z.string().describe("Why the correct option is right, one or two sentences"),
       hint: z.string().describe("A short hint that does not give the answer away"),
+      citations: z.array(z.number()).describe("Numbers of the passages supporting the answer"),
     }),
   ),
 });
@@ -47,7 +54,7 @@ export const generateQuiz: Generator<QuizOptions, QuizData> = async ({
     model,
     output: Output.object({ schema }),
     system: studioSystem(
-      `Create a multiple-choice quiz of ${count} questions about the sources. ${LEVEL[options.difficulty]} Each question has exactly four options and one correct answer.`,
+      `Create a multiple-choice quiz of ${count} questions about the sources. ${LEVEL[options.difficulty]} Each question has exactly four options and one correct answer. Cite up to three numbered passages that support each answer in citations.`,
       args,
     ),
     prompt: `Create the ${count} questions now.`,
@@ -61,6 +68,7 @@ export const generateQuiz: Generator<QuizOptions, QuizData> = async ({
       answer: q.answer,
       explanation: clean(q.explanation),
       hint: clean(q.hint),
+      sources: studioSourceRefs(args.passages, q.citations),
     }))
     .filter(
       (q) => q.question && q.options.length >= 2 && q.answer >= 0 && q.answer < q.options.length,

@@ -13,6 +13,7 @@ import { DirectionalText } from "@/components/common/directional-text";
 import { Button } from "@/components/panelui/button";
 import { cn } from "@/lib/utils";
 import type { ToolViewerProps } from "@/studio/shared/form";
+import { StudioStudySources } from "@/studio/shared/study-sources";
 import type { FlashcardsData } from "./definition";
 
 const range = (n: number) => Array.from({ length: n }, (_, i) => i);
@@ -27,7 +28,7 @@ function shuffled(list: number[]): number[] {
 }
 
 /** Cards one at a time: flip to see the answer, then mark whether you knew it. */
-export function FlashcardsViewer({ data }: ToolViewerProps<FlashcardsData>) {
+export function FlashcardsViewer({ data, onOpenPassage }: ToolViewerProps<FlashcardsData>) {
   const { t } = useTranslation("studio");
   const [order, setOrder] = useState(() => range(data.cards.length));
   const [position, setPosition] = useState(0);
@@ -81,6 +82,7 @@ export function FlashcardsViewer({ data }: ToolViewerProps<FlashcardsData>) {
       )
         return;
       if (event.key === " ") {
+        if (event.target instanceof HTMLElement && event.target.closest("button, a")) return;
         event.preventDefault();
         if (!finished) setFlipped((value) => !value);
       } else if (event.key === "ArrowRight") go(position + 1);
@@ -165,6 +167,7 @@ export function FlashcardsViewer({ data }: ToolViewerProps<FlashcardsData>) {
           </div>
         </div>
       </button>
+      {flipped ? <StudioStudySources sources={card.sources} open={onOpenPassage} /> : null}
 
       <div className="flex w-full items-center justify-between gap-2">
         <Button

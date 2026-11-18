@@ -18,6 +18,7 @@ import { Menu } from "@/components/panelui/menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useWorkspace } from "@/components/workspace/workspace-context";
 import { addQuizMissesToStudy, addStudioFlashcards } from "@/lib/db/study";
+import { vaultOf } from "@/lib/db/vaults";
 import { studyHref } from "@/lib/study/links";
 import { updateOutputData, useOutput } from "@/lib/db/outputs";
 import { formatRelativeTime } from "@/lib/format";
@@ -72,6 +73,17 @@ export function OutputViewer({ id }: { id: string }) {
   const png = local
     ? undefined
     : definition?.exports?.filter(isFileExport).find((option) => option.format === "png");
+
+  function openStudyReview(outputId: string, cardIds: string[]) {
+    if (!cardIds.length) {
+      toast.error(t("viewer.noStudyCards"));
+      return;
+    }
+    const vault = vaultOf(notebook);
+    void navigate(studyHref("review", { output: outputId, vault }), {
+      state: { studyReviewIds: cardIds, studyReviewVault: vault },
+    });
+  }
 
   // Annotate: the output's picture, locked on a new whiteboard, to draw over it.
   const annotate =
@@ -197,9 +209,9 @@ export function OutputViewer({ id }: { id: string }) {
                     onClick={() => {
                       setAddingCards(true);
                       void addStudioFlashcards(output)
-                        .then((count) => {
-                          if (count > 0) toast.success(t("viewer.studyCardsAdded", { count }));
-                          navigate(studyHref("cards", { output: output.id }));
+                        .then(({ added, cardIds }) => {
+                          if (added > 0) toast.success(t("viewer.studyCardsAdded", { count: added }));
+                          openStudyReview(output.id, cardIds);
                         })
                         .catch((error: Error) => toast.error(error.message))
                         .finally(() => setAddingCards(false));
@@ -275,13 +287,13 @@ export function OutputViewer({ id }: { id: string }) {
                 output.toolId === "quiz"
                   ? async (positions) => {
                       try {
-                        const added = await addQuizMissesToStudy(output, positions);
+                        const { added, cardIds } = await addQuizMissesToStudy(output, positions);
                         toast.success(
                           added
                             ? t("quiz.viewer.savedMissed", { count: added })
                             : t("quiz.viewer.missedAlreadySaved"),
                         );
-                        navigate(studyHref("cards", { output: output.id }));
+                        openStudyReview(output.id, cardIds);
                       } catch (error) {
                         toast.error(error instanceof Error ? error.message : String(error));
                       }

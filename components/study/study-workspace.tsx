@@ -833,7 +833,9 @@ export default function StudyWorkspace({
               ? studyHref("highlights", { book: book.id })
               : reportFilter
                 ? studyHref("cards", reportFilter)
-                : undefined
+                : output
+                  ? studyHref("cards", { output, vault: studyVaultId })
+                  : undefined
           }
           libraryLabel={reviewingVocabulary ? t("study.vocabulary.open") : undefined}
           collection={
