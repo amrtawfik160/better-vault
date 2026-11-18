@@ -87,6 +87,7 @@ export function StudyReview({
   vaultId,
   libraryHref,
   libraryLabel,
+  quizHref,
   history,
   sessionId,
 }: {
@@ -103,6 +104,7 @@ export function StudyReview({
   vaultId: string;
   libraryHref?: string;
   libraryLabel?: string;
+  quizHref?: string;
   history: StudyRecordOf<"session">[];
   sessionId: string;
 }) {
@@ -268,10 +270,19 @@ export function StudyReview({
             : `${queue.length} due · ${rated} reviewed this session`}
           {collection ? ` · ${collection}` : ""}
         </p>
-        {item && libraryHref ? (
-          <Link to={library} className="text-sm text-muted-foreground underline underline-offset-4">
-            {libraryName}
-          </Link>
+        {(item && libraryHref) || quizHref ? (
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+            {item && libraryHref ? (
+              <Link to={library} className="underline underline-offset-4">
+                {libraryName}
+              </Link>
+            ) : null}
+            {quizHref ? (
+              <Link to={quizHref} state={returnState} className="underline underline-offset-4">
+                {t("study.recall.backToQuiz")}
+              </Link>
+            ) : null}
+          </div>
         ) : null}
       </div>
       {item ? (

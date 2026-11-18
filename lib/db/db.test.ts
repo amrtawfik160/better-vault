@@ -36,7 +36,13 @@ import { createDexieBackend } from "./dexie-backend";
 import { loadBlob, saveBlob } from "./blobs";
 import { ancestors, createFolder, deleteFolder, moveFolder } from "./folders";
 import { createNotebook, deleteNotebook, updateNotebook } from "./notebooks";
-import { createOutput, deleteOutput, markInterruptedOutputs } from "./outputs";
+import {
+  createOutput,
+  createReadyOutput,
+  deleteOutput,
+  markInterruptedOutputs,
+  saveQuizAttempt,
+} from "./outputs";
 import { asBackend, createSqliteStore, schemaVersion } from "./sqlite/store";
 import { setStoreForTests, store } from "./store";
 import { conversationTitle } from "@/lib/chat/title";
@@ -586,6 +592,53 @@ describe.each(backends)("%s store", (name, create) => {
       await markInterruptedOutputs(new Set([running]), "interrupted");
       expect((await store().getOutput(running))?.status).toBe("generating");
       expect((await store().getOutput(stale))?.status).toBe("error");
+    });
+
+    it("preserves a quiz attempt through backup and rejects a second write from the same question", async () => {
+      const notebookId = await createNotebook("Quiz notes");
+      const id = await createReadyOutput({
+        notebookId,
+        toolId: "quiz",
+        title: "Check understanding",
+        options: {},
+        sourceIds: [],
+        data: {
+          questions: [
+            {
+              question: "What intersects?",
+              options: ["Quorums", "None"],
+              answer: 0,
+              explanation: "A shared replica",
+              hint: "Overlap",
+            },
+          ],
+        },
+      });
+
+      expect(await saveQuizAttempt(id, 0, { kind: "advance" })).toBeUndefined();
+      expect(await saveQuizAttempt(id, 0, { kind: "answer", option: 2 })).toBeUndefined();
+      const competing = await Promise.all([
+        saveQuizAttempt(id, 0, { kind: "answer", option: 0 }),
+        saveQuizAttempt(id, 0, { kind: "answer", option: 1 }),
+      ]);
+      expect(competing.filter(Boolean)).toHaveLength(1);
+      const answered = competing.find(Boolean);
+      expect(answered).toMatchObject({ index: 0, revision: 1 });
+      const finished = await saveQuizAttempt(id, 1, { kind: "advance" });
+      expect(finished).toEqual({ index: 1, revision: 2, answers: answered?.answers });
+
+      const backup = JSON.parse(JSON.stringify(await exportBackup()));
+      await deleteAllData();
+      await importBackup(backup);
+      expect((await store().getOutput(id))?.quizAttempt).toEqual(finished);
+      expect(await saveQuizAttempt(id, 1, { kind: "retry" })).toBeUndefined();
+      expect(await saveQuizAttempt(id, 2, { kind: "retry" })).toEqual({
+        revision: 3,
+        index: 0,
+        answers: [],
+      });
+      await deleteOutput(id);
+      expect(await saveQuizAttempt(id, 3, { kind: "answer", option: 0 })).toBeUndefined();
     });
   });
 

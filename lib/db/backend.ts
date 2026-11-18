@@ -7,6 +7,7 @@ import type {
   StudyWordResult,
   StudyWordWrite,
 } from "@/lib/study/records";
+import type { QuizAction, QuizAttempt } from "@/studio/tools/quiz/attempt";
 import type {
   Chunk,
   Conversation,
@@ -127,6 +128,8 @@ export interface Backend {
   patchOutput(id: string, patch: Partial<StudioOutput>): Promise<void>;
   /** Changes a ready output's data. False when it is gone or not ready. */
   patchReadyOutput(id: string, patch: Partial<StudioOutput>): Promise<boolean>;
+  /** Applies a quiz action only to the attempt revision displayed to the learner. */
+  saveQuizAttempt(id: string, revision: number, action: QuizAction): Promise<QuizAttempt | undefined>;
   /** Marks outputs still generating, except `running`, as failed. */
   interruptOutputs(running: string[], error: string): Promise<void>;
   /** Deletes an output with its files. */
@@ -245,6 +248,7 @@ export const writes = {
   addOutput: ["outputs", "notebooks"],
   patchOutput: ["outputs"],
   patchReadyOutput: ["outputs"],
+  saveQuizAttempt: ["outputs"],
   interruptOutputs: ["outputs"],
   deleteOutput: ["outputs", "blobs"],
   putBlob: ["blobs"],
@@ -347,6 +351,7 @@ export const backendMethods = [
   "addOutput",
   "patchOutput",
   "patchReadyOutput",
+  "saveQuizAttempt",
   "interruptOutputs",
   "deleteOutput",
   "putBlob",

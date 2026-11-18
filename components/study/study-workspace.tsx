@@ -34,6 +34,7 @@ import {
   useStudyRecords,
 } from "@/lib/db/study";
 import { useNotes } from "@/lib/db/notes";
+import { useOutput } from "@/lib/db/outputs";
 import { useSourceTitles } from "@/lib/db/sources";
 import { currentVaultId, DEFAULT_VAULT, setCurrentVault } from "@/lib/db/vaults";
 import type { Notebook, Vault } from "@/lib/db/types";
@@ -530,6 +531,13 @@ export default function StudyWorkspace({
   const revision = queryIndex(params.get("rev"));
   const focusedRange = at !== undefined && length ? { offset: at, length, revision } : undefined;
   const output = params.get("output");
+  const studioOutput = useOutput(tab === "review" ? output : null);
+  const quizHref =
+    studioOutput?.id === output &&
+    studioOutput.toolId === "quiz" &&
+    scope.notebookOwner(studioOutput.notebookId) === studyVaultId
+      ? originHref({ kind: "studio", notebookId: studioOutput.notebookId, outputId: studioOutput.id })
+      : undefined;
   const cardId = params.get("card");
   const notebookId = params.get("notebook");
   const requestedReview = selection?.studyReviewIds;
@@ -866,6 +874,7 @@ export default function StudyWorkspace({
           initialPractice={weakMode}
           sessionId={reviewSessionId}
           history={rows.filter((row) => row.kind === "session")}
+          quizHref={quizHref}
           libraryHref={
             reviewingVocabulary
               ? studyHref("vocabulary", { vault: studyVaultId })

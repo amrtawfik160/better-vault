@@ -2,6 +2,7 @@ import type { StudyRecord } from "@/lib/study/records";
 import { patchedStudyThread } from "@/lib/study/reports";
 import { patchedStudyBook, revisedStudyBook } from "@/lib/study/text-edits";
 import { detachedVocabularyCard, vocabularyCardId, vocabularyChanges } from "@/lib/study/vocabulary";
+import { updatedQuizAttempt } from "@/studio/tools/quiz/attempt";
 import type { Backend, StoreContent, TableName } from "../backend";
 import type {
   Chunk,
@@ -475,6 +476,13 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
       transaction(db, () => {
         if (get<StudioOutput>("outputs", id)?.status !== "ready") return false;
         return patch<StudioOutput>("outputs", id, change);
+      }),
+    saveQuizAttempt: (id, revision, action) =>
+      transaction(db, () => {
+        const attempt = updatedQuizAttempt(get<StudioOutput>("outputs", id), revision, action);
+        if (!attempt) return;
+        patch<StudioOutput>("outputs", id, { quizAttempt: attempt });
+        return attempt;
       }),
     interruptOutputs: (running, error) =>
       transaction(db, () => {

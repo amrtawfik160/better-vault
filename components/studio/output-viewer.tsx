@@ -20,7 +20,7 @@ import { useWorkspace } from "@/components/workspace/workspace-context";
 import { addQuizMissesToStudy, addStudioFlashcards } from "@/lib/db/study";
 import { vaultOf } from "@/lib/db/vaults";
 import { studyHref } from "@/lib/study/links";
-import { updateOutputData, useOutput } from "@/lib/db/outputs";
+import { saveQuizAttempt, updateOutputData, useOutput } from "@/lib/db/outputs";
 import { formatRelativeTime } from "@/lib/format";
 import { storageIds, storages } from "@/lib/storage/catalog";
 import { isStorageReady, useStorageSettings } from "@/lib/storage/settings";
@@ -280,6 +280,7 @@ export function OutputViewer({ id }: { id: string }) {
             </div>
           ) : (
             <client.Viewer
+              key={output.id}
               outputId={output.id}
               onDataChange={saveData}
               onAnnotate={annotate ? () => void annotate() : undefined}
@@ -298,6 +299,12 @@ export function OutputViewer({ id }: { id: string }) {
                         toast.error(error instanceof Error ? error.message : String(error));
                       }
                     }
+                  : undefined
+              }
+              quizAttempt={output.quizAttempt}
+              onQuizAction={
+                output.toolId === "quiz"
+                  ? (revision, action) => saveQuizAttempt(output.id, revision, action)
                   : undefined
               }
               chrome={chrome}

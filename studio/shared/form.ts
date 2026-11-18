@@ -1,3 +1,5 @@
+import type { QuizAction, QuizAttempt } from "@/studio/tools/quiz/attempt";
+
 /** What a tool's dialog form receives: its own options and the shared focus text. */
 export interface ToolFormProps<Options> {
   value: Options;
@@ -47,6 +49,8 @@ export interface ToolViewerProps<Data> {
   onAnnotate?: () => void;
   /** Adds the missed questions from a finished quiz to Study. */
   onReviewMissed?: (positions: readonly number[]) => Promise<void>;
+  quizAttempt?: QuizAttempt;
+  onQuizAction?: (revision: number, action: QuizAction) => Promise<QuizAttempt | undefined>;
   /** The element the viewer scrolls in, for parts that follow the reading. */
   scrollRef?: import("react").RefObject<HTMLElement | null>;
   /** The title and actions, for immersive viewers. */
