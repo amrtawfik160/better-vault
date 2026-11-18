@@ -62,6 +62,8 @@ export function originHref(origin: StudyOrigin) {
       });
     case "studio":
       return withQuery(routes.notebook(origin.notebookId), { output: origin.outputId });
+    case "card":
+      return studyHref("cards", { card: origin.cardId });
     case "word":
       return studyHref("vocabulary", { word: origin.wordId });
   }
@@ -81,6 +83,8 @@ export function originLabel(origin: StudyOrigin) {
       return "Open session report";
     case "studio":
       return "Open Studio output";
+    case "card":
+      return "Open flashcard";
     case "word":
       return "Open vocabulary";
   }

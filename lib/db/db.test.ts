@@ -8,9 +8,13 @@ import {
   freshSchedule,
   putStudyRecords,
   rateStudyItem,
+  readStudyThread,
   readStudyTutorSources,
+  saveStudyCard,
   saveStudyText,
   startSourceTutor,
+  startBookTutor,
+  startCardTutor,
   StudyTextConflict,
   updateStudyBook,
   updateStudyReport,
@@ -822,6 +826,50 @@ describe.each(backends)("%s store", (name, create) => {
         noteIds: thread.noteIds,
         sourceIds: thread.sourceIds,
       });
+    });
+
+    it("keeps a Tutor flashcard set ordered and drops cards that change vaults through their origins", async () => {
+      const work = await createVault({ name: "Engineering" });
+      const other = await createVault({ name: "Private" });
+      const book = await addStudyBook({
+        title: "Consensus",
+        format: "text",
+        vaultId: work,
+        sections: [{ title: "Chapter", text: "Two majorities overlap." }],
+      });
+      const tutor = await startBookTutor(book, { scope: "book", goal: "book" });
+      const linked = await saveStudyCard({
+        front: "What overlaps?",
+        back: "Two majorities.",
+        origin: { kind: "tutor", threadId: tutor.id },
+        vaultId: other,
+        tags: [],
+      });
+      const own = await saveStudyCard({ front: "Define epoch", back: "Leader term", vaultId: work, tags: [] });
+      const privateNote = await createNote({ title: "Personal", body: "Private topic", vaultId: other });
+      const hidden = await saveStudyCard({
+        front: "Private cue", back: "Private answer", vaultId: work, tags: [],
+        origin: { kind: "note", noteId: privateNote.id },
+      });
+      const thread = await startCardTutor([linked.id, hidden.id, own.id, linked.id], work, "Practice");
+      if (!thread) throw new Error("Tutor should open with the available cards");
+      expect(thread).toMatchObject({ scope: "cards", cardIds: [linked.id, own.id], practiceCardId: linked.id });
+      expect((await readStudyTutorSources(thread, work)).cards?.map(({ id }) => id)).toEqual([linked.id]);
+      await updateNotebook(book.notebookId, { vaultId: other });
+      expect((await readStudyTutorSources(thread, work)).cards?.map(({ id }) => id)).toEqual([own.id]);
+      expect((await readStudyTutorSources(thread, other)).cards).toEqual([]);
+      await updateStudyThread(thread.id, { practiceCardId: own.id }, [
+        { role: "user", text: "A leadership term.", practiceCardId: own.id },
+      ]);
+      expect((await readStudyTutorSources(await readStudyThread(thread.id), work, "report")).cards?.map(({ id }) => id)).toEqual([own.id]);
+      const backup = JSON.parse(JSON.stringify(await exportBackup()));
+      await deleteAllData();
+      await importBackup(backup);
+      expect(await readStudyThread(thread.id)).toMatchObject({
+        cardIds: [linked.id, own.id], practiceCardId: own.id,
+        messages: [{ role: "user", practiceCardId: own.id }],
+      });
+      expect(await store().getStudy(own.id)).toMatchObject({ schedule: own.schedule });
     });
 
     it("keeps dated reports, flashcard origins and follow-ups through regeneration and backup", async () => {

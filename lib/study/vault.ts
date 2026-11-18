@@ -1,5 +1,19 @@
 import type { Notebook, Note, Vault } from "@/lib/db/types";
-import type { StudyRecord } from "./records";
+import type { StudyOrigin, StudyRecord } from "./records";
+
+export function studyOriginRecordId(origin: StudyOrigin | undefined) {
+  switch (origin?.kind) {
+    case "book":
+      return origin.bookId;
+    case "tutor":
+    case "report":
+      return origin.threadId;
+    case "card":
+      return origin.cardId;
+    case "word":
+      return origin.wordId;
+  }
+}
 
 export function studyVaultIndex({
   rows,
@@ -41,18 +55,13 @@ export function studyVaultIndex({
     const origin = "origin" in row ? row.origin : undefined;
     const fromOrigin = () => {
       switch (origin?.kind) {
-        case "book":
-          return inherited(origin.bookId);
-        case "tutor":
-        case "report":
-          return inherited(origin.threadId);
-        case "word":
-          return inherited(origin.wordId);
         case "note":
           return liveVault(noteVaults.get(origin.noteId));
         case "studio":
         case "source":
           return notebookOwner(origin.notebookId);
+        default:
+          return inherited(studyOriginRecordId(origin));
       }
     };
     const vault =

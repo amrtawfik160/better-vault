@@ -44,6 +44,7 @@ import {
 import { askStudyModel } from "@/lib/study/client";
 import { studyConversationExcerpt } from "@/lib/study/ai";
 import { passagesFor, tutorBookOrigin } from "@/lib/study/passages";
+import { activeStudyCard, selectedStudyCards } from "@/lib/study/recall";
 import { matchesStudyReport, studyReportKey, studyReports } from "@/lib/study/reports";
 import { Markdown } from "@/components/chat/markdown";
 import { recordStudyVoice, transcribeStudyVoice } from "@/lib/study/voice";
@@ -92,9 +93,19 @@ function tutorMaterialOptions(
   books: StudyBook[],
   notes: Note[],
   sources: TutorMaterial[],
+  cards: StudyRecordOf<"card">[],
   selection: TutorMaterialSelection,
 ): TutorMaterialOptions {
-  if (scope !== "materials") return { bookIds: [], sourceIds: [], noteIds: notes };
+  if (scope === "cards")
+    return {
+      bookIds: [],
+      sourceIds: [],
+      noteIds: [],
+      cardIds: cards
+        .filter(({ front, back }) => front.trim() && back.trim())
+        .map(({ id, front, tags }) => ({ id, title: front, detail: tags.join(" · ") || undefined })),
+    };
+  if (scope !== "materials") return { bookIds: [], sourceIds: [], noteIds: notes, cardIds: [] };
   const bookSources = new Set(books.map(({ sourceId }) => sourceId));
   const savedSources = new Set(selection.sourceIds);
   const sourcesInUse = new Set(sources.filter(({ id }) => savedSources.has(id)).map(({ id }) => id));
@@ -102,23 +113,37 @@ function tutorMaterialOptions(
     bookIds: books.filter(({ sourceId }) => !sourcesInUse.has(sourceId)),
     sourceIds: sources.filter(({ id }) => !bookSources.has(id) || savedSources.has(id)),
     noteIds: notes,
+    cardIds: [],
   };
+}
+
+function materialChanges(scope: StudyThread["scope"], selection: TutorMaterialSelection) {
+  const { bookIds, noteIds, sourceIds, cardIds } = selection;
+  if (scope === "cards") return { cardIds };
+  if (scope === "notes") return { noteIds };
+  return { bookIds, noteIds, sourceIds };
 }
 
 export function TutorIndex({
   threads,
   books,
   notes,
+  cards,
   notebookSources,
   vaultId,
   open,
+  practice,
+  openingPractice,
 }: {
   threads: StudyThread[];
   books: StudyBook[];
   notes: Note[];
+  cards: StudyRecordOf<"card">[];
   notebookSources: TutorMaterial[];
   vaultId: string;
   open: (thread: StudyThread) => void;
+  practice: (ids: string[]) => void;
+  openingPractice: boolean;
 }) {
   const { t } = useTranslation("home");
   const [goal, setGoal] = useState<StudyThread["goal"]>("book");
@@ -128,21 +153,20 @@ export function TutorIndex({
   const [query, setQuery] = useState("");
   const [deleting, setDeleting] = useState<StudyThread | null>(null);
   const savedSettings = useSettings();
-  const curated = scope === "notes" || scope === "materials";
+  const cardPractice = scope === "cards";
+  const curated = scope === "notes" || scope === "materials" || cardPractice;
   const readableBooks = useMemo(
     () => books.filter(({ sections }) => sections.some(({ text }) => text.trim())),
     [books],
   );
   const readableNotes = useMemo(() => notes.filter(({ body }) => body.trim()), [notes]);
-  const selection =
-    scope === "materials"
-      ? materialSelection
-      : { ...emptyTutorSelection, noteIds: materialSelection.noteIds };
+  const selection = { ...emptyTutorSelection, ...materialChanges(scope, materialSelection) };
   const materialOptions = tutorMaterialOptions(
     scope,
     readableBooks,
     readableNotes,
     notebookSources,
+    cards,
     selection,
   );
   const selected = availableTutorSelection(materialOptions, selection);
@@ -157,6 +181,10 @@ export function TutorIndex({
         onSubmit={(event) => {
           event.preventDefault();
           if (!ready) return;
+          if (cardPractice) {
+            practice(selected.cardIds);
+            return;
+          }
           const book =
             scope === "book" || scope === "chapter"
               ? books.find((item) => item.id === bookId)
@@ -194,7 +222,8 @@ export function TutorIndex({
             Goal
             <select
               className={optionClass}
-              value={goal}
+              value={cardPractice ? "teach-back" : goal}
+              disabled={cardPractice}
               onChange={(event) => setGoal(event.target.value as StudyThread["goal"])}
             >
               {studyGoals.map((value) => (
@@ -216,7 +245,8 @@ export function TutorIndex({
                 .filter((value) => value !== "passage")
                 .map((value) => (
                   <option key={value} value={value}>
-                    {value === "materials" ? t("study.materials.scope") : scopeLabels[value]}
+                    {value === "materials" ? t("study.materials.scope")
+                      : value === "cards" ? t("study.materials.cards") : scopeLabels[value]}
                   </option>
                 ))}
             </select>
@@ -243,14 +273,13 @@ export function TutorIndex({
             <TutorMaterialPicker
               options={materialOptions}
               selection={selection}
+              flashcards={cardPractice}
               onApply={(change) =>
-                setSelection((current) =>
-                  scope === "materials" ? change : { ...current, noteIds: change.noteIds },
-                )
+                setSelection((current) => ({ ...current, ...materialChanges(scope, change) }))
               }
             />
           ) : null}
-          <Button type="submit" disabled={!ready}>
+          <Button type="submit" disabled={!ready || openingPractice}>
             Start conversation
           </Button>
         </div>
@@ -376,6 +405,7 @@ export function StudyTutor({
   const { t, i18n } = useTranslation("home");
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [changingCard, setChangingCard] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState(thread.title);
   const [showReport, setShowReport] = useState(openReport ?? false);
@@ -393,8 +423,9 @@ export function StudyTutor({
   const [voiceAvailable, setVoiceAvailable] = useState<boolean>();
   const [readAloud, setReadAloud] = useState(false);
   const [language, setLanguage] = useState(thread.practiceLanguage ?? "");
-  const workPending = busy || voiceState !== null || livePhase !== null;
-  const curated = thread.scope === "materials" || thread.scope === "notes";
+  const workPending = busy || changingCard || voiceState !== null || livePhase !== null;
+  const cardPractice = thread.scope === "cards";
+  const curated = thread.scope === "materials" || thread.scope === "notes" || cardPractice;
   const readableBooks = useMemo(
     () =>
       thread.scope === "materials"
@@ -404,18 +435,26 @@ export function StudyTutor({
   );
   const readableNotes = useMemo(() => vaultNotes.filter(({ body }) => body.trim()), [vaultNotes]);
   const selection = {
-    bookIds: thread.scope === "materials" ? (thread.bookIds ?? []) : [],
-    sourceIds: thread.scope === "materials" ? (thread.sourceIds ?? []) : [],
-    noteIds: thread.noteIds ?? [],
+    ...emptyTutorSelection,
+    ...materialChanges(thread.scope, {
+      bookIds: thread.bookIds ?? [],
+      sourceIds: thread.sourceIds ?? [],
+      noteIds: thread.noteIds ?? [],
+      cardIds: thread.cardIds ?? [],
+    }),
   };
   const materialOptions = tutorMaterialOptions(
     thread.scope,
     readableBooks,
     readableNotes,
     notebookSources,
+    reportCards,
     selection,
   );
   const selected = availableTutorSelection(materialOptions, selection);
+  const practiceCards = selectedStudyCards(selected.cardIds, reportCards);
+  const practiceCard = activeStudyCard(practiceCards, thread.practiceCardId);
+  const nextCard = practiceCards[practiceCards.findIndex(({ id }) => id === practiceCard?.id) + 1];
   const contextReady = !curated || tutorSelectionCount(selected) > 0;
   const controller = useRef<AbortController | null>(null);
   const voice = useRef<VoiceCapture | null>(null);
@@ -441,6 +480,10 @@ export function StudyTutor({
     ...thread.messages.map((entry, index) => ({ entry, index })),
     ...temporaryTurns.map((entry) => ({ entry, index: undefined })),
   ].sort((a, b) => (a.entry.at ?? 0) - (b.entry.at ?? 0));
+  const currentTurns =
+    cardPractice && focusMessage === undefined
+      ? conversation.filter(({ entry }) => practiceCard && entry.practiceCardId === practiceCard.id)
+      : conversation;
   const hasSavedAnswer = thread.messages.some(({ role, text }) => role === "assistant" && text.trim());
 
   useEffect(() => {
@@ -480,6 +523,17 @@ export function StudyTutor({
     await updateStudyThread(thread.id, change);
   }
 
+  async function choosePracticeCard(id: string) {
+    setChangingCard(true);
+    try {
+      await save({ practiceCardId: id });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setChangingCard(false);
+    }
+  }
+
   function saveTemporaryTurns(turns: StudyThread["messages"]) {
     recentTurns.current = turns;
     setTemporaryTurns(turns);
@@ -514,17 +568,26 @@ export function StudyTutor({
       const passages = passagesFor(current, sources, text);
       if (current.scope !== "general" && !passages.length)
         throw new Error(
-          current.scope === "materials"
+          current.scope === "cards"
+            ? t("study.materials.noCardsSelected")
+            : current.scope === "materials"
             ? t("study.materials.noReadableSelection")
             : current.scope === "notes"
               ? "Choose a note with text first."
               : "This scope has no readable text. Choose another context.",
         );
+      const cardOrigin = passages[0]?.origin;
+      const practiceCardId = cardOrigin?.kind === "card" ? cardOrigin.cardId : undefined;
       const answer = await askStudyModel({
         action: "chat",
         input: text,
         passages,
-        thread: current,
+        thread: practiceCardId
+          ? {
+              ...current,
+              messages: current.messages.filter((turn) => turn.practiceCardId === practiceCardId),
+            }
+          : current,
         signal,
         spoken,
       });
@@ -534,13 +597,16 @@ export function StudyTutor({
         return passage ? [{ index, origin: passage.origin, title: passage.title }] : [];
       });
       const turns: StudyThread["messages"] = [
-        { role: "user", text, at: submittedAt },
-        { role: "assistant", text: answer.text, citations, at: submittedAt },
+        { role: "user", text, at: submittedAt, practiceCardId },
+        { role: "assistant", text: answer.text, citations, at: submittedAt, practiceCardId },
       ];
       if (spoken && !current.keepVoiceTranscripts)
         saveTemporaryTurns([...recentTurns.current, ...turns]);
       else
-        await updateStudyThread(thread.id, { practiceLanguage: current.practiceLanguage }, turns);
+        await updateStudyThread(thread.id, {
+          practiceLanguage: current.practiceLanguage,
+          ...(practiceCardId && practiceCardId !== current.practiceCardId ? { practiceCardId } : {}),
+        }, turns);
       if (spoken) setVoicePractice(true);
       if (!session) {
         setInput("");
@@ -664,19 +730,25 @@ export function StudyTutor({
     controller.current = abort;
     try {
       const context = await currentConversation();
-      const sources = await readStudyTutorSources(context, vaultId);
+      const sources = await readStudyTutorSources(context, vaultId, "report");
       abort.signal.throwIfAborted();
-      const history = context.messages;
+      let history = context.messages;
+      if (context.scope === "cards") {
+        const available = new Set(sources.cards?.map(({ id }) => id));
+        history = history.filter(({ practiceCardId }) => practiceCardId && available.has(practiceCardId));
+        if (!history.length) throw new Error(t("study.recall.tutorReportEmpty"));
+      }
       const topic = history
         .filter(({ role }) => role === "user")
         .slice(-3)
         .map(({ text }) => text)
         .join(" ");
+      const reportThread = { ...context, messages: history };
       const result = await askStudyModel({
         action: "report",
         input: "Write a report on the study conversation.",
-        passages: passagesFor(context, sources, topic),
-        thread: context,
+        passages: passagesFor(reportThread, sources, topic, "report"),
+        thread: reportThread,
         signal: abort.signal,
       });
       if (!abort.signal.aborted && result.report) {
@@ -886,11 +958,13 @@ export function StudyTutor({
                   scope === "general" ||
                   scope === "notes" ||
                   scope === "materials" ||
+                  scope === "cards" ||
                   (book && (scope !== "passage" || thread.quote)),
               )
               .map((scope) => (
                 <option value={scope} key={scope}>
-                  {scope === "materials" ? t("study.materials.scope") : scopeLabels[scope]}
+                  {scope === "materials" ? t("study.materials.scope")
+                    : scope === "cards" ? t("study.materials.cards") : scopeLabels[scope]}
                 </option>
               ))}
           </select>
@@ -918,20 +992,60 @@ export function StudyTutor({
             <TutorMaterialPicker
               options={materialOptions}
               selection={selection}
+              flashcards={cardPractice}
               disabled={workPending}
-              onApply={(next) =>
-                save(thread.scope === "materials" ? next : { noteIds: next.noteIds })
-              }
+              onApply={(next) => save({
+                ...materialChanges(thread.scope, next),
+                ...(cardPractice && !next.cardIds.includes(thread.practiceCardId ?? "")
+                  ? { practiceCardId: next.cardIds[0] }
+                  : {}),
+              })}
             />
             {!contextReady ? (
-              <p className="text-muted-foreground">{t("study.materials.noReadableSelection")}</p>
+              <p className="text-muted-foreground">
+                {t(cardPractice ? "study.materials.noCardsSelected" : "study.materials.noReadableSelection")}
+              </p>
             ) : null}
           </div>
         ) : null}
       </div>
-      {conversation.length ? (
+      {practiceCard ? (
+        <div className="flex flex-wrap items-end gap-2 rounded-xl border p-3">
+          <label className="grid min-w-0 flex-[1_1_15rem] gap-1 text-sm">
+            {t("study.recall.tutorCard")}
+            <select
+              aria-label={t("study.recall.tutorCard")}
+              className={`${optionClass} w-full`}
+              value={practiceCard.id}
+              disabled={workPending}
+              onChange={(event) => void choosePracticeCard(event.target.value)}
+            >
+              {practiceCards.map(({ id, front }) => (
+                <option key={id} value={id}>{front}</option>
+              ))}
+            </select>
+          </label>
+          {!conversation.some(({ entry }) => entry.practiceCardId === practiceCard.id) ? (
+            <Button
+              size="sm"
+              disabled={workPending || !model}
+              onClick={() => void send(t("study.recall.tutorPrompt"), Date.now())}
+            >
+              {t("study.recall.tutorAsk")}
+            </Button>
+          ) : null}
+          {nextCard ? (
+            <Button size="sm" variant="outline" disabled={workPending}
+              onClick={() => void choosePracticeCard(nextCard.id)}
+            >
+              {t("study.recall.tutorNextCard")}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+      {currentTurns.length ? (
         <div className="space-y-3" aria-label="Conversation">
-          {conversation.map(({ entry, index }) => (
+          {currentTurns.map(({ entry, index }) => (
             <div
               key={index === undefined ? `temporary-${entry.at}-${entry.role}` : index}
               id={index === undefined ? undefined : `study-message-${index}`}
@@ -986,7 +1100,7 @@ export function StudyTutor({
             </div>
           ))}
         </div>
-      ) : (
+      ) : !cardPractice ? (
         <div className="flex flex-wrap gap-2">
           {thread.goal === "teach-back" ? (
             <Button
@@ -1013,11 +1127,11 @@ export function StudyTutor({
             </Button>
           ))}
         </div>
-      )}
+      ) : null}
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          void send(input, Date.now());
+          if (contextReady && !workPending) void send(input, Date.now());
         }}
         className="grid gap-2 rounded-2xl border bg-card p-3"
       >

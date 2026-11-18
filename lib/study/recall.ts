@@ -1,10 +1,27 @@
-import type { StudyRating, StudyRecord, StudyRecordOf } from "./records";
+import type { StudyRating, StudyRecord, StudyRecordOf, StudyThread } from "./records";
 
 type WeakStudyCard = {
   card: StudyRecordOf<"card">;
   rating: "again" | "hard";
   reviewedAt: number;
 };
+
+export function selectedStudyCards(
+  ids: readonly string[] | undefined,
+  cards: readonly StudyRecordOf<"card">[],
+) {
+  const byId = new Map(cards.map((card) => [card.id, card]));
+  return [...new Set(ids)].flatMap((id) => byId.get(id) ?? []);
+}
+
+export function activeStudyCard(cards: readonly StudyRecordOf<"card">[], id: string | undefined) {
+  return cards.find((card) => card.id === id) ?? cards[0];
+}
+
+export function recentPracticeCards(messages: StudyThread["messages"]) {
+  const recent = messages.slice(-16).toReversed();
+  return [...new Set(recent.flatMap(({ practiceCardId }) => (practiceCardId ? [practiceCardId] : [])))];
+}
 
 /** Find active cards whose latest scheduled review showed a recall gap. */
 export function weakStudyCards(rows: readonly StudyRecord[]) {

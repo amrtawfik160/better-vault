@@ -18,6 +18,7 @@ const bodySchema = z.object({
     .max(16)
     .default([]),
   goal: z.enum(["book", "teach-back", "language", "general"]).optional(),
+  flashcardPractice: z.boolean().optional(),
   correct: z.boolean().optional(),
   correctionMode: z.enum(studyCorrections).optional(),
   practiceLanguage: z.string().max(35).optional(),
@@ -55,6 +56,7 @@ export async function POST(request: Request) {
     history,
     input,
     goal,
+    flashcardPractice,
     correct,
     correctionMode,
     practiceLanguage,
@@ -79,6 +81,12 @@ export async function POST(request: Request) {
         : "",
       action === "chat" && goal === "teach-back"
         ? "Ask one question at a time before giving the answer. After the student tries, point out what was accurate, identify one specific gap, and ask them to try again or apply the idea to an example."
+        : "",
+      action === "chat" && flashcardPractice
+        ? "Use the provided flashcard as the only exercise for this turn. Start by asking the question or asking the learner to explain the idea in their own words. Keep the reference answer hidden until the learner tries or asks for it. If they ask for a hint, give one hint without revealing the answer. After an attempt, compare their explanation with the reference, identify a specific gap or confirm what they understood, and invite them to try again or choose another flashcard. Cite the card when giving feedback, not when asking the first question."
+        : "",
+      action === "report" && flashcardPractice
+        ? "Review the learner's attempts on the practiced flashcards. An invitation to start, a request for a hint, or an unanswered question is not evidence of recall."
         : "",
       action === "chat" && correct
         ? "Offer brief, specific corrections for language mistakes."

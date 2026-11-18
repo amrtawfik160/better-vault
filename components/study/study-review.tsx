@@ -12,7 +12,7 @@ import { useTranslation } from "react-i18next";
 import { StudyFlashcardGenerator } from "./study-flashcard-generator";
 import { StudyOriginLink } from "./study-origin-link";
 import { originHref, studyCitationOrigin, studyHref } from "@/lib/study/links";
-import { loadReviewSession, reviewSelection, saveReviewSession } from "@/lib/study/review-session";
+import { loadReviewSession, reviewReturnState, reviewSelection, saveReviewSession } from "@/lib/study/review-session";
 import { toast } from "sonner";
 import { Button } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
@@ -61,6 +61,8 @@ export function StudyReview({
   useHighlights,
   books,
   threads,
+  practice,
+  openingPractice,
   collection,
   initialPractice,
   vaultId,
@@ -71,6 +73,8 @@ export function StudyReview({
   useHighlights: boolean;
   books: StudyBook[];
   threads: StudyThread[];
+  practice: (id: string, state: ReturnType<typeof reviewReturnState>) => void;
+  openingPractice: boolean;
   collection?: string;
   initialPractice?: boolean;
   vaultId: string;
@@ -252,6 +256,19 @@ export function StudyReview({
                   </div>
                 </div>
               ) : null}
+              {item.kind === "card" ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy || openingPractice}
+                  onClick={() => {
+                    rememberReview();
+                    practice(item.id, returnState);
+                  }}
+                >
+                  {t("study.recall.tutorCardAction")}
+                </Button>
+              ) : null}
               {practiced ? (
                 <Button
                   onClick={() => {
@@ -378,6 +395,8 @@ export function CardLibrary({
   filter,
   clearFilter,
   review,
+  practice,
+  openingPractice,
   creation,
 }: {
   cards: Card[];
@@ -385,6 +404,8 @@ export function CardLibrary({
   filter?: string;
   clearFilter: () => void;
   review: (ids?: string[]) => void;
+  practice: (ids: string[]) => void;
+  openingPractice: boolean;
   creation: Pick<Card, "notebookId" | "origin" | "tags" | "vaultId"> | false;
 }) {
   const { t } = useTranslation("home");
@@ -497,6 +518,15 @@ export function CardLibrary({
               ? t("study.recall.reviewSelected", { count: selectedCards.length })
               : "Review these cards"}
           </Button>
+          {reviewSet.length ? (
+            <Button
+              variant="outline"
+              disabled={openingPractice}
+              onClick={() => practice(reviewSet.map(({ id }) => id))}
+            >
+              {t("study.recall.tutorAction")}
+            </Button>
+          ) : null}
           {!filter && !generating ? (
             <Button variant="outline" onClick={() => setGenerating(true)}>
               Generate from text

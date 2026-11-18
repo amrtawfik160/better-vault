@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { passagesFor } from "./passages";
 import { findStudyExcerpt } from "./locators";
 import { originHref } from "./links";
-import type { StudyBook, StudyThread } from "./records";
+import type { StudyBook, StudyRecordOf, StudyThread } from "./records";
+import { freshSchedule } from "./schedule";
 
 const sectionText =
   "The system is stable in this discussion. Ordinary membership changes are common.\n\n".repeat(
@@ -33,6 +34,29 @@ const thread = {
 } satisfies StudyThread;
 
 describe("Tutor grounding", () => {
+  it("sends just the active card for practice and only discussed cards for reports", () => {
+    const cards = ["first", "second", "third", "outside"].map((id): StudyRecordOf<"card"> => ({
+      id, kind: "card", front: `Question ${id}`, back: `Answer ${id}`, tags: [],
+      updatedAt: 0, schedule: freshSchedule(0),
+    }));
+    const practice: StudyThread = {
+      ...thread, scope: "cards", practiceCardId: "second", cardIds: ["first", "second", "third"],
+      messages: [
+        { role: "user", text: "Start", practiceCardId: "first" },
+        { role: "assistant", text: "Explain the first concept", practiceCardId: "first" },
+        { role: "user", text: "Old practice in another set", practiceCardId: "outside" },
+      ],
+    };
+    const evidence = passagesFor(practice, { cards }, "Begin practice");
+    expect(evidence).toEqual([{
+      origin: { kind: "card", cardId: "second" }, title: "Question second",
+      text: "Question: Question second\n\nAnswer: Answer second",
+    }]);
+    expect(new URL(originHref(evidence[0].origin), "https://deeple.test").searchParams.get("card")).toBe("second");
+    expect(passagesFor(practice, { cards }, "Review", "report").map(({ title }) => title)).toEqual(["Question first"]);
+    expect(passagesFor(practice, { cards: [cards[2], cards[0]] }, "Continue").map(({ title }) => title)).toEqual(["Question first"]);
+  });
+
   it("retrieves evidence near the end of a long chapter and links the exact source text", () => {
     const passages = passagesFor(
       thread,

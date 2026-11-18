@@ -15,7 +15,7 @@ import { Card } from "@/components/panelui/card";
 import { Tabs } from "@/components/panelui/tabs";
 import { SettingsSheet } from "@/components/settings/settings-sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { startBookTutor, useStudyRecords } from "@/lib/db/study";
+import { startBookTutor, startCardTutor, useStudyRecords } from "@/lib/db/study";
 import { useNotes } from "@/lib/db/notes";
 import { useSourceTitles } from "@/lib/db/sources";
 import { currentVaultId, DEFAULT_VAULT, setCurrentVault } from "@/lib/db/vaults";
@@ -40,12 +40,16 @@ function DailyStudy({
   go,
   read,
   teachBack,
+  practice,
+  openingPractice,
 }: {
   rows: StudyRecord[];
   books: StudyBook[];
   go: (tab: Tab, params?: Record<string, string>) => void;
   read: (book: StudyBook) => void;
   teachBack: (book: StudyBook) => void;
+  practice: (ids: string[]) => void;
+  openingPractice: boolean;
 }) {
   const { t } = useTranslation("home");
   const [now, setNow] = useState(Date.now);
@@ -172,9 +176,19 @@ function DailyStudy({
         <Card size="sm">
           <Card.Header className="flex flex-wrap items-center justify-between gap-2">
             <Card.Title>{t("study.recall.needsPractice")}</Card.Title>
-            <Button variant="outline" size="sm" onClick={() => go("review", { mode: "weak" })}>
-              {t("study.recall.practiceWeakCards", { count: weakCards.length })}
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => go("review", { mode: "weak" })}>
+                {t("study.recall.practiceWeakCards", { count: weakCards.length })}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={openingPractice}
+                onClick={() => practice(weakCards.map(({ card }) => card.id))}
+              >
+                {t("study.recall.tutorAction")}
+              </Button>
+            </div>
           </Card.Header>
           <Card.Content>
             <ul className="divide-y">
@@ -349,6 +363,7 @@ export default function StudyWorkspace({
   const location = useLocation();
   const [params, setParams] = useSearchParams();
   const [settings, setSettings] = useState(false);
+  const [openingPractice, setOpeningPractice] = useState(false);
   const saved = useStudyRecords();
   const notes = useNotes();
   const tab: Tab = tabs.find((entry) => entry === params.get("tab")) ?? "today";
@@ -447,6 +462,22 @@ export default function StudyWorkspace({
   function openThread(what: StudyThread) {
     go("tutor", { thread: what.id });
   }
+  async function openCardPractice(ids: string[], state?: ReturnType<typeof reviewReturnState>) {
+    if (openingPractice) return;
+    setOpeningPractice(true);
+    try {
+      const thread = await startCardTutor(ids, studyVaultId, t("study.recall.tutorTitle"));
+      if (thread) {
+        setParams({ view: "study", tab: "tutor", vault: studyVaultId, thread: thread.id }, {
+          state: state ?? reviewReturnState(location.state),
+        });
+      } else toast.error(t("study.materials.noCardsSelected"));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setOpeningPractice(false);
+    }
+  }
   async function createThread(
     what: StudyBook,
     scope: StudyThread["scope"],
@@ -485,6 +516,8 @@ export default function StudyWorkspace({
           teachBack={(item) =>
             void createThread(item, "chapter", item.section, undefined, "teach-back")
           }
+          practice={(ids) => void openCardPractice(ids)}
+          openingPractice={openingPractice}
         />
       ) : null}
       {unavailableBook ? (
@@ -536,6 +569,8 @@ export default function StudyWorkspace({
         <CardLibrary
           cards={filteredCards}
           vaultId={studyVaultId}
+          practice={(ids) => void openCardPractice(ids)}
+          openingPractice={openingPractice}
           filter={
             reportCollection ??
             book?.title ??
@@ -584,6 +619,8 @@ export default function StudyWorkspace({
           useHighlights={params.get("kind") === "highlights"}
           books={books}
           threads={threads}
+          practice={(id, state) => void openCardPractice([id], state)}
+          openingPractice={openingPractice}
           initialPractice={weakMode}
           libraryHref={reportFilter ? studyHref("cards", reportFilter) : undefined}
           collection={
@@ -630,10 +667,13 @@ export default function StudyWorkspace({
           <TutorIndex
             books={books}
             notes={vaultNotes}
+            cards={cards}
             notebookSources={notebookSources}
             threads={threads}
             vaultId={studyVaultId}
             open={openThread}
+            practice={(ids) => void openCardPractice(ids)}
+            openingPractice={openingPractice}
           />
         )
       ) : null}

@@ -4,7 +4,8 @@ import { originHref } from "@/lib/study/links";
 import { studyPdfSections } from "@/lib/study/read-file";
 import { studyTextEdit, studyTextRevision } from "@/lib/study/text-edits";
 import type { StudyTutorSources } from "@/lib/study/passages";
-import { studyVaultIndex } from "@/lib/study/vault";
+import { recentPracticeCards, selectedStudyCards } from "@/lib/study/recall";
+import { studyOriginRecordId, studyVaultIndex } from "@/lib/study/vault";
 import { flashcardsData } from "@/studio/tools/flashcards/definition";
 import { quizData } from "@/studio/tools/quiz/definition";
 import { normaliseText } from "@/lib/grounding/chunk";
@@ -49,11 +50,64 @@ export async function readStudyThread(id: string): Promise<StudyThread> {
   return thread;
 }
 
+async function readStudyCardsInVault(ids: string[], vaultId: string, thread?: StudyThread) {
+  const backend = store();
+  const rows = new Map<string, StudyRecord>();
+  const visited = new Set<string>();
+  const noteIds = new Set<string>();
+  async function read(id: string) {
+    if (visited.has(id)) return;
+    visited.add(id);
+    const row = id === thread?.id ? thread : await backend.getStudy(id);
+    if (!row) return;
+    rows.set(id, row);
+    const origin = "origin" in row ? row.origin : undefined;
+    if (origin?.kind === "note") noteIds.add(origin.noteId);
+    const parents = ["bookId" in row ? row.bookId : undefined, studyOriginRecordId(origin)];
+    await Promise.all(parents.map((parent) => parent && read(parent)));
+  }
+  const [notebooks, vaults] = await Promise.all([
+    backend.listNotebooks(),
+    listVaults(),
+    Promise.all([...ids, ...(thread ? [thread.id] : [])].map(read)),
+  ]);
+  const notes = await Promise.all([...noteIds].map((id) => backend.getNote(id)));
+  const scope = studyVaultIndex({
+    rows: [...rows.values()],
+    notebooks,
+    notes: notes.filter((note) => note !== undefined),
+    vaults,
+    defaultVaultId: DEFAULT_VAULT,
+  });
+  if (thread && scope.owner(thread) !== vaultId) return [];
+  const cards = [...rows.values()].filter((row) => row.kind === "card");
+  return selectedStudyCards(ids, cards).filter(
+    (card) => scope.owner(card) === vaultId && card.front.trim() && card.back.trim(),
+  );
+}
+
 export async function readStudyTutorSources(
   thread: StudyThread,
   vaultId: string,
+  purpose: "chat" | "report" = "chat",
 ): Promise<StudyTutorSources> {
   if (thread.scope === "general") return {};
+  if (thread.scope === "cards") {
+    const ids = new Set(thread.cardIds);
+    if (purpose === "report") {
+      const practiced = recentPracticeCards(thread.messages).filter((id) => ids.has(id));
+      return { cards: await readStudyCardsInVault(practiced, vaultId, thread) };
+    }
+    const first =
+      thread.practiceCardId && ids.has(thread.practiceCardId)
+        ? thread.practiceCardId
+        : thread.cardIds?.[0];
+    if (!first) return { cards: [] };
+    const active = await readStudyCardsInVault([first], vaultId, thread);
+    if (active.length) return { cards: active };
+    ids.delete(first);
+    return { cards: await readStudyCardsInVault([...ids], vaultId, thread) };
+  }
   const backend = store();
   const bookIds = new Set(thread.scope === "materials" ? thread.bookIds : []);
   if (thread.bookId) bookIds.add(thread.bookId);
@@ -342,6 +396,26 @@ export async function startSourceTutor(sourceId: string) {
     vaultId: vaultOf(notebook),
     ...(book ? { bookIds: [book.id] } : { sourceIds: [source.id] }),
     ...(await studyConversationDefaults("book")),
+    messages: [],
+    updatedAt: Date.now(),
+  };
+  await putStudyRecords(thread);
+  return thread;
+}
+
+export async function startCardTutor(ids: string[], vaultId: string, title: string) {
+  const cards = await readStudyCardsInVault(ids, vaultId);
+  if (!cards.length) return null;
+  const thread: StudyThread = {
+    ...(await studyConversationDefaults("teach-back")),
+    id: studyId(),
+    kind: "thread",
+    title,
+    goal: "teach-back",
+    scope: "cards",
+    cardIds: cards.map(({ id }) => id),
+    practiceCardId: cards[0].id,
+    vaultId,
     messages: [],
     updatedAt: Date.now(),
   };

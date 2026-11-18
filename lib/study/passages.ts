@@ -1,7 +1,8 @@
 import type { Chunk, Note, Source } from "@/lib/db/types";
 import { selectPassages } from "@/lib/grounding/passages";
 import { extractHeadings, sameName } from "@/lib/notes/syntax";
-import type { StudyBook, StudyOrigin, StudyThread } from "./records";
+import { activeStudyCard, recentPracticeCards, selectedStudyCards } from "./recall";
+import type { StudyBook, StudyOrigin, StudyRecordOf, StudyThread } from "./records";
 import { locateStudyMark, studyTextRevision } from "./text-edits";
 
 export type StudyPassage = {
@@ -17,6 +18,7 @@ export type StudyTutorSources = {
   notebookSources?: readonly (Pick<Source, "id" | "title" | "notebookId"> & {
     chunks: readonly Pick<Chunk, "id" | "text">[];
   })[];
+  cards?: readonly StudyRecordOf<"card">[];
 };
 
 type SourcePassage = StudyPassage & { sourceId: string };
@@ -147,9 +149,29 @@ function bookPassages(book: StudyBook): SourcePassage[] {
 
 export function passagesFor(
   thread: StudyThread,
-  { book, books = [], notes = [], notebookSources = [] }: StudyTutorSources,
+  { book, books = [], notes = [], notebookSources = [], cards = [] }: StudyTutorSources,
   input: string,
+  purpose: "chat" | "report" = "chat",
 ): StudyPassage[] {
+  if (thread.scope === "cards") {
+    const selection = selectedStudyCards(thread.cardIds, cards);
+    const active = activeStudyCard(selection, thread.practiceCardId);
+    const material =
+      purpose === "report"
+        ? selectedStudyCards(recentPracticeCards(thread.messages), selection).slice(0, 8)
+        : active
+          ? [active]
+          : [];
+    const limit = purpose === "report" ? 1_300 : 10_500;
+    return material.map(({ id, front, back }) => {
+      const question = front.trim().slice(0, Math.floor(limit / 3));
+      return {
+        origin: { kind: "card", cardId: id },
+        title: question.slice(0, 500),
+        text: `Question: ${question}\n\nAnswer: ${back.trim().slice(0, limit - question.length - 20)}`,
+      };
+    });
+  }
   if (thread.scope === "notes" || thread.scope === "materials") {
     const originNotes = new Set(thread.noteIds);
     const passages = notes.filter(({ id }) => originNotes.has(id)).flatMap(notePassages);

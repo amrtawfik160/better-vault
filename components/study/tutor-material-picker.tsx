@@ -9,17 +9,24 @@ const groups = [
   ["bookIds", "study.materials.documents"],
   ["sourceIds", "study.materials.sources"],
   ["noteIds", "study.materials.notes"],
+  ["cardIds", "study.materials.cards"],
 ] as const;
 type Group = (typeof groups)[number][0];
 export type TutorMaterial = { id: string; title: string; detail?: string };
 export type TutorMaterialOptions = Record<Group, readonly TutorMaterial[]>;
 export type TutorMaterialSelection = Record<Group, string[]>;
-export const emptyTutorSelection: TutorMaterialSelection = { bookIds: [], sourceIds: [], noteIds: [] };
+export const emptyTutorSelection: TutorMaterialSelection = {
+  bookIds: [],
+  sourceIds: [],
+  noteIds: [],
+  cardIds: [],
+};
 
 type Props = {
   options: TutorMaterialOptions;
   selection: TutorMaterialSelection;
   disabled?: boolean;
+  flashcards?: boolean;
   onApply: (selection: TutorMaterialSelection) => void | Promise<void>;
 };
 
@@ -28,13 +35,14 @@ export function availableTutorSelection(
   selection: TutorMaterialSelection,
 ) {
   const available = (key: Group) => {
-    const saved = new Set(selection[key]);
-    return options[key].filter(({ id }) => saved.has(id)).map(({ id }) => id);
+    const visible = new Set(options[key].map(({ id }) => id));
+    return [...new Set(selection[key])].filter((id) => visible.has(id));
   };
   return {
     bookIds: available("bookIds"),
     sourceIds: available("sourceIds"),
     noteIds: available("noteIds"),
+    cardIds: available("cardIds"),
   };
 }
 
@@ -42,7 +50,7 @@ export function tutorSelectionCount(selection: TutorMaterialSelection) {
   return groups.reduce((count, [key]) => count + selection[key].length, 0);
 }
 
-export function TutorMaterialPicker({ options, selection, disabled, onApply }: Props) {
+export function TutorMaterialPicker({ options, selection, disabled, flashcards, onApply }: Props) {
   const { t } = useTranslation("home");
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -59,13 +67,16 @@ export function TutorMaterialPicker({ options, selection, disabled, onApply }: P
       <Dialog.Trigger
         render={<Button variant="outline" size="sm" type="button" disabled={disabled || saving} />}
       >
-        {count ? t("study.materials.selected", { count }) : t("study.materials.choose")}
+        {count
+          ? t("study.materials.selected", { count })
+          : t(flashcards ? "study.materials.chooseCards" : "study.materials.choose")}
       </Dialog.Trigger>
       {open ? (
         <MaterialDialog
           options={options}
           initial={current}
           missing={tutorSelectionCount(selection) - count}
+          flashcards={flashcards}
           saving={saving}
           save={async (draft) => {
             setSaving(true);
@@ -88,12 +99,14 @@ function MaterialDialog({
   options,
   initial,
   missing,
+  flashcards,
   saving,
   save,
 }: {
   options: TutorMaterialOptions;
   initial: TutorMaterialSelection;
   missing: number;
+  flashcards?: boolean;
   saving: boolean;
   save: (selection: TutorMaterialSelection) => Promise<void>;
 }) {
@@ -152,8 +165,8 @@ function MaterialDialog({
   return (
     <Dialog.Content closeLabel={common("actions.close")}>
       <Dialog.Header
-        title={t("study.materials.choose")}
-        description={t("study.materials.description")}
+        title={t(flashcards ? "study.materials.chooseCards" : "study.materials.choose")}
+        description={t(flashcards ? "study.materials.cardDescription" : "study.materials.description")}
       />
       <Dialog.Body>
         <Input
@@ -171,7 +184,7 @@ function MaterialDialog({
         {matches.map(({ key, label, items }) => choices(items, key, t(label)))}
         {matches.every(({ items }) => !items.length) ? (
           <p className="mt-3 text-sm text-muted-foreground">
-            {t(search ? "study.materials.noMatches" : "study.materials.empty")}
+            {t(search ? "study.materials.noMatches" : flashcards ? "study.materials.noCards" : "study.materials.empty")}
           </p>
         ) : null}
       </Dialog.Body>
