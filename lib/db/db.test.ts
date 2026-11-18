@@ -1341,7 +1341,7 @@ describe.each(backends)("%s store", (name, create) => {
       });
       const openedAt = Date.now();
       const previous = { section: 0, surface: "text" as const, progress: 0.3 };
-      const current = { section: 1, surface: "text" as const, progress: 0.2, anchor: { offset: 0, quote, revision: 0 } };
+      const current = { section: 1, surface: "text" as const, progress: 0.2, endRevision: 0, anchor: { offset: 0, quote, revision: 0 } };
       await saveStudyReadingPlace(book.id, previous, openedAt);
       await store().patchStudyBook({ id: book.id, change: { section: 1 }, updatedAt: openedAt + 20 });
       await saveStudyReadingPlace(book.id, current, openedAt + 30);

@@ -57,13 +57,17 @@ function capturePlace(
   section: number,
   revision: number,
 ): StudyReadingPlace {
-  const y = viewport.getBoundingClientRect().top + readingInset(viewport);
+  const viewportBounds = viewport.getBoundingClientRect();
+  const y = viewportBounds.top + readingInset(viewport);
   const layoutBounds = layout?.getBoundingClientRect();
   const inLayout = layoutBounds && y <= layoutBounds.bottom;
   const root = (inLayout && layout) || article;
   const bounds = root.getBoundingClientRect();
   const progress = Math.min(1, Math.max(0, (y - bounds.top) / Math.max(1, bounds.height)));
   const place: StudyReadingPlace = { section, surface: inLayout ? "layout" : "text", progress };
+  if (viewport.scrollTop > 1 && viewportBounds.bottom >= (layoutBounds ?? bounds).bottom - 1) {
+    place.endRevision = revision;
+  }
   if (!canonical || viewport.scrollTop <= 1) return place;
   const range = visibleText(root, y);
   if (!range) return place;

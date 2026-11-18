@@ -21,6 +21,7 @@ const readingPlace = z.object({
   section: index,
   surface: z.enum(["text", "layout"]),
   progress: z.number().min(0).max(1),
+  endRevision: index.optional(),
   anchor: z.object({ offset: index, quote: z.string().min(1).max(96), revision: index }).optional(),
 });
 const textEdit = z.object({

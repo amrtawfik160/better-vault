@@ -7,6 +7,7 @@ import { StudyFollowUps } from "./study-follow-ups";
 import { originHref, queryIndex, studyHighlightOrigin, studyHref } from "@/lib/study/links";
 import { tutorBookOrigin } from "@/lib/study/passages";
 import { difficultStudyItems, studyHighlightPreview } from "@/lib/study/recall";
+import { studyReadingProgress } from "@/lib/study/reading-progress";
 import { studyReportKey } from "@/lib/study/reports";
 import {
   directReviewSession,
@@ -278,7 +279,7 @@ function DailyStudy({
           </Card.Content>
         </Card>
       ) : null}
-      {rows.length ? <StudyProgress rows={rows} books={books} now={now} /> : null}
+      {rows.length ? <StudyProgress rows={rows} books={books} now={now} vaultId={vaultId} /> : null}
       <div className="space-y-2">
         <h3 className="font-semibold">Recent activity</h3>
         {sessions.length ? (
@@ -313,11 +314,14 @@ function StudyProgress({
   rows,
   books,
   now,
+  vaultId,
 }: {
   rows: StudyRecord[];
   books: StudyBook[];
   now: number;
+  vaultId: string;
 }) {
+  const { t, i18n } = useTranslation("home");
   const cutoff = new Date(now);
   cutoff.setHours(0, 0, 0, 0);
   cutoff.setDate(cutoff.getDate() - 29);
@@ -355,7 +359,10 @@ function StudyProgress({
       tab: "tutor",
     },
   ];
-  const reading = books.filter((book) => book.lastReadAt !== undefined || book.section > 0);
+  const reading = books
+    .filter((book) => book.lastReadAt !== undefined || book.readingPlace || book.section > 0)
+    .toSorted((a, b) => (b.lastReadAt ?? 0) - (a.lastReadAt ?? 0));
+  const percent = new Intl.NumberFormat(i18n.language, { style: "percent" });
   return (
     <section className="space-y-3" aria-label="Study progress">
       <h3 className="font-semibold">Study progress</h3>
@@ -386,30 +393,36 @@ function StudyProgress({
       ) : null}
       {reading.length ? (
         <div className="space-y-2 rounded-xl border p-3">
-          <h4 className="text-sm font-medium">Reading progress</h4>
+          <h4 className="text-sm font-medium">{t("study.today.readingProgress")}</h4>
           <ul className="space-y-3">
-            {reading.map((book) => (
-              <li key={book.id} className="space-y-1">
-                <div className="flex items-center justify-between gap-2 text-sm">
-                  <Link
-                    dir="auto"
-                    to={studyHref("library", { book: book.id })}
-                    className="truncate hover:underline"
-                  >
-                    {book.title}
-                  </Link>
-                  <span className="shrink-0 text-xs text-muted-foreground">
-                    {Math.round(((book.section + 1) / book.sections.length) * 100)}%
-                  </span>
-                </div>
-                <progress
-                  max={book.sections.length}
-                  value={book.section + 1}
-                  aria-label={`Reading progress for ${book.title}`}
-                  className="block h-1 w-full accent-primary"
-                />
-              </li>
-            ))}
+            {reading.map((book) => {
+              const position = studyReadingProgress(book);
+              const display = position < 1 ? Math.min(0.99, position) : 1;
+              const progress = percent.format(display);
+              return (
+                <li key={book.id} className="space-y-1">
+                  <div className="flex items-center justify-between gap-2 text-sm">
+                    <Link
+                      dir="auto"
+                      to={studyHref("library", { book: book.id, vault: vaultId })}
+                      className="min-w-0 wrap-break-word hover:underline"
+                    >
+                      {book.title}
+                    </Link>
+                    <span aria-hidden="true" className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                      {progress}
+                    </span>
+                  </div>
+                  <progress
+                    max={1}
+                    value={display}
+                    aria-label={t("study.today.readingProgressFor", { title: book.title })}
+                    aria-valuetext={progress}
+                    className="block h-1 w-full accent-primary"
+                  />
+                </li>
+              );
+            })}
           </ul>
         </div>
       ) : null}
