@@ -3,7 +3,9 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/panelui/button";
 import { loadBlob } from "@/lib/db/blobs";
+import type { StudyImageCrop } from "@/lib/study/records";
 import type { StudyImageCapture } from "@/lib/study/visual-card";
+import { StudyImageRegion } from "./study-image-crop";
 import { useRenderedStudyMarks, type StudyTextMark } from "./study-rendered-text";
 import "./study-pdf-page.css";
 
@@ -14,10 +16,12 @@ export function StudyPdfPage({
   marks,
   zoom,
   layoutVisit,
+  focusCrop,
   onSelect,
   onReadingSurface,
   onVisual,
   onDiscuss,
+  onDiscussArea,
 }: {
   fileId: string;
   page: number;
@@ -25,10 +29,12 @@ export function StudyPdfPage({
   marks: readonly StudyTextMark[];
   zoom: number;
   layoutVisit: string;
+  focusCrop?: StudyImageCrop;
   onSelect: (root: HTMLElement) => void;
   onReadingSurface: (surface: { section: number; root: HTMLElement | null }) => void;
   onVisual: (capture: StudyImageCapture) => void;
   onDiscuss: (capture: StudyImageCapture) => void;
+  onDiscussArea: (capture: StudyImageCapture) => void;
 }) {
   const { t } = useTranslation("home");
   const paper = useRef<HTMLDivElement>(null);
@@ -144,6 +150,9 @@ export function StudyPdfPage({
         <Button variant="outline" size="sm" disabled={!ready || capturing} onClick={() => capturePage(onDiscuss)}>
           {t("study.reader.discussPageImage")}
         </Button>
+        <Button variant="outline" size="sm" disabled={!ready || capturing} onClick={() => capturePage(onDiscussArea)}>
+          {t("study.reader.discussPageArea")}
+        </Button>
       </div>
       <div className="overflow-auto">
         <div
@@ -169,6 +178,7 @@ export function StudyPdfPage({
             onTouchEnd={capture}
             onKeyUp={capture}
           />
+          {focusCrop ? <StudyImageRegion crop={focusCrop} /> : null}
         </div>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { routes } from "@/lib/routes";
-import type { StudyCitation, StudyOrigin, StudyRecordOf } from "./records";
+import type { StudyBook, StudyCitation, StudyOrigin, StudyRecordOf, StudyVisualOrigin } from "./records";
+import { readStudyImageCrop, studyImageCropKey } from "./visual-card";
 
 function withQuery(path: string, values: Record<string, string | number | undefined>) {
   const params = new URLSearchParams();
@@ -54,6 +55,7 @@ export function originHref(origin: StudyOrigin, reader?: URLSearchParams) {
         rev: origin.revision,
         figure: origin.visual?.kind === "epub" ? origin.visual.figure : undefined,
         pageTop: origin.visual?.kind === "pdf" ? origin.visual.top : undefined,
+        crop: origin.visual?.crop ? studyImageCropKey(origin.visual.crop) : undefined,
         reference: origin.section === undefined ? undefined : "1",
         readerFocus: sameReader && isFocusedStudyReader(reader) ? "1" : undefined,
         readerTutor,
@@ -124,4 +126,13 @@ export function queryIndex(value: string | null): number | undefined {
   if (value === null || !/^\d+$/.test(value)) return;
   const number = Number(value);
   return Number.isSafeInteger(number) ? number : undefined;
+}
+
+export function studyVisualFromReader(params: URLSearchParams, format?: StudyBook["format"]): StudyVisualOrigin | undefined {
+  const crop = readStudyImageCrop(params.get("crop"));
+  const figure = queryIndex(params.get("figure"));
+  const top = queryIndex(params.get("pageTop"));
+  if (format === "epub" && figure !== undefined) return { kind: "epub", figure, ...(crop && { crop }) };
+  if (format === "pdf" && top !== undefined && top <= 10_000)
+    return { kind: "pdf", top, ...(crop && { crop }) };
 }

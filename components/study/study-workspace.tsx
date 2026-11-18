@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { StudyOriginLink } from "./study-origin-link";
 import { StudyFollowUps } from "./study-follow-ups";
 import { StudyActivity } from "./study-activity";
-import { isFocusedStudyReader, originHref, queryIndex, studyHighlightOrigin, studyHref } from "@/lib/study/links";
+import { isFocusedStudyReader, originHref, queryIndex, studyHighlightOrigin, studyHref, studyVisualFromReader } from "@/lib/study/links";
 import { tutorBookOrigin } from "@/lib/study/passages";
 import { captureStudyImage, type StudyImageCapture } from "@/lib/study/visual-card";
 import { difficultStudyItems, studyHighlightPreview } from "@/lib/study/recall";
@@ -48,7 +48,6 @@ import {
   type StudyBook,
   type StudyRecord,
   type StudyThread,
-  type StudyVisualOrigin,
 } from "@/lib/study/records";
 import { StudyLibrary } from "./study-library";
 import { StudyReader } from "./study-reader";
@@ -511,14 +510,7 @@ export default function StudyWorkspace({
   const at = queryIndex(params.get("at"));
   const length = queryIndex(params.get("length"));
   const revision = queryIndex(params.get("rev"));
-  const figure = queryIndex(params.get("figure"));
-  const pageTop = queryIndex(params.get("pageTop"));
-  const focusedVisual: StudyVisualOrigin | undefined =
-    book?.format === "epub" && figure !== undefined
-      ? { kind: "epub", figure }
-      : book?.format === "pdf" && pageTop !== undefined && pageTop <= 10_000
-        ? { kind: "pdf", top: pageTop }
-        : undefined;
+  const focusedVisual = studyVisualFromReader(params, book?.format);
   const focusedRange = at !== undefined && length ? { offset: at, length, revision } : undefined;
   const output = params.get("output");
   const studioOutput = useOutput(tab === "review" ? output : null);
@@ -625,7 +617,7 @@ export default function StudyWorkspace({
   }
 
   async function openTutorWhileReading(open: () => Promise<StudyThread>) {
-    if (readerRequest.current) return;
+    if (readerRequest.current) return false;
     const active = window.document.activeElement;
     if (!readerThreadId && active instanceof HTMLElement && active !== window.document.body)
       readerTrigger.current = active;
@@ -634,10 +626,13 @@ export default function StudyWorkspace({
     setOpeningReaderTutor(true);
     try {
       const thread = await open();
-      if (!request.signal.aborted) showReaderTutor(thread.id);
+      if (request.signal.aborted) return false;
+      showReaderTutor(thread.id);
+      return true;
     } catch (error) {
       if (!request.signal.aborted)
         toast.error(error instanceof Error ? error.message : String(error));
+      return false;
     } finally {
       readerRequest.current = null;
       setOpeningReaderTutor(false);
@@ -826,7 +821,7 @@ export default function StudyWorkspace({
             startChat={(scope, section, selection, goal, initial) =>
               void discussWhileReading(book, scope, section, selection, goal, initial)
             }
-            startImageChat={(section, capture) => void discussImage(book, section, capture)}
+            startImageChat={(section, capture) => discussImage(book, section, capture)}
             openingTutor={openingReaderTutor}
             layoutCheckpoint={readerCheckpoint}
             focused={focusedReader}

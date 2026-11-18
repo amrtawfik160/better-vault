@@ -23,7 +23,7 @@ import { studyFollowUpId, studyReportKey, studyReports } from "@/lib/study/repor
 import { studyTutorContextSchema } from "@/lib/study/records";
 import { studyOriginRecordId, studyVaultIndex } from "@/lib/study/vault";
 import { clearTutorDraftRecovery } from "@/lib/study/tutor-draft-recovery";
-import { studyImageId, type StudyImageSnapshot } from "@/lib/study/visual-card";
+import { studyImageCropKey, studyImageId, type StudyImageSnapshot } from "@/lib/study/visual-card";
 import { flashcardsData } from "@/studio/tools/flashcards/definition";
 import { quizData } from "@/studio/tools/quiz/definition";
 import { normaliseText } from "@/lib/grounding/chunk";
@@ -119,7 +119,8 @@ export function useStudyDocumentImage(book: StudyBook | undefined, thread: Study
   return useStoreQuery(
     async () => (await studyDocumentImage(book, thread)) ?? null,
     [book?.id, book?.notebookId, book?.sourceId, thread.bookId, thread.scope, thread.section,
-      anchor?.kind, anchor?.kind === "pdf" ? anchor.top : anchor?.figure],
+      anchor?.kind, anchor?.kind === "pdf" ? anchor.top : anchor?.figure,
+      anchor?.crop ? studyImageCropKey(anchor.crop) : undefined],
     ["blobs"],
   );
 }

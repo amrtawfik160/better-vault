@@ -1,21 +1,38 @@
 import { fromBase64 } from "@/lib/base64";
-import type { StudyImageContext, StudyVisualOrigin } from "./records";
+import { studyImageCropSchema, type StudyImageContext, type StudyImageCrop, type StudyVisualOrigin } from "./records";
 
-export type StudyImageCapture =
-  { kind: "pdf"; blob: Blob } | { kind: "epub"; blob: Blob; figure: number; description: string };
+export type StudyImageCapture = { crop?: StudyImageCrop } & (
+  { kind: "pdf"; blob: Blob } | { kind: "epub"; blob: Blob; figure: number; description: string }
+);
 
-export type StudyImageCrop = { left: number; top: number; right: number; bottom: number };
 export const fullStudyImage: StudyImageCrop = { left: 0, top: 0, right: 100, bottom: 100 };
 
+export function isCroppedStudyImage({ left, top, right, bottom }: StudyImageCrop) {
+  return left > 0 || top > 0 || right < 100 || bottom < 100;
+}
+
+export function studyImageCropKey({ left, top, right, bottom }: StudyImageCrop) {
+  return [left, top, right, bottom].join(",");
+}
+
+export function readStudyImageCrop(value: string | null) {
+  if (!value || !/^\d{1,3}(,\d{1,3}){3}$/.test(value)) return;
+  const [left, top, right, bottom] = value.split(",").map(Number);
+  const crop = studyImageCropSchema.safeParse({ left, top, right, bottom }).data;
+  return crop && isCroppedStudyImage(crop) ? crop : undefined;
+}
+
 export function studyImageAnchor(capture: StudyImageCapture): StudyVisualOrigin {
+  const crop = capture.crop && isCroppedStudyImage(capture.crop) ? capture.crop : undefined;
   return capture.kind === "pdf"
-    ? { kind: "pdf", top: 0 }
-    : { kind: "epub", figure: capture.figure };
+    ? { kind: "pdf", top: (crop?.top ?? 0) * 100, ...(crop && { crop }) }
+    : { kind: "epub", figure: capture.figure, ...(crop && { crop }) };
 }
 
 export function studyImageId(bookId: string, section: number, anchor: StudyVisualOrigin) {
   const position = anchor.kind === "pdf" ? anchor.top : anchor.figure;
-  return `study-image:${encodeURIComponent(bookId)}:${section}:${anchor.kind}:${position}`;
+  const id = `study-image:${encodeURIComponent(bookId)}:${section}:${anchor.kind}:${position}`;
+  return anchor.crop ? `${id}:${studyImageCropKey(anchor.crop)}` : id;
 }
 
 export function studyCropPixels(crop: StudyImageCrop, width: number, height: number) {
@@ -69,7 +86,7 @@ export async function captureStudyImage(
     const image = new Image();
     image.src = url;
     await image.decode();
-    const snapshot = studyCardImage(image, fullStudyImage);
+    const snapshot = studyCardImage(image, capture.crop ?? fullStudyImage);
     if (!snapshot) return;
     const [header, encoded] = snapshot.split(",", 2);
     return {

@@ -3,10 +3,11 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/panelui/button";
 import { loadBlob } from "@/lib/db/blobs";
 import { epubPath, openStudyEpub } from "@/lib/study/epub";
-import type { StudyReadingAppearance, StudySection } from "@/lib/study/records";
+import type { StudyReadingAppearance, StudySection, StudyVisualOrigin } from "@/lib/study/records";
 import type { StudyImageCapture } from "@/lib/study/visual-card";
 import { textDirection, type TextDirection } from "@/lib/text/direction";
 import { directionalInline } from "@/components/common/directional-text";
+import { StudyImageRegion } from "./study-image-crop";
 import { useRenderedStudyMarks, type StudyTextMark } from "./study-rendered-text";
 
 const epubThemeClass = {
@@ -110,9 +111,11 @@ async function loadPictures(
 }
 
 type FigureCapture = Extract<StudyImageCapture, { kind: "epub" }>;
+type FigureOrigin = Extract<StudyVisualOrigin, { kind: "epub" }>;
 type FigureActions = {
   onVisual: (capture: StudyImageCapture) => void;
   onDiscuss: (capture: StudyImageCapture) => void;
+  onDiscussArea: (capture: StudyImageCapture) => void;
 };
 
 function FigureAction({
@@ -145,6 +148,16 @@ function FigureAction({
       >
         {t("study.reader.discussFigure")}
       </Button>
+      <Button
+        type="button"
+        className="select-none"
+        variant="ghost"
+        size="sm"
+        aria-label={capture.description ? t("study.reader.discussNamedFigureArea", { description: capture.description }) : undefined}
+        onClick={() => actions.onDiscussArea(capture)}
+      >
+        {t("study.reader.discussFigureArea")}
+      </Button>
     </span>
   );
 }
@@ -156,6 +169,7 @@ function displayChapter(
   destinations: ReadonlyMap<string, number>,
   go: (index: number) => void,
   actions: FigureActions,
+  focus?: FigureOrigin,
 ) {
   const figures = new Map<Element, number>();
   chapter.body.querySelectorAll("img").forEach((image, index) => figures.set(image, index));
@@ -192,18 +206,22 @@ function displayChapter(
       if (!figure) return null;
       const link = node.closest("a");
       const linked = link && chapterDestination(link) !== undefined;
+      const crop = focus?.figure === figure.capture.figure ? focus.crop : undefined;
       return (
         <span
           key={key}
           className="my-3 inline-flex max-w-full flex-col items-start gap-1 align-middle"
         >
-          <img
-            src={figure.picture.url}
-            alt={figure.capture.description}
-            loading="lazy"
-            data-study-figure={figure.capture.figure}
-            className="max-h-[60vh] max-w-full object-contain"
-          />
+          <span className="relative block max-w-full">
+            <img
+              src={figure.picture.url}
+              alt={figure.capture.description}
+              loading="lazy"
+              data-study-figure={figure.capture.figure}
+              className="block max-h-[60vh] max-w-full object-contain"
+            />
+            {crop ? <StudyImageRegion crop={crop} /> : null}
+          </span>
           {linked ? null : <FigureAction capture={figure.capture} actions={actions} />}
         </span>
       );
@@ -300,10 +318,12 @@ export function StudyEpubChapter({
   marks,
   font,
   theme,
+  focus,
   onSelect,
   onReadingSurface,
   onVisual,
   onDiscuss,
+  onDiscussArea,
   go,
 }: {
   fileId: string;
@@ -313,10 +333,12 @@ export function StudyEpubChapter({
   marks: readonly StudyTextMark[];
   font: number;
   theme: StudyReadingAppearance["epubTheme"];
+  focus?: FigureOrigin;
   onSelect: (root: HTMLElement) => void;
   onReadingSurface: (surface: { section: number; root: HTMLElement | null }) => void;
   onVisual: (capture: StudyImageCapture) => void;
   onDiscuss: (capture: StudyImageCapture) => void;
+  onDiscussArea: (capture: StudyImageCapture) => void;
   go: (index: number) => void;
 }) {
   const [loaded, setLoaded] = useState<{
@@ -391,7 +413,7 @@ export function StudyEpubChapter({
       onTouchEnd={capture}
       onKeyUp={capture}
     >
-      {displayChapter(loaded.chapter, loaded.path, loaded.pictures, destinations, go, { onVisual, onDiscuss })}
+      {displayChapter(loaded.chapter, loaded.path, loaded.pictures, destinations, go, { onVisual, onDiscuss, onDiscussArea }, focus)}
     </div>
   );
 }

@@ -16,6 +16,7 @@ import { Button } from "@/components/panelui/button";
 import { StudyEpubChapter } from "./study-epub-chapter";
 import { StudyPdfPage } from "./study-pdf-page";
 import { StudyVisualCard, type VisualFlashcard } from "./study-visual-card";
+import { StudyImageDiscussion } from "./study-image-discussion";
 import { StudyFlashcardDraftDialog, type FlashcardSource } from "./study-flashcard-generator";
 import { renderedSelection, renderedStudyRange, useRenderedStudyMarks } from "./study-rendered-text";
 import { useStudyReadingPlace } from "./study-reading-place";
@@ -165,7 +166,7 @@ export function StudyReader({
     goal?: "teach-back",
     initial?: StudyThread["messages"],
   ) => void;
-  startImageChat: (section: number, capture: StudyImageCapture) => void;
+  startImageChat: (section: number, capture: StudyImageCapture) => Promise<boolean>;
   openingTutor: boolean;
   layoutCheckpoint: RefObject<(() => void) | null>;
   focused: boolean;
@@ -214,7 +215,11 @@ export function StudyReader({
   const [cardBack, setCardBack] = useState("");
   const [draftSource, setDraftSource] = useState<FlashcardSource | null>(null);
   const [cardSaving, setCardSaving] = useState(false);
-  const [visualCard, setVisualCard] = useState<{ capture: StudyImageCapture; section: number }>();
+  const [visualAction, setVisualAction] = useState<{
+    action: "card" | "discuss";
+    capture: StudyImageCapture;
+    section: number;
+  }>();
   const [language, setLanguage] = useState("");
   const [translating, setTranslating] = useState(false);
   const [color, setColor] = useState<StudyHighlightColor>("yellow");
@@ -376,6 +381,11 @@ export function StudyReader({
       }
       textBody.current?.querySelector("#focused-passage")?.scrollIntoView({ block: "center" });
     } else if (layout && viewport && visualKind === "pdf" && pageTop !== undefined) {
+      const area = layout.parentElement?.querySelector("[data-study-image-region]");
+      if (area) {
+        area.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
+        return;
+      }
       const bounds = layout.getBoundingClientRect();
       const top = bounds.top + bounds.height * (pageTop / 10_000);
       viewport.scrollBy({
@@ -385,7 +395,8 @@ export function StudyReader({
     } else if (layout && visualKind === "epub" && figure !== undefined) {
       const picture = layout.querySelector<HTMLImageElement>(`img[data-study-figure="${figure}"]`);
       if (!picture) return;
-      const center = () => picture.scrollIntoView({ block: "center", behavior: "instant" });
+      const area = picture.parentElement?.querySelector("[data-study-image-region]");
+      const center = () => (area ?? picture).scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
       center();
       if (!picture.complete) {
         picture.addEventListener("load", center, { once: true });
@@ -420,15 +431,15 @@ export function StudyReader({
 
   function go(page: number) {
     clearSelection();
-    setVisualCard(undefined);
+    setVisualAction(undefined);
     setEditingSection(undefined);
     setResult(null);
     openPage(page);
   }
 
-  function openVisualCard(capture: StudyImageCapture) {
+  function openVisualAction(capture: StudyImageCapture, action: "card" | "discuss") {
     clearSelection();
-    setVisualCard({ capture, section: index });
+    setVisualAction({ action, capture, section: index });
   }
 
   async function saveVisualCard({ visual, ...content }: VisualFlashcard, section: number) {
@@ -439,7 +450,7 @@ export function StudyReader({
       tags: [book.title],
       origin: { kind: "book", bookId: book.id, section, visual },
     });
-    setVisualCard(undefined);
+    setVisualAction(undefined);
     toast.success(t("study.visualCard.saved"), {
       action: {
         label: t("study.visualCard.review"),
@@ -808,7 +819,7 @@ export function StudyReader({
             active={focus && { section: index, ...focus }}
             open={({ section, offset, length }) => {
               clearSelection();
-              setVisualCard(undefined);
+              setVisualAction(undefined);
               setEditingSection(undefined);
               setResult(null);
               openPassage(section, { offset, length });
@@ -957,10 +968,12 @@ export function StudyReader({
             marks={renderedMarks}
             zoom={zoom}
             layoutVisit={location.key}
+            focusCrop={focusedVisual?.kind === "pdf" ? focusedVisual.crop : undefined}
             onSelect={captureRendered}
             onReadingSurface={setReadingSurface}
-            onVisual={openVisualCard}
-            onDiscuss={(capture) => startImageChat(index, capture)}
+            onVisual={(capture) => openVisualAction(capture, "card")}
+            onDiscuss={(capture) => void startImageChat(index, capture)}
+            onDiscussArea={(capture) => openVisualAction(capture, "discuss")}
           />
         ) : null}
         {viewEpub && fileId ? (
@@ -973,11 +986,13 @@ export function StudyReader({
             marks={renderedMarks}
             font={font}
             theme={epubTheme}
+            focus={focusedVisual?.kind === "epub" ? focusedVisual : undefined}
             go={go}
             onSelect={captureRendered}
             onReadingSurface={setReadingSurface}
-            onVisual={openVisualCard}
-            onDiscuss={(capture) => startImageChat(index, capture)}
+            onVisual={(capture) => openVisualAction(capture, "card")}
+            onDiscuss={(capture) => void startImageChat(index, capture)}
+            onDiscussArea={(capture) => openVisualAction(capture, "discuss")}
           />
         ) : null}
         <article
@@ -1221,11 +1236,18 @@ export function StudyReader({
           ) : null}
         </div>
       ) : null}
-      {visualCard ? (
+      {visualAction?.action === "card" ? (
         <StudyVisualCard
-          capture={visualCard.capture}
-          onClose={() => setVisualCard(undefined)}
-          onSave={(card) => saveVisualCard(card, visualCard.section)}
+          capture={visualAction.capture}
+          onClose={() => setVisualAction(undefined)}
+          onSave={(card) => saveVisualCard(card, visualAction.section)}
+        />
+      ) : null}
+      {visualAction?.action === "discuss" ? (
+        <StudyImageDiscussion
+          capture={visualAction.capture}
+          onClose={() => setVisualAction(undefined)}
+          onStart={(capture) => startImageChat(visualAction.section, capture)}
         />
       ) : null}
       {draftSource ? (

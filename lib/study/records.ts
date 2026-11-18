@@ -47,9 +47,17 @@ const textEdit = z.object({
   section: index,
   ranges: z.array(z.object({ before: index, after: index, length: z.number().int().positive() })),
 });
+const imageEdge = index.max(100);
+export const studyImageCropSchema = z.object({
+  left: imageEdge,
+  top: imageEdge,
+  right: imageEdge,
+  bottom: imageEdge,
+}).refine(({ left, top, right, bottom }) => left < right && top < bottom);
+export type StudyImageCrop = z.infer<typeof studyImageCropSchema>;
 const studyVisualOrigin = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("pdf"), top: index.max(10_000) }),
-  z.object({ kind: z.literal("epub"), figure: index }),
+  z.object({ kind: z.literal("pdf"), top: index.max(10_000), crop: studyImageCropSchema.optional() }),
+  z.object({ kind: z.literal("epub"), figure: index, crop: studyImageCropSchema.optional() }),
 ]);
 export const studyOriginSchema = z.discriminatedUnion("kind", [
   z.object({

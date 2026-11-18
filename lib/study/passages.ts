@@ -361,7 +361,8 @@ export function passagesFor(
     return [{
       origin,
       title: `${book.title} · ${section.title}`,
-      text: [thread.imageContext?.description, section.text.trim().slice(0, 8000)].filter(Boolean).join("\n\n"),
+      text: [thread.imageContext?.description, origin.visual.crop ? undefined : section.text.trim().slice(0, 8000)]
+        .filter(Boolean).join("\n\n"),
     }];
   }
   if (thread.scope === "passage" && thread.quote) {

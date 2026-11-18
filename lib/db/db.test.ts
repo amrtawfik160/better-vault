@@ -196,7 +196,7 @@ describe.each(backends)("%s store", (name, create) => {
       const book = await addStudyBook({
         title: "Graphics",
         format: "pdf",
-        sections: [{ title: "Page 1", text: "" }, { title: "Page 2", text: "" }],
+        sections: [{ title: "Page 1", text: "" }, { title: "Page 2", text: "Other text on the page." }],
         bytes: Uint8Array.of(37, 80, 68, 70),
         mime: "application/pdf",
       });
@@ -214,11 +214,27 @@ describe.each(backends)("%s store", (name, create) => {
       const visualPassage = {
         origin: visualOrigin,
         title: "Graphics · Page 2",
-        text: "",
+        text: "Other text on the page.",
       };
       expect(passagesFor(reopened, sources, "Explain the diagram.")).toEqual([visualPassage]);
       expect(await readFlashcardDraftPassages([visualOrigin, visualOrigin], DEFAULT_VAULT)).toEqual([
-        { ...visualPassage, image: sources.documentImage },
+        { ...visualPassage, text: "", image: sources.documentImage },
+      ]);
+      const crop = { left: 10, top: 25, right: 40, bottom: 70 };
+      const cropAnchor = { ...anchor, top: 2500, crop };
+      const cropSnapshot = { context: { anchor: cropAnchor }, file: { mime: "image/png", data: Uint8Array.of(4, 5) } };
+      const cropped = await startBookImageTutor(book, 1, cropSnapshot);
+      const other = await startBookImageTutor(book, 1, {
+        context: { anchor: { ...cropAnchor, crop: { ...crop, left: 60, right: 90 } } },
+        file: { mime: "image/png", data: Uint8Array.of(6, 7) },
+      });
+      expect(new Set([tutor.id, cropped.id, other.id]).size).toBe(3);
+      expect((await startBookImageTutor(book, 1, cropSnapshot)).id).toBe(cropped.id);
+      const croppedSources = await readStudyTutorSources(cropped, DEFAULT_VAULT);
+      const cropOrigin = { ...visualOrigin, visual: cropAnchor };
+      expect(croppedSources.documentImage).toBe("data:image/png;base64,BAU=");
+      expect(passagesFor(cropped, croppedSources, "Explain this area.")).toEqual([
+        { ...visualPassage, origin: cropOrigin, text: "" },
       ]);
       expect(await readFlashcardDraftPassages([visualOrigin], "another-vault")).toEqual([]);
       const replyOrigin = { kind: "tutor", threadId: reopened.id, message: 0 } as const;
@@ -243,6 +259,12 @@ describe.each(backends)("%s store", (name, create) => {
       const restored = await readStudyThread(tutor.id);
       expect(restored.messages).toEqual(reopened.messages);
       expect((await readStudyTutorSources(restored, DEFAULT_VAULT)).documentImage).toBe(sources.documentImage);
+      const restoredCrop = await readStudyThread(cropped.id);
+      expect(restoredCrop.imageContext?.anchor).toEqual(cropAnchor);
+      expect((await readStudyTutorSources(restoredCrop, DEFAULT_VAULT)).documentImage).toBe(croppedSources.documentImage);
+      expect(await readFlashcardDraftPassages([cropOrigin], DEFAULT_VAULT)).toEqual([
+        { ...visualPassage, origin: cropOrigin, text: "", image: croppedSources.documentImage },
+      ]);
       await deleteSource(book.sourceId);
       expect((await readStudyTutorSources(restored, DEFAULT_VAULT)).documentImage).toBeUndefined();
       expect(await readFlashcardDraftPassages([visualOrigin], DEFAULT_VAULT)).toEqual([]);
