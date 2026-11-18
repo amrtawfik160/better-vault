@@ -1,6 +1,7 @@
 import { generateId } from "ai";
 import { useSyncExternalStore } from "react";
 import { clearReviewCheckpoint } from "@/lib/study/review-session";
+import { clearDocumentRecoveries, clearDocumentRecovery, studyDocumentDraftId } from "@/lib/study/document-drafts";
 import { DEFAULT_VAULT, studyVaultIndex } from "@/lib/study/vault";
 import { useStoreQuery } from "./live";
 import { store } from "./store";
@@ -90,6 +91,11 @@ export async function deleteVault(id: string) {
   for (const skill of (await store().listSkills()).filter((item) => item.vaultId === id))
     await store().deleteSkill(skill.id);
   await store().deleteVault(id);
+  clearDocumentRecovery(studyDocumentDraftId({ vaultId: id }));
+  for (const row of rows) {
+    if (row.kind === "book" && scope.owner(row) === id)
+      clearDocumentRecoveries(`document-draft:book:${row.id}:`);
+  }
   clearReviewCheckpoint(id);
   if (currentVaultId() === id) setCurrentVault(DEFAULT_VAULT);
 }

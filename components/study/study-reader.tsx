@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { StudyMarkdown, StudyText } from "./study-text";
-import { StudyDocumentEditor, type StudyDocumentDraft } from "./study-document-editor";
+import { StudyDocumentEdits } from "./study-document-edits";
 import { highlightColors } from "./study-highlight-colors";
 import { flashcardMaterialLimit, flashcardPassageSize } from "@/lib/study/ai";
 import { directionalInline, DirectionalText } from "@/components/common/directional-text";
@@ -25,10 +25,8 @@ import {
   recordStudyActivity,
   saveStudyCard,
   saveStudyNote,
-  saveStudyText,
   saveStudyWord,
   studyId,
-  StudyTextConflict,
   updateStudyBook,
 } from "@/lib/db/study";
 import { routes } from "@/lib/routes";
@@ -196,8 +194,7 @@ export function StudyReader({
   const [translating, setTranslating] = useState(false);
   const [color, setColor] = useState<StudyHighlightColor>("yellow");
   const [search, setSearch] = useState("");
-  const [edit, setEdit] = useState<(StudyDocumentDraft & { original: string; originalMarkdown?: string }) | null>(null);
-  const [savingText, setSavingText] = useState(false);
+  const [editingSection, setEditingSection] = useState<number>();
   const [font, setFont] = useState(18);
   const [zoom, setZoom] = useState(100);
   const [epubTheme, setEpubTheme] = useState<StudyEpubTheme>("system");
@@ -226,7 +223,7 @@ export function StudyReader({
     layout,
     loadingLayout: waitingMath || Boolean(showLayout && fileId && layout === undefined),
     renderedArticle: markdown !== undefined,
-    enabled: !visitingPassage && !edit,
+    enabled: !visitingPassage && editingSection !== index,
     activity: latestInteraction,
     layoutCheckpoint,
   });
@@ -333,7 +330,7 @@ export function StudyReader({
 
   function go(page: number) {
     clearSelection();
-    setEdit(null);
+    setEditingSection(undefined);
     setResult(null);
     setSearch("");
     openPage(page);
@@ -770,7 +767,7 @@ export function StudyReader({
                     className="w-full cursor-pointer rounded-lg p-2 text-start hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
                     onClick={() => {
                       clearSelection();
-                      setEdit(null);
+                      setEditingSection(undefined);
                       setSearch("");
                       openPassage(page, { offset, length });
                     }}
@@ -807,67 +804,15 @@ export function StudyReader({
         </Button>
       </div>
       {book.format === "text" && !book.attachedToNotebook ? (
-        edit === null ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setEdit({
-              original: section.text,
-              originalMarkdown: markdown,
-              text: markdown ?? section.text,
-              markdown: markdown !== undefined,
-            })}
-          >
-            Edit text
-          </Button>
-        ) : (
-          <form
-            className="space-y-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (!edit.text.trim() || savingText) return;
-              setSavingText(true);
-              void saveStudyText(book.id, edit.text, {
-                section: index,
-                original: edit.original,
-                originalMarkdown: edit.originalMarkdown,
-                markdown: edit.markdown,
-              })
-                .then(() => {
-                  clearSelection();
-                  setEdit(null);
-                })
-                .catch((error: Error) =>
-                  toast.error(
-                    error instanceof StudyTextConflict
-                      ? t("study.reader.editConflict")
-                      : error.message,
-                  ),
-                )
-                .finally(() => setSavingText(false));
-            }}
-          >
-            <StudyDocumentEditor
-              label="Edit document text"
-              value={edit}
-              disabled={savingText}
-              onChange={(draft) => setEdit({ ...edit, ...draft })}
-            />
-            <div className="flex gap-2">
-              <Button type="submit" disabled={!edit.text.trim() || savingText}>
-                Save changes
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                disabled={savingText}
-                onClick={() => setEdit(null)}
-              >
-                Cancel
-              </Button>
-            </div>
-          </form>
-        )
+        <StudyDocumentEdits
+          key={index}
+          book={book}
+          section={index}
+          vaultId={vaultId}
+          open={editingSection === index}
+          onOpenChange={(open) => setEditingSection(open ? index : undefined)}
+          onSave={clearSelection}
+        />
       ) : null}
       <div className="space-y-4 rounded-2xl border bg-card p-5 sm:p-8">
         {viewPdf && fileId ? (

@@ -1,6 +1,7 @@
 import type {
   StudyBookTextWrite,
   StudyBookWrite,
+  StudyDocumentRecovery,
   StudyRecord,
   StudyReviewItemWrite,
   StudyReviewWrite,
@@ -145,6 +146,7 @@ export interface Backend {
   insertStudy(rows: StudyRecord[]): Promise<number>;
   patchStudyBook(write: StudyBookWrite): Promise<void>;
   patchStudyThread(write: StudyThreadWrite): Promise<boolean>;
+  writeStudyDocumentDraft(row: StudyDocumentRecovery, replaces?: string): Promise<boolean>;
   writeStudyVocabulary(write: StudyWordWrite): Promise<StudyWordResult>;
   patchStudyReviewItem(write: StudyReviewItemWrite): Promise<boolean>;
   applyStudyReview(write: StudyReviewWrite): Promise<boolean>;
@@ -228,7 +230,7 @@ export const writes = {
   ],
   saveCalendar: ["calendar"],
   putVault: ["vaults"],
-  deleteVault: ["vaults"],
+  deleteVault: ["vaults", "study"],
   putNote: ["notes"],
   putNotes: ["notes"],
   deleteNote: ["notes"],
@@ -258,6 +260,7 @@ export const writes = {
   insertStudy: ["study"],
   patchStudyBook: ["study"],
   patchStudyThread: ["study"],
+  writeStudyDocumentDraft: ["study"],
   writeStudyVocabulary: ["study"],
   patchStudyReviewItem: ["study"],
   applyStudyReview: ["study"],
@@ -365,6 +368,7 @@ export const backendMethods = [
   "insertStudy",
   "patchStudyBook",
   "patchStudyThread",
+  "writeStudyDocumentDraft",
   "writeStudyVocabulary",
   "patchStudyReviewItem",
   "applyStudyReview",

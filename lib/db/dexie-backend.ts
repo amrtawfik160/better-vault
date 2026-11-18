@@ -1,4 +1,6 @@
 import type { StudyRecord } from "@/lib/study/records";
+import { canWriteStudyDocumentDraft, studyDocumentDraftId } from "@/lib/study/document-drafts";
+import { DEFAULT_VAULT } from "@/lib/study/vault";
 import { patchedStudyReviewItem } from "@/lib/study/recall";
 import { patchedStudyThread } from "@/lib/study/reports";
 import { patchedStudyBook, revisedStudyBook } from "@/lib/study/text-edits";
@@ -109,9 +111,11 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
     putVault: async (vault) => {
       await db.vaults.put(vault);
     },
-    deleteVault: async (id) => {
-      await db.vaults.delete(id);
-    },
+    deleteVault: (id) =>
+      db.transaction("rw", [db.vaults, db.study], async () => {
+        await db.study.delete(studyDocumentDraftId({ vaultId: id }));
+        await db.vaults.delete(id);
+      }),
 
     listFolders: () => db.folders.toArray(),
     addFolder: async (folder) => {
@@ -279,6 +283,17 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
         await db.study.put(next);
         return true;
       }),
+    writeStudyDocumentDraft: (row, replaces) =>
+      db.transaction("rw", [db.study, db.vaults], async () => {
+        const existing = await db.study.get(row.id);
+        if (!canWriteStudyDocumentDraft(existing, row, replaces)) return false;
+        const hasTarget = row.bookId
+          ? (await db.study.get(row.bookId))?.kind === "book"
+          : row.vaultId === DEFAULT_VAULT || Boolean(row.vaultId && (await db.vaults.get(row.vaultId)));
+        if (!hasTarget) return false;
+        await db.study.put(row);
+        return true;
+      }),
     patchStudyReviewItem: (write) =>
       db.transaction("rw", db.study, async () => {
         const next = patchedStudyReviewItem(await db.study.get(write.id), write);
@@ -325,7 +340,7 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
           await db.study
             .where("notebookId")
             .equals(row.notebookId)
-            .filter((item) => item.kind === "highlight" && item.bookId === id)
+            .filter((item) => (item.kind === "highlight" || item.kind === "document-draft") && item.bookId === id)
             .delete();
         }
         if (row?.kind === "word") {

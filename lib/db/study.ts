@@ -5,7 +5,8 @@ import { notebookAnswerEvidence } from "@/lib/chat/study";
 import { freshSchedule, nextStudySchedule } from "@/lib/study/schedule";
 import { originHref, studyCitationOrigin } from "@/lib/study/links";
 import { studyPdfSections } from "@/lib/study/read-file";
-import { studyMarkdownContent } from "@/lib/study/markdown-document";
+import { studyDocumentContent } from "@/lib/study/markdown-document";
+import { clearDocumentRecoveries } from "@/lib/study/document-drafts";
 import { locateStudyMark, resolveStudyRange, studyTextEdit, studyTextRevision } from "@/lib/study/text-edits";
 import { cardEvidenceLimit, type StudyPassage, type StudyTutorSources } from "@/lib/study/passages";
 import { locateCitedChunk } from "@/lib/study/locators";
@@ -478,6 +479,7 @@ function bookFromSource(source: Source, pdf?: Pick<StudyBook, "sections" | "file
 export async function deleteStudyBook(book: StudyBook) {
   if (book.attachedToNotebook) await removeStudyRecord(book.id);
   else await deleteNotebook(book.notebookId);
+  clearDocumentRecoveries(`document-draft:book:${book.id}:`);
 }
 
 export type StudyCard = StudyRecordOf<"card">;
@@ -873,9 +875,7 @@ export async function saveStudyText(
     throw new Error("The document needs between 1 and 2,000,000 characters.");
   const previousText = previous.text;
   const markdown = draft?.markdown ?? (previous.markdown !== undefined);
-  const content = markdown
-    ? studyMarkdownContent(text)
-    : { text: text.replace(/\r\n?/g, "\n"), markdown: undefined };
+  const content = studyDocumentContent(text, markdown);
   const body = content.text;
   const total = book.sections.reduce(
     (length, entry) => length + entry.text.length,

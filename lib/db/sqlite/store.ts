@@ -1,4 +1,6 @@
 import type { StudyRecord } from "@/lib/study/records";
+import { canWriteStudyDocumentDraft, studyDocumentDraftId } from "@/lib/study/document-drafts";
+import { DEFAULT_VAULT } from "@/lib/study/vault";
 import { patchedStudyReviewItem } from "@/lib/study/recall";
 import { patchedStudyThread } from "@/lib/study/reports";
 import { patchedStudyBook, revisedStudyBook } from "@/lib/study/text-edits";
@@ -350,9 +352,11 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
     putVault: (vault) => {
       put("vaults", vault);
     },
-    deleteVault: (id) => {
-      deleteWhere("vaults", "id", id);
-    },
+    deleteVault: (id) =>
+      transaction(db, () => {
+        deleteWhere("study", "id", studyDocumentDraftId({ vaultId: id }));
+        deleteWhere("vaults", "id", id);
+      }),
 
     listFolders: () => docs<Folder>(db.prepare("SELECT doc FROM folders ORDER BY id").all()),
     addFolder: (folder) => add("folders", folder),
@@ -561,6 +565,17 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
         put("study", next);
         return true;
       }),
+    writeStudyDocumentDraft: (row, replaces) =>
+      transaction(db, () => {
+        const existing = get<StudyRecord>("study", row.id);
+        if (!canWriteStudyDocumentDraft(existing, row, replaces)) return false;
+        const hasTarget = row.bookId
+          ? get<StudyRecord>("study", row.bookId)?.kind === "book"
+          : row.vaultId === DEFAULT_VAULT || Boolean(row.vaultId && get<Vault>("vaults", row.vaultId));
+        if (!hasTarget) return false;
+        put("study", row);
+        return true;
+      }),
     patchStudyReviewItem: (write) =>
       transaction(db, () => {
         const next = patchedStudyReviewItem(get<StudyRecord>("study", write.id), write);
@@ -604,7 +619,7 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
         const row = get<StudyRecord>("study", id);
         if (row?.kind === "book") {
           db.prepare(
-            "DELETE FROM study WHERE notebook_id = ? AND json_extract(doc, '$.kind') = 'highlight' AND json_extract(doc, '$.bookId') = ?",
+            "DELETE FROM study WHERE notebook_id = ? AND json_extract(doc, '$.kind') IN ('highlight', 'document-draft') AND json_extract(doc, '$.bookId') = ?",
           ).run(row.notebookId, id);
         }
         if (row?.kind === "word") {

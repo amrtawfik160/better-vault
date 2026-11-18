@@ -461,7 +461,7 @@ export default function StudyWorkspace({
     : undefined;
   const studyVaultId = linkedVault ?? vaultId;
   const rows = (saved ?? [])
-    .filter((row) => scope.owner(row) === studyVaultId)
+    .filter((row) => row.kind !== "document-draft" && scope.owner(row) === studyVaultId)
     .sort((a, b) => b.updatedAt - a.updatedAt);
 
   useEffect(() => {

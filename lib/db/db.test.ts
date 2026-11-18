@@ -50,6 +50,8 @@ import { setStoreForTests, store } from "./store";
 import { conversationTitle } from "@/lib/chat/title";
 import { studyVaultIndex } from "@/lib/study/vault";
 import { studyCitationOrigin } from "@/lib/study/links";
+import { studyDocumentDraftId } from "@/lib/study/document-drafts";
+import type { StudyDocumentRecovery } from "@/lib/study/records";
 import { resolveStudyRange } from "@/lib/study/text-edits";
 import { captureReportPracticeContext, matchesStudyReport, plannedStudySteps, studyReports } from "@/lib/study/reports";
 import {
@@ -698,6 +700,86 @@ describe.each(backends)("%s store", (name, create) => {
   });
 
   describe("study", () => {
+    it("keeps document drafts out of notebook sources and rejects writes after deletion", async () => {
+      const vaultId = await createVault({ name: "Physics" });
+      const notebookId = await createNotebook("Mechanics", { vaultId });
+      const source = await addSource({
+        notebookId,
+        title: "Kinetic energy",
+        kind: "text",
+        text: "The energy depends on the square of speed.",
+      });
+      const book = await studyBookForSource(source.id);
+      const draft: StudyDocumentRecovery = {
+        id: studyDocumentDraftId({ bookId: book.id, section: 0 }),
+        bookId: book.id,
+        notebookId,
+        vaultId,
+        kind: "document-draft",
+        updatedAt: 1,
+        version: "typed",
+        snapshot: {
+          kind: "edit",
+          original: source.text,
+          text: "**Revised** energy explanation.",
+          markdown: true,
+        },
+      };
+      const fresh: StudyDocumentRecovery = {
+        id: studyDocumentDraftId({ vaultId }),
+        vaultId,
+        kind: "document-draft",
+        updatedAt: 1,
+        version: "new",
+        snapshot: { kind: "new", title: "Potential energy", text: "# Draft", markdown: true },
+      };
+
+      expect(await store().writeStudyDocumentDraft(draft)).toBe(true);
+      expect(await store().writeStudyDocumentDraft(fresh)).toBe(true);
+      expect(await store().getStudy(book.id)).toEqual(book);
+      expect((await store().getSource(source.id))?.text).toBe(source.text);
+      expect((await getChunks([source.id])).map(({ text }) => text)).toEqual([source.text]);
+      const backup = await exportBackup();
+      await deleteAllData();
+      await importBackup(backup);
+      expect(await store().getStudy(draft.id)).toEqual(draft);
+      expect(await store().getStudy(fresh.id)).toEqual(fresh);
+
+      await deleteStudyBook(book);
+      expect(await store().getStudy(draft.id)).toBeUndefined();
+      expect(await store().writeStudyDocumentDraft({ ...draft, updatedAt: 2 })).toBe(false);
+      expect(await store().getSource(source.id)).toBeDefined();
+
+      await deleteVault(vaultId);
+      expect(await store().getStudy(fresh.id)).toBeUndefined();
+      expect(await store().writeStudyDocumentDraft({ ...fresh, updatedAt: 2 })).toBe(false);
+    });
+
+    it("preserves another tab's newer draft and keeps a discarded draft cleared", async () => {
+      const first: StudyDocumentRecovery = {
+        id: studyDocumentDraftId({ vaultId: DEFAULT_VAULT }),
+        vaultId: DEFAULT_VAULT,
+        kind: "document-draft",
+        updatedAt: 1,
+        version: "first",
+        snapshot: { kind: "new", title: "Draft", text: "First version", markdown: false },
+      };
+      const next: StudyDocumentRecovery = {
+        ...first,
+        updatedAt: 2,
+        version: "next",
+        snapshot: { kind: "new", title: "Draft", text: "Next version", markdown: false },
+      };
+      const discarded = { ...next, version: "discarded", updatedAt: 3, snapshot: null };
+      expect(await store().writeStudyDocumentDraft(first)).toBe(true);
+      expect(await store().writeStudyDocumentDraft(next)).toBe(true);
+      expect(await store().writeStudyDocumentDraft(discarded, first.version)).toBe(false);
+      expect(await store().getStudy(first.id)).toEqual(next);
+      expect(await store().writeStudyDocumentDraft(discarded, next.version)).toBe(true);
+      expect(await store().writeStudyDocumentDraft(next)).toBe(false);
+      expect(await store().getStudy(first.id)).toEqual(discarded);
+    });
+
     it("adds just the missed quiz questions and preserves their schedules on a retry", async () => {
       const notebookId = await createNotebook("Quiz notes");
       const output = {

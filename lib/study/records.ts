@@ -88,6 +88,18 @@ export const studyCorrections = ["live", "report", "off"] as const;
 export const studyRatings = ["again", "hard", "good", "easy"] as const;
 export const studyHighlightColor = z.enum(["yellow", "green", "blue", "pink", "purple"]);
 
+const documentDraftBody = z.object({ text: z.string(), markdown: z.boolean() });
+const documentDraftSnapshot = z.discriminatedUnion("kind", [
+  documentDraftBody.extend({ kind: z.literal("new"), title: z.string() }),
+  documentDraftBody.extend({ kind: z.literal("edit"), original: z.string(), originalMarkdown: z.string().optional() }),
+]);
+export const studyDocumentDraftSchema = base.extend({
+  kind: z.literal("document-draft"),
+  bookId: z.string().optional(),
+  version: z.string(),
+  snapshot: documentDraftSnapshot.nullable(),
+});
+
 export const studyTutorContextSchema = z.object({
   goal: studyGoal,
   scope: z.enum(studyScopes),
@@ -154,6 +166,7 @@ const studyReportSchema = studyReportReplySchema.extend({
 });
 
 export const studyRecordSchema = z.discriminatedUnion("kind", [
+  studyDocumentDraftSchema,
   base.extend({
     kind: z.literal("book"),
     notebookId: z.string(),
@@ -254,6 +267,8 @@ export type StudyOrigin = z.infer<typeof studyOriginSchema>;
 export type StudyCitation = z.infer<typeof citation>;
 export type StudyRecord = z.infer<typeof studyRecordSchema>;
 export type StudyRecordOf<K extends StudyRecord["kind"]> = Extract<StudyRecord, { kind: K }>;
+export type StudyDocumentRecovery = z.infer<typeof studyDocumentDraftSchema>;
+export type StudyDocumentSnapshot = z.infer<typeof documentDraftSnapshot>;
 export type StudyHighlightColor = z.infer<typeof studyHighlightColor>;
 export type StudyWord = StudyRecordOf<"word">;
 export type StudyWordWrite =

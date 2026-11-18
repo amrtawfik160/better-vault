@@ -5,7 +5,7 @@ import { studyReportKey, studyReports } from "@/lib/study/reports";
 import { studyVaultIndex } from "@/lib/study/vault";
 
 export type StudySearchLink = {
-  type: Exclude<StudyRecord["kind"], "session"> | "message" | "report";
+  type: Exclude<StudyRecord["kind"], "session" | "document-draft"> | "message" | "report";
   href: string;
   context?: string;
 };
@@ -43,7 +43,7 @@ export function studySearchEntries(
   const entries: StudySearchEntry[] = [];
 
   for (const row of input.rows) {
-    if (row.kind === "session") continue;
+    if (row.kind === "session" || row.kind === "document-draft") continue;
     const vaultId = owner(row);
     const add = (study: StudySearchLink, title: string, text = "") => {
       if (!title.trim() && !text.trim()) return;

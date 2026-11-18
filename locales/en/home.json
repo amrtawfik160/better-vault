@@ -303,6 +303,18 @@
       "noReadableSelection": "Choose material with readable text to continue."
     },
     "documentEditor": {
+      "edit": "Edit text",
+      "editLabel": "Edit document text",
+      "publish": "Save changes",
+      "resumeEditing": "Resume editing",
+      "resumeNew": "Continue document draft",
+      "closeEditor": "Close editor",
+      "discardDraft": "Discard draft",
+      "discardTitle": "Discard this draft?",
+      "discardDescription": "This removes the unsaved text and formatting in this draft.",
+      "staleDraft": "The document has a newer version. Save this draft as a separate document to keep both.",
+      "saveDraftCopy": "Save as new document",
+      "draftCopyTitle": "Draft of {{title}}",
       "markdown": "Format as Markdown",
       "format": "Formatting",
       "preview": "Preview formatting",

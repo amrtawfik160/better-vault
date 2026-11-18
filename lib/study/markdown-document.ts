@@ -48,6 +48,12 @@ export function studyMarkdownContent(markdown: string) {
   return { markdown: body, text: readerText(tree).trim() };
 }
 
+export function studyDocumentContent(text: string, markdown: boolean) {
+  return markdown
+    ? studyMarkdownContent(text)
+    : { text: text.replace(/\r\n?/g, "\n"), markdown: undefined };
+}
+
 export type StudyFormulaMode = "source" | "legacy";
 
 /** A renderer can use old coordinates only when its text matches the stored projection. */

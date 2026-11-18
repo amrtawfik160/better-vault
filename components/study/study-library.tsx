@@ -26,9 +26,11 @@ import { currentVaultId } from "@/lib/db/vaults";
 import { routes } from "@/lib/routes";
 import { studyHref } from "@/lib/study/links";
 import { readStudyFile } from "@/lib/study/read-file";
-import { studyMarkdownContent } from "@/lib/study/markdown-document";
-import type { StudyBook } from "@/lib/study/records";
+import { studyDocumentContent } from "@/lib/study/markdown-document";
+import { studyDocumentDraftId } from "@/lib/study/document-drafts";
+import type { StudyBook, StudyDocumentRecovery, StudyDocumentSnapshot } from "@/lib/study/records";
 import { StudyDocumentEditor } from "./study-document-editor";
+import { useStudyDocumentRecovery } from "./study-document-recovery";
 
 const formatIcons = { pdf: Pdf01Icon, epub: Book02Icon, text: TextIcon };
 
@@ -50,7 +52,8 @@ export function StudyLibrary({
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState<StudyBook | null>(null);
   const [editing, setEditing] = useState<StudyBook | null>(null);
-  const [drafting, setDrafting] = useState(false);
+  const [drafting, setDrafting] = useState<string>();
+  const recovery = useStudyDocumentRecovery({ id: studyDocumentDraftId({ vaultId }), vaultId });
   const matches = books.filter((book) =>
     book.title.toLowerCase().includes(search.trim().toLowerCase()),
   );
@@ -90,9 +93,18 @@ export function StudyLibrary({
             >
               {tNotes("title")}
             </Link>
-            <Button shape="pill" variant="outline" onClick={() => setDrafting(true)}>
+            <Button
+              shape="pill"
+              variant="outline"
+              disabled={!recovery.ready}
+              onClick={() => setDrafting(vaultId)}
+            >
               <Icon icon={Add01Icon} />
-              {t("study.library.newText")}
+              {t(
+                recovery.latest?.snapshot?.kind === "new"
+                  ? "study.documentEditor.resumeNew"
+                  : "study.library.newText",
+              )}
             </Button>
             <Button shape="pill" onClick={() => input.current?.click()} disabled={loading}>
               <Icon icon={FileImportIcon} />
@@ -201,12 +213,14 @@ export function StudyLibrary({
           )}
         </div>
       )}
-      {drafting ? (
+      {drafting === vaultId ? (
         <NewStudyDocument
+          key={vaultId}
           vaultId={vaultId}
-          onClose={() => setDrafting(false)}
+          recovery={recovery}
+          onClose={() => setDrafting(undefined)}
           onSave={(book) => {
-            setDrafting(false);
+            setDrafting((current) => (current === vaultId ? undefined : current));
             if (currentVaultId() === vaultId) openBook(book);
           }}
         />
@@ -268,68 +282,115 @@ function NotebookLibraryScope({ notebookId }: { notebookId: string }) {
 
 function NewStudyDocument({
   vaultId,
+  recovery,
   onClose,
   onSave,
 }: {
   vaultId: string;
+  recovery: ReturnType<typeof useStudyDocumentRecovery>;
   onClose: () => void;
   onSave: (book: StudyBook) => void;
 }) {
   const { t } = useTranslation("home");
   const { t: tCommon } = useTranslation();
-  const [title, setTitle] = useState("");
-  const [draft, setDraft] = useState({ text: "", markdown: false });
+  const [editor, setEditor] = useState(
+    (): { draft: Extract<StudyDocumentSnapshot, { kind: "new" }>; row?: StudyDocumentRecovery } => {
+      const existing = recovery.latest;
+      return existing?.snapshot?.kind === "new"
+        ? { draft: existing.snapshot, row: existing }
+        : { draft: { kind: "new", title: "", text: "", markdown: false } };
+    },
+  );
+  const { draft, row } = editor;
   const [saving, setSaving] = useState(false);
+  const [discard, setDiscard] = useState(false);
   const form = useId();
+  function update(change: Partial<Pick<typeof draft, "title" | "text" | "markdown">>) {
+    const next = { ...draft, ...change };
+    setEditor({ draft: next, row: recovery.stage(next) });
+  }
   return (
-    <Dialog open onOpenChange={(open) => !open && !saving && onClose()}>
-      <Dialog.Content closeLabel={tCommon("actions.close")}>
-        <Dialog.Header title={t("study.library.newText")} />
-        <Dialog.Body>
-          <form
-            id={form}
-            className="grid gap-3"
-            onSubmit={async (event) => {
-              event.preventDefault();
-              if (saving || !title.trim() || !draft.text.trim()) return;
-              setSaving(true);
-              try {
-                const content = draft.markdown ? studyMarkdownContent(draft.text) : { text: draft.text };
-                onSave(
-                  await addStudyBook({
-                    title,
+    <>
+      <Dialog open onOpenChange={(open) => !open && !saving && onClose()}>
+        <Dialog.Content closeLabel={tCommon("actions.close")}>
+          <Dialog.Header title={t("study.library.newText")} />
+          <Dialog.Body>
+            <form
+              id={form}
+              className="grid gap-3"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                if (saving || !draft.title.trim() || !draft.text.trim()) return;
+                setSaving(true);
+                try {
+                  const created = await addStudyBook({
+                    title: draft.title,
                     format: "text",
-                    sections: [{ title, ...content }],
+                    sections: [
+                      { title: draft.title, ...studyDocumentContent(draft.text, draft.markdown) },
+                    ],
                     vaultId,
-                  }),
-                );
-              } catch (error) {
-                toast.error(error instanceof Error ? error.message : String(error));
-                setSaving(false);
-              }
-            }}
-          >
-            <label className="grid gap-1.5 text-sm font-medium">
-              {t("study.library.title")}
-              <Input required value={title} onChange={(event) => setTitle(event.target.value)} />
-            </label>
-            <StudyDocumentEditor
-              value={draft}
-              onChange={setDraft}
-              label={t("study.library.text")}
-              disabled={saving}
-            />
-          </form>
-        </Dialog.Body>
-        <Dialog.Footer>
-          <Dialog.Close render={<Button variant="secondary" disabled={saving} />}>
-            {tCommon("actions.cancel")}
-          </Dialog.Close>
-          <Button type="submit" form={form} disabled={saving || !title.trim() || !draft.text.trim()}>
-            {t("study.library.save")}
-          </Button>
-        </Dialog.Footer>
-      </Dialog.Content>
-    </Dialog>
+                  });
+                  if (row) await recovery.clear(row).catch(console.error);
+                  onSave(created);
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : String(error));
+                  setSaving(false);
+                }
+              }}
+            >
+              <label className="grid gap-1.5 text-sm font-medium">
+                {t("study.library.title")}
+                <Input
+                  required
+                  disabled={saving}
+                  value={draft.title}
+                  onChange={(event) => update({ title: event.target.value })}
+                />
+              </label>
+              <StudyDocumentEditor
+                value={draft}
+                onChange={update}
+                label={t("study.library.text")}
+                disabled={saving}
+              />
+            </form>
+          </Dialog.Body>
+          <Dialog.Footer>
+            {row ? (
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={saving}
+                onClick={() => setDiscard(true)}
+              >
+                {t("study.documentEditor.discardDraft")}
+              </Button>
+            ) : null}
+            <Dialog.Close render={<Button variant="secondary" disabled={saving} />}>
+              {tCommon(row ? "actions.close" : "actions.cancel")}
+            </Dialog.Close>
+            <Button
+              type="submit"
+              form={form}
+              disabled={saving || !draft.title.trim() || !draft.text.trim()}
+            >
+              {t("study.library.save")}
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+      <ConfirmDialog
+        open={discard}
+        onOpenChange={setDiscard}
+        title={t("study.documentEditor.discardTitle")}
+        body={t("study.documentEditor.discardDescription")}
+        confirmLabel={t("study.documentEditor.discardDraft")}
+        onConfirm={async () => {
+          if (row) await recovery.clear(row);
+          onClose();
+        }}
+      />
+    </>
   );
 }
