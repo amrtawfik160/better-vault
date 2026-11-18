@@ -187,8 +187,11 @@
       "practiceNow": "Practice now",
       "needsPractice": "Needs more practice",
       "weakSet": "Cards you found difficult",
+      "weakHighlights": "Highlights you found difficult",
       "practiceWeakCards_one": "Practice {{count}} difficult card",
       "practiceWeakCards_other": "Practice {{count}} difficult cards",
+      "practiceWeakHighlights_one": "Practice {{count}} difficult highlight",
+      "practiceWeakHighlights_other": "Practice {{count}} difficult highlights",
       "rating": {
         "again": "Again",
         "hard": "Hard"

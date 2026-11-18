@@ -4,9 +4,9 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { StudyOriginLink } from "./study-origin-link";
 import { StudyFollowUps } from "./study-follow-ups";
-import { originHref, queryIndex, studyHref } from "@/lib/study/links";
+import { originHref, queryIndex, studyHighlightOrigin, studyHref } from "@/lib/study/links";
 import { tutorBookOrigin } from "@/lib/study/passages";
-import { studyHighlightPreview, weakStudyCards } from "@/lib/study/recall";
+import { difficultStudyItems, studyHighlightPreview } from "@/lib/study/recall";
 import { studyReportKey } from "@/lib/study/reports";
 import {
   directReviewSession,
@@ -76,7 +76,7 @@ function DailyStudy({
   go: (tab: Tab, params?: Record<string, string>) => void;
   read: (book: StudyBook) => void;
   teachBack: (book: StudyBook) => void;
-  practice: (ids: string[]) => void;
+  practice: (kind: "card" | "highlight", ids: string[]) => void;
   openingPractice: boolean;
 }) {
   const { t } = useTranslation("home");
@@ -98,7 +98,7 @@ function DailyStudy({
   const dueHighlights = rows.filter(
     (item) => item.kind === "highlight" && item.schedule.dueAt <= now,
   ).length;
-  const weakCards = weakStudyCards(rows);
+  const difficult = difficultStudyItems(reviewable, sessions);
   const paused = savedReview(vaultId);
   const pausedItems = paused
     ? reviewCollection(
@@ -218,41 +218,63 @@ function DailyStudy({
           </p>
         </div>
       ) : null}
-      {weakCards.length ? (
+      {difficult.length ? (
         <Card size="sm">
-          <Card.Header className="flex flex-wrap items-center justify-between gap-2">
+          <Card.Header>
             <Card.Title>{t("study.recall.needsPractice")}</Card.Title>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" onClick={() => go("review", { mode: "weak" })}>
-                {t("study.recall.practiceWeakCards", { count: weakCards.length })}
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={openingPractice}
-                onClick={() => practice(weakCards.map(({ card }) => card.id))}
-              >
-                {t("study.recall.tutorAction")}
-              </Button>
-            </div>
           </Card.Header>
-          <Card.Content>
-            <ul className="divide-y">
-              {weakCards.slice(0, 3).map(({ card, rating }) => (
-                <li
-                  key={card.id}
-                  className="flex min-w-0 flex-wrap items-center gap-x-3 py-2 text-sm"
-                >
-                  <span dir="auto" className="min-w-0 flex-1 wrap-break-word">
-                    {card.front}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {t(`study.recall.rating.${rating}`)}
-                  </span>
-                  {card.origin ? <StudyOriginLink origin={card.origin} /> : null}
-                </li>
-              ))}
-            </ul>
+          <Card.Content className="space-y-3 divide-y">
+            {(["card", "highlight"] as const).map((kind) => {
+              const entries = difficult.filter(({ item }) => item.kind === kind);
+              if (!entries.length) return null;
+              const isHighlight = kind === "highlight";
+              return (
+                <div key={kind} className="space-y-2 pb-3 last:pb-0">
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => go("review", isHighlight ? { mode: "weak", kind: "highlights" } : { mode: "weak" })}
+                    >
+                      {t(
+                        isHighlight ? "study.recall.practiceWeakHighlights" : "study.recall.practiceWeakCards",
+                        { count: entries.length },
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={openingPractice}
+                      onClick={() => practice(kind, entries.map(({ item }) => item.id))}
+                    >
+                      {isHighlight
+                        ? t("study.highlights.discuss", { count: entries.length })
+                        : t("study.recall.tutorAction")}
+                    </Button>
+                  </div>
+                  <ul className="divide-y">
+                    {entries.slice(0, 3).map(({ item, rating }) => {
+                      const origin = item.kind === "highlight" ? studyHighlightOrigin(item) : item.origin;
+                      const prompt = item.kind === "highlight"
+                        ? item.cue || studyHighlightPreview(item.quote)
+                        : item.front;
+                      return (
+                        <li
+                          key={item.id}
+                          className="flex min-w-0 flex-wrap items-center gap-x-3 py-2 text-sm"
+                        >
+                          <span dir="auto" className="min-w-0 flex-1 wrap-break-word">
+                            {prompt}
+                          </span>
+                          <span className="text-muted-foreground">{t(`study.recall.rating.${rating}`)}</span>
+                          {origin ? <StudyOriginLink origin={origin} /> : null}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              );
+            })}
           </Card.Content>
         </Card>
       ) : null}
@@ -500,7 +522,7 @@ export default function StudyWorkspace({
   const requestedReview = selection?.studyReviewIds;
   const reviewingHighlights = params.get("kind") === "highlights";
   const reviewingVocabulary = params.get("kind") === "vocabulary";
-  const weakMode = tab === "review" && !reviewingHighlights && params.get("mode") === "weak";
+  const weakMode = tab === "review" && params.get("mode") === "weak";
   const filteredCards = studyCardsInScope(cards, params, book, thread?.id ?? null);
   const reviewSessionId =
     selection?.studyReviewSession ?? (location.key === "default" ? directReviewId : location.key);
@@ -713,7 +735,7 @@ export default function StudyWorkspace({
           teachBack={(item) =>
             void createThread(item, "chapter", item.section, undefined, "teach-back")
           }
-          practice={(ids) => void openTutorSelection("card", ids)}
+          practice={(kind, ids) => void openTutorSelection(kind, ids)}
           openingPractice={openingPractice}
         />
       ) : null}
@@ -822,6 +844,9 @@ export default function StudyWorkspace({
           words={words}
           threads={threads}
           practice={(item, state) => void openTutorSelection(item.kind, [item.id], state)}
+          practiceDifficult={(ids) =>
+            go("review", { ...Object.fromEntries(params), vault: studyVaultId, mode: "weak" }, ids)
+          }
           openingPractice={openingPractice}
           initialPractice={weakMode}
           sessionId={reviewSessionId}
@@ -840,7 +865,7 @@ export default function StudyWorkspace({
           libraryLabel={reviewingVocabulary ? t("study.vocabulary.open") : undefined}
           collection={
             weakMode
-              ? t("study.recall.weakSet")
+              ? t(reviewingHighlights ? "study.recall.weakHighlights" : "study.recall.weakSet")
               : reviewingVocabulary
                 ? t("study.tabs.vocabulary")
                 : requestedReview

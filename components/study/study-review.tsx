@@ -19,7 +19,7 @@ import {
   studyHighlightOrigin,
   studyHref,
 } from "@/lib/study/links";
-import { studyHighlightPreview } from "@/lib/study/recall";
+import { difficultStudyItems, studyHighlightPreview } from "@/lib/study/recall";
 import {
   loadReviewSession,
   pendingReviewLearning,
@@ -80,6 +80,7 @@ export function StudyReview({
   words,
   threads,
   practice,
+  practiceDifficult,
   openingPractice,
   collection,
   initialPractice,
@@ -95,6 +96,7 @@ export function StudyReview({
   words: Word[];
   threads: StudyThread[];
   practice: (item: Card | Highlight, state: ReturnType<typeof reviewReturnState>) => void;
+  practiceDifficult: (ids: string[]) => void;
   openingPractice: boolean;
   collection?: string;
   initialPractice?: boolean;
@@ -158,6 +160,9 @@ export function StudyReview({
   const awaitingHistory =
     finished?.committed &&
     items.some(({ id, schedule }) => id === finished.id && schedule.dueAt === finished.dueAt);
+  const difficult = !item && rated && !practiced && !nextRetry && !busy && !awaitingHistory
+    ? difficultStudyItems(items, history, sessionId)
+    : [];
   const remaining = items.toSorted((a, b) => a.schedule.dueAt - b.schedule.dueAt)[0];
   const isRevealed = Boolean(item && revealed === item.id && (!position || pinned));
   const highlightBook =
@@ -402,6 +407,13 @@ export function StudyReview({
           </p>
           {nextRetry ? <RetryCountdown dueAt={nextRetry.schedule.dueAt} /> : null}
           <div className="flex flex-wrap items-center gap-3">
+            {difficult.length ? (
+              <Button onClick={() => practiceDifficult(difficult.map(({ item }) => item.id))}>
+                {t(useHighlights ? "study.recall.practiceWeakHighlights" : "study.recall.practiceWeakCards", {
+                  count: difficult.length,
+                })}
+              </Button>
+            ) : null}
             {items.length && !nextRetry && !busy && !awaitingHistory ? (
               <Button
                 variant="outline"

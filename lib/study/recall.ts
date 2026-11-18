@@ -1,10 +1,4 @@
-import type { StudyRating, StudyRecord, StudyRecordOf, StudyThread } from "./records";
-
-type WeakStudyCard = {
-  card: StudyRecordOf<"card">;
-  rating: "again" | "hard";
-  reviewedAt: number;
-};
+import type { StudyRecordOf, StudyThread } from "./records";
 
 export function studyHighlightPreview(quote: string) {
   const text = quote.replace(/\s+/g, " ").trim();
@@ -28,20 +22,28 @@ export function recentPracticeCards(messages: StudyThread["messages"]) {
   return [...new Set(recent.flatMap(({ practiceCardId }) => (practiceCardId ? [practiceCardId] : [])))];
 }
 
-/** Find active cards whose latest scheduled review showed a recall gap. */
-export function weakStudyCards(rows: readonly StudyRecord[]) {
-  const latest = new Map<string, { rating: StudyRating; at: number }>();
-  for (const row of rows) {
-    if (row.kind !== "session" || row.activity !== "review" || !row.itemId || !row.rating) continue;
-    if ((latest.get(row.itemId)?.at ?? -Infinity) <= row.updatedAt)
-      latest.set(row.itemId, { rating: row.rating, at: row.updatedAt });
+export function latestStudyReviews(history: readonly StudyRecordOf<"session">[]) {
+  const latest = new Map<string, StudyRecordOf<"session">>();
+  for (const review of history) {
+    if (review.activity !== "review" || !review.itemId || !review.rating) continue;
+    const previous = latest.get(review.itemId);
+    if (!previous || review.updatedAt >= previous.updatedAt) latest.set(review.itemId, review);
   }
-  return rows
-    .filter((row) => row.kind === "card")
-    .flatMap<WeakStudyCard>((card) => {
-      const review = latest.get(card.id);
+  return latest;
+}
+
+export function difficultStudyItems(
+  items: readonly StudyRecordOf<"card" | "highlight">[],
+  history: readonly StudyRecordOf<"session">[],
+  sessionId?: string,
+) {
+  const latest = latestStudyReviews(history);
+  return items
+    .flatMap((item) => {
+      const review = latest.get(item.id);
+      if (sessionId !== undefined && review?.reviewSessionId !== sessionId) return [];
       return review?.rating === "again" || review?.rating === "hard"
-        ? [{ card, rating: review.rating, reviewedAt: review.at }]
+        ? [{ item, rating: review.rating, reviewedAt: review.updatedAt }]
         : [];
     })
     .sort((a, b) => {

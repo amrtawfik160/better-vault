@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { routes } from "@/lib/routes";
-import { weakStudyCards } from "./recall";
+import { difficultStudyItems, latestStudyReviews } from "./recall";
 import type { StudyBook, StudyRecord, StudyRecordOf } from "./records";
 import { matchesStudyReport } from "./reports";
 import { scheduleState } from "./schedule";
@@ -86,12 +86,6 @@ export function reviewCollection(
     params.get("kind") === "vocabulary"
       ? new Set(rows.filter((row) => row.kind === "word").map(({ id }) => id))
       : undefined;
-  const ids =
-    !reviewingHighlights && params.get("mode") === "weak"
-      ? new Set(weakStudyCards(rows).map(({ card }) => card.id))
-      : selection
-        ? new Set(selection)
-        : undefined;
   const items = reviewingHighlights
     ? rows.filter(
         (row): row is StudyRecordOf<"highlight"> =>
@@ -107,7 +101,11 @@ export function reviewCollection(
         book,
         rows.some((row) => row.kind === "thread" && row.id === threadId) ? threadId : null,
       );
-  return ids ? items.filter(({ id }) => ids.has(id)) : items;
+  const ids = selection && new Set(selection);
+  const scoped = ids ? items.filter(({ id }) => ids.has(id)) : items;
+  if (params.get("mode") !== "weak") return scoped;
+  const history = rows.filter((row) => row.kind === "session");
+  return difficultStudyItems(scoped, history).map(({ item }) => item);
 }
 
 export function reviewQueue(items: ReviewItem[], practiced: string[] | null, now: number) {
@@ -128,12 +126,7 @@ export function pendingReviewLearning(
   sessionId: string,
   now: number,
 ) {
-  const latest = new Map<string, StudyRecordOf<"session">>();
-  for (const review of history) {
-    if (review.activity !== "review" || !review.itemId) continue;
-    const previous = latest.get(review.itemId);
-    if (!previous || review.updatedAt > previous.updatedAt) latest.set(review.itemId, review);
-  }
+  const latest = latestStudyReviews(history);
   return items
     .filter(({ id, schedule }) => {
       if (schedule.dueAt <= now || scheduleState(schedule) !== "learning") return false;
@@ -214,9 +207,18 @@ export function saveReviewCheckpoint(
   snapshot: ReviewSnapshot,
 ) {
   try {
+    const current = savedReview(vaultId);
     if (snapshot.position) {
+      if (
+        snapshot.practiced &&
+        current &&
+        !current.snapshot.practiced &&
+        !sameReview(current, destination)
+      ) {
+        return;
+      }
       localStorage.setItem(resumePrefix + vaultId, JSON.stringify({ ...destination, snapshot }));
-    } else if (sameReview(savedReview(vaultId), destination)) {
+    } else if (sameReview(current, destination)) {
       clearReviewCheckpoint(vaultId);
     }
   } catch {
