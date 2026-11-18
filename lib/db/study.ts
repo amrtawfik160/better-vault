@@ -803,12 +803,20 @@ export async function startSourceTutor(sourceId: string) {
   return thread;
 }
 
-export async function startCardTutor(ids: string[], vaultId: string, title: string, draft?: StudyTutorDraft) {
+async function openScopedTutor(thread: StudyThread) {
+  const backend = store();
+  if (await backend.insertStudy([thread])) return thread;
+  const saved = await backend.getStudy(thread.id);
+  if (saved?.kind === "thread" && saved.vaultId === thread.vaultId) return saved;
+  throw new Error("This Tutor conversation is no longer available.");
+}
+
+export async function startCardTutor(ids: string[], vaultId: string, title: string, draft?: StudyTutorDraft, id = studyId()) {
   const cards = await readStudyCardsInVault(ids, vaultId);
   if (!cards.length) return null;
   const thread: StudyThread = {
     ...(await studyConversationDefaults("teach-back")),
-    id: studyId(),
+    id,
     kind: "thread",
     title,
     goal: "teach-back",
@@ -820,16 +828,15 @@ export async function startCardTutor(ids: string[], vaultId: string, title: stri
     messages: [],
     updatedAt: Date.now(),
   };
-  await putStudyRecords(thread);
-  return thread;
+  return openScopedTutor(thread);
 }
 
-export async function startHighlightTutor(ids: string[], vaultId: string, title: string, draft?: StudyTutorDraft) {
+export async function startHighlightTutor(ids: string[], vaultId: string, title: string, draft?: StudyTutorDraft, id = studyId()) {
   const highlights = highlightSources(await readStudyRowsInVault(ids, vaultId), [...new Set(ids)]);
   if (!highlights.length) return null;
   const thread: StudyThread = {
     ...(await studyConversationDefaults("book")),
-    id: studyId(),
+    id,
     kind: "thread",
     title,
     goal: "book",
@@ -840,8 +847,7 @@ export async function startHighlightTutor(ids: string[], vaultId: string, title:
     messages: [],
     updatedAt: Date.now(),
   };
-  await putStudyRecords(thread);
-  return thread;
+  return openScopedTutor(thread);
 }
 
 export async function startStudyFollowUp(

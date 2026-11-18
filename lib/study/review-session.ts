@@ -16,6 +16,7 @@ const snapshotSchema = z.object({
   practiced: z.array(z.string()).nullable(),
   position: z.object({ id: z.string(), dueAt: z.number() }).optional(),
   response: responseSchema.optional(),
+  feedbackId: z.string().min(1).optional(),
 });
 const savedSessions = z.array(z.tuple([z.string(), snapshotSchema]));
 const storageKey = "better-vault:study-review-sessions";
@@ -23,6 +24,7 @@ const directKey = `${storageKey}:direct`;
 const directSession = z.tuple([z.string(), z.string().min(1).max(80)]);
 export type ReviewSnapshot = z.infer<typeof snapshotSchema>;
 export type ReviewResponse = z.infer<typeof responseSchema>;
+export type ReviewTutorFeedback = { threadId: string; text: string };
 
 const selectionSchema = z.object({
   studyReviewSession: z.string().min(1).max(80).optional(),

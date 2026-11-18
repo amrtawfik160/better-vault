@@ -243,6 +243,7 @@
       "tutorAction": "Practice with Tutor",
       "tutorCardAction": "Practice this card with Tutor",
       "tutorFeedback": "Get feedback with Tutor",
+      "continueTutorFeedback": "Continue Tutor feedback",
       "feedbackChoice": "I chose option {{choice}}.\n{{response}}",
       "cardFeedbackPrompt": "I’ve already attempted this flashcard. Check my response against the saved answer and its source. Tell me what I got right, what I should fix, and give me one follow-up question.\n\nMy response\n{{response}}",
       "highlightFeedbackPrompt": "I’ve already tried the recall prompt below. Check my response against the saved highlight. Tell me what I got right, what I should fix, and give me one follow-up question.\n\nRecall prompt\n{{cue}}\n\nMy response\n{{response}}",

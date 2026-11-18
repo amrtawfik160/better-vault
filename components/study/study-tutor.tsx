@@ -432,7 +432,7 @@ export function StudyTutor({
   focusSuggestion,
   reportCards,
   vaultWords,
-  focusMessage,
+  focusMessage: requestedMessage,
   back,
   openBesideReader,
   setup,
@@ -461,12 +461,17 @@ export function StudyTutor({
   const composer = useStudyTutorDraft(thread);
   const input = composer.draft.text;
   const composerField = useRef<HTMLTextAreaElement>(null);
-  const focusDraft = location.state?.focusStudyDraft === true;
+  const fromReviewFeedback = location.state?.studyReviewFeedback === true || location.state?.focusStudyDraft === true;
+  const [feedbackReply] = useState(() => fromReviewFeedback && !input.trim()
+    ? thread.messages.findLastIndex(({ role }) => role === "assistant")
+    : -1);
+  const focusMessage = requestedMessage ?? (fromReviewFeedback && feedbackReply >= 0 ? feedbackReply : undefined);
+  const focusDraft = fromReviewFeedback && focusMessage === undefined;
   const [operation, setOperation] = useState<"answer" | "report" | null>(null);
   const [failed, setFailed] = useState<TutorFailure>();
   const busy = operation !== null;
   const [changingCard, setChangingCard] = useState(false);
-  const [answerImageCardId, setAnswerImageCardId] = useState(focusDraft ? thread.practiceCardId : undefined);
+  const [answerImageCardId, setAnswerImageCardId] = useState(fromReviewFeedback ? thread.practiceCardId : undefined);
   const revealedImageCardId = useRef(answerImageCardId);
   const answerImageRegion = useId();
   const [renaming, setRenaming] = useState(false);

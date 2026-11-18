@@ -1655,6 +1655,29 @@ describe.each(backends)("%s store", (name, create) => {
       expect(await store().getStudy(own.id)).toMatchObject({ schedule: own.schedule });
     });
 
+    it("opens one feedback conversation for a review attempt and preserves it on later openings", async () => {
+      const card = await saveStudyCard({ front: "What overlaps?", back: "Two majorities.", vaultId: DEFAULT_VAULT, tags: [] });
+      const id = "review-feedback:practice-attempt";
+      const initial = { id: "initial-answer", text: "I think the majorities overlap.", at: Date.now() };
+      const open = (draft = initial) => startCardTutor([card.id], DEFAULT_VAULT, "Flashcard practice", draft, id);
+      const [first, second] = await Promise.all([open(), open()]);
+      expect(first).toMatchObject({ id, draft: initial, messages: [] });
+      expect(second).toEqual(first);
+
+      const edited = { id: "edited-answer", text: "Can you check my reasoning?", at: initial.at + 1 };
+      await updateStudyThread(id, {}, [], { kind: "save", draft: edited });
+      expect(await open()).toMatchObject({ id, draft: edited });
+      await updateStudyThread(id, {}, [
+        { role: "user", text: edited.text, practiceCardId: card.id },
+        { role: "assistant", text: "Check the size of the union.", practiceCardId: card.id },
+      ], { kind: "consume", id: edited.id });
+      const reopened = await open();
+      expect(reopened?.draft?.text || "").toBe("");
+      expect(reopened?.messages.map(({ text }) => text)).toEqual([edited.text, "Check the size of the union."]);
+      expect((await store().listStudy()).filter(({ id: rowId }) => rowId === id)).toHaveLength(1);
+      expect(await store().getStudy(card.id)).toEqual(card);
+    });
+
     it("replays an interrupted draft save without overwriting or duplicating its cards", async () => {
       const card = await saveStudyCard({ front: "Existing question", back: "Existing answer", tags: [] });
       const second = { ...card, id: card.id + "-new", front: "Second question" };

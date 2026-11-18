@@ -39,6 +39,7 @@ import {
   saveReviewSession,
   type ReviewResponse,
   type ReviewSnapshot,
+  type ReviewTutorFeedback,
 } from "@/lib/study/review-session";
 import { toast } from "sonner";
 import { Button } from "@/components/panelui/button";
@@ -110,7 +111,7 @@ export function StudyReview({
   books: StudyBook[];
   words: Word[];
   threads: StudyThread[];
-  practice: (item: Card | Highlight, state: ReturnType<typeof reviewReturnState>, draftText?: string) => void;
+  practice: (item: Card | Highlight, state: ReturnType<typeof reviewReturnState>, feedback?: ReviewTutorFeedback) => void;
   practiceDifficult: (ids: string[]) => void;
   openingPractice: boolean;
   collection?: string;
@@ -188,18 +189,24 @@ export function StudyReview({
     ? choices?.[savedResponse.index] ? savedResponse : undefined
     : choices ? undefined : savedResponse;
   const attemptedAnswer = response?.kind === "choice" ? choices?.[response.index] : response?.value.trim();
+  const feedbackId = item && isRevealed && attemptedAnswer
+    ? (session.feedbackId ?? `review-feedback:${JSON.stringify([vaultId, sessionId, item.id, item.schedule.dueAt])}`)
+    : undefined;
+  const hasFeedback = feedbackId !== undefined && threads.some((thread) => thread.id === feedbackId);
   const question = item?.kind === "card" ? item.front : item?.cue || t("study.recall.highlightPrompt");
   const highlightBook =
     item?.kind === "highlight" ? books.find(({ id }) => id === item.bookId) : undefined;
 
   function revealAnswer() {
-    if (item && !busy)
-      setSession((value) => ({
-        ...value,
-        revealed: item.id,
-        position: { id: item.id, dueAt: item.schedule.dueAt },
-        response,
-      }));
+    if (!item || busy || isRevealed) return;
+    const feedbackId = attemptedAnswer ? `review-feedback:${studyId()}` : undefined;
+    setSession((value) => ({
+      ...value,
+      revealed: item.id,
+      position: { id: item.id, dueAt: item.schedule.dueAt },
+      response,
+      feedbackId,
+    }));
   }
 
   function respond(next: ReviewResponse) {
@@ -208,6 +215,7 @@ export function StudyReview({
         ...value,
         position: { id: item.id, dueAt: item.schedule.dueAt },
         response: next,
+        feedbackId: undefined,
       }));
   }
 
@@ -231,6 +239,7 @@ export function StudyReview({
         revealed: "",
         position: undefined,
         response: undefined,
+        feedbackId: undefined,
         rated: Math.max(rated, value.rated) + (committed ? 1 : 0),
       }));
       setStarted(gradedAt);
@@ -254,11 +263,12 @@ export function StudyReview({
       practiced,
       position: itemId && dueAt !== undefined ? { id: itemId, dueAt } : undefined,
       response,
+      feedbackId,
     };
     saveReviewSession(storageId, snapshot);
     saveReviewCheckpoint(vaultId, destination, snapshot);
   }, [
-    isRevealed, revealed, rated, practiced, itemId, dueAt, response, storageId, vaultId, destination,
+    isRevealed, revealed, rated, practiced, itemId, dueAt, response, feedbackId, storageId, vaultId, destination,
     busy, awaitingHistory,
   ]);
 
@@ -301,7 +311,7 @@ export function StudyReview({
   function openTutor() {
     if (!item) return;
     const responseText = attemptedAnswer?.slice(0, 10_000);
-    const draftText = attemptedAnswer
+    const draftText = feedbackId && attemptedAnswer
       ? t(item.kind === "card" ? "study.recall.cardFeedbackPrompt" : "study.recall.highlightFeedbackPrompt", {
           cue: question.slice(0, 500),
           response: response?.kind === "choice"
@@ -309,7 +319,7 @@ export function StudyReview({
             : responseText,
         })
       : undefined;
-    practice(item, returnState, draftText);
+    practice(item, returnState, draftText && feedbackId ? { threadId: feedbackId, text: draftText } : undefined);
   }
 
   return (
@@ -427,7 +437,7 @@ export function StudyReview({
                 disabled={busy || openingPractice}
                 onClick={openTutor}
               >
-                {t(attemptedAnswer ? "study.recall.tutorFeedback" :
+                {t(hasFeedback ? "study.recall.continueTutorFeedback" : feedbackId ? "study.recall.tutorFeedback" :
                   item.kind === "card" ? "study.recall.tutorCardAction" : "study.highlights.discussOne")}
               </Button>
               {practiced ? (
@@ -439,6 +449,7 @@ export function StudyReview({
                       revealed: "",
                       position: undefined,
                       response: undefined,
+                      feedbackId: undefined,
                     }));
                   }}
                 >
@@ -504,6 +515,7 @@ export function StudyReview({
                     revealed: "",
                     position: undefined,
                     response: undefined,
+                    feedbackId: undefined,
                   }))
                 }
               >

@@ -21,6 +21,7 @@ import {
   reviewSelection,
   savedReview,
   studyCardsInScope,
+  type ReviewTutorFeedback,
 } from "@/lib/study/review-session";
 import { studyReturnState } from "@/lib/study/return-links";
 import { studyVaultIndex } from "@/lib/study/vault";
@@ -724,19 +725,19 @@ export default function StudyWorkspace({
     kind: "card" | "highlight",
     ids: string[],
     state?: ReturnType<typeof studyReturnState>,
-    draftText?: string,
+    feedback?: ReviewTutorFeedback,
   ) {
     if (openingPractice) return;
     setOpeningPractice(true);
     try {
-      const draft = draftText ? { id: studyId(), text: draftText, at: Date.now() } : undefined;
+      const draft = feedback ? { id: studyId(), text: feedback.text, at: Date.now() } : undefined;
       const thread = kind === "card"
-        ? await startCardTutor(ids, studyVaultId, t("study.recall.tutorTitle"), draft)
-        : await startHighlightTutor(ids, studyVaultId, t("study.highlights.tutorTitle"), draft);
+        ? await startCardTutor(ids, studyVaultId, t("study.recall.tutorTitle"), draft, feedback?.threadId)
+        : await startHighlightTutor(ids, studyVaultId, t("study.highlights.tutorTitle"), draft, feedback?.threadId);
       if (thread) {
         const returnState = state ?? studyReturnState(location.state);
         setParams({ view: "study", tab: "tutor", vault: studyVaultId, thread: thread.id }, {
-          state: draft ? { ...returnState, focusStudyDraft: true } : returnState,
+          state: feedback ? { ...returnState, studyReviewFeedback: true } : returnState,
         });
       } else toast.error(t(kind === "card" ? "study.materials.noCardsSelected" : "study.highlights.unavailable"));
     } catch (error) {
@@ -901,7 +902,7 @@ export default function StudyWorkspace({
           books={books}
           words={words}
           threads={threads}
-          practice={(item, state, draftText) => void openTutorSelection(item.kind, [item.id], state, draftText)}
+          practice={(item, state, feedback) => void openTutorSelection(item.kind, [item.id], state, feedback)}
           practiceDifficult={(ids) =>
             go("review", { ...Object.fromEntries(params), vault: studyVaultId, mode: "weak" }, ids)
           }
