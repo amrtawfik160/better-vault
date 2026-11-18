@@ -8,6 +8,7 @@ import {
   freshSchedule,
   putStudyRecords,
   rateStudyItem,
+  renameStudyBook,
   readStudyThread,
   readStudyTutorSources,
   readFlashcardDraftPassages,
@@ -83,7 +84,7 @@ import {
   seedBotsOnce,
   updateBot,
 } from "./bots";
-import { addSource, attachImages, deleteSource, getChunks } from "./sources";
+import { addSource, attachImages, deleteSource, getChunks, renameSource } from "./sources";
 import {
   DEFAULT_VAULT,
   createVault,
@@ -917,6 +918,81 @@ describe.each(backends)("%s store", (name, create) => {
       expect(await getChunks([source.id])).toEqual(chunks);
       expect(await store().listNotebooks()).toHaveLength(1);
       expect(await store().listSources(notebookId)).toHaveLength(1);
+    });
+
+    it("renames the notebook source and Study document together without replacing saved passages", async () => {
+      const notebookId = await createNotebook("Mechanics notebook");
+      const source = await addSource({
+        notebookId,
+        title: "Lecture transcript",
+        kind: "text",
+        text: "Momentum is conserved in a closed system.",
+      });
+      const book = await studyBookForSource(source.id);
+      await updateStudyBook(book.id, { bookmarks: [0] });
+      await renameSource(source.id, "Momentum");
+      expect(await store().getStudy(book.id)).toMatchObject({
+        title: "Momentum",
+        sections: [{ title: "Momentum", text: source.text }],
+        bookmarks: [0],
+      });
+      await renameStudyBook(book, "Conservation of momentum");
+      expect((await store().getSource(source.id))?.title).toBe("Conservation of momentum");
+      expect((await store().getNotebook(notebookId))?.title).toBe("Mechanics notebook");
+      expect(await getChunks([source.id])).toMatchObject([
+        { id: `${source.id}:0`, text: source.text },
+      ]);
+      expect((await studyBookForSource(source.id)).id).toBe(book.id);
+
+      const standalone = await addStudyBook({
+        title: "Tutorial",
+        format: "text",
+        sections: [{ title: "Worked example", text: source.text }],
+      });
+      await renameStudyBook(standalone, "Momentum tutorial");
+      expect((await store().getNotebook(standalone.notebookId))?.title).toBe("Momentum tutorial");
+      expect((await store().getSource(standalone.sourceId))?.title).toBe("Momentum tutorial");
+      expect(await store().getStudy(standalone.id)).toMatchObject({
+        title: "Momentum tutorial",
+        sections: [{ title: "Worked example", text: source.text }],
+      });
+    });
+
+    it("resolves a removed source's citation from its saved Study text in the notebook's vault", async () => {
+      const otherVault = await createVault({ name: "Reference material" });
+      const notebookId = await createNotebook("Control theory");
+      const quote = "The dominant poles determine response time.";
+      const source = await addSource({ notebookId, title: "Poles", kind: "text", text: quote });
+      const [chunk] = await getChunks([source.id]);
+      const book = await studyBookForSource(source.id);
+      const origin = {
+        kind: "source",
+        notebookId,
+        sourceId: source.id,
+        chunkId: chunk.id,
+        snippet: quote,
+      } as const;
+      await deleteSource(source.id);
+      expect(await store().getSource(source.id)).toBeUndefined();
+      expect(await store().attachStudyBook({ ...book, id: "late-open" })).toBeUndefined();
+      const unrelatedNotebook = await createNotebook("Unrelated notes");
+      expect(
+        await readFlashcardDraftPassages(
+          [{ ...origin, notebookId: unrelatedNotebook }, origin],
+          DEFAULT_VAULT,
+        ),
+      ).toMatchObject([{ text: quote, origin: { kind: "book", bookId: book.id, section: 0, offset: 0 } }]);
+      expect(
+        await readFlashcardDraftPassages([{ ...origin, snippet: "A different quote." }], DEFAULT_VAULT),
+      ).toEqual([]);
+
+      await updateNotebook(notebookId, { vaultId: otherVault });
+      expect(await readFlashcardDraftPassages([origin], DEFAULT_VAULT)).toEqual([]);
+      expect(await readFlashcardDraftPassages([origin], otherVault)).toMatchObject([
+        { text: quote, origin: { kind: "book", bookId: book.id } },
+      ]);
+      await deleteStudyBook(book);
+      expect(await readFlashcardDraftPassages([origin], otherVault)).toEqual([]);
     });
 
     it("adds a Studio set once and commits only one review for a due card", async () => {

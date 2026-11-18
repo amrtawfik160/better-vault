@@ -24,6 +24,8 @@
   "askTutor": "Ask Tutor",
   "citationChanged": "This citation points to a passage that has changed or moved.",
   "unavailable": "This source is no longer available",
+  "savedStudyDescription": "You can still read the text saved in Study.",
+  "openSavedStudy": "Read saved document",
   "openPage": "Open page",
   "rename": {
     "title": "Rename source",

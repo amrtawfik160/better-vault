@@ -94,7 +94,8 @@ export async function setAllSourcesSelected(notebookId: string, selected: boolea
 }
 
 export async function renameSource(id: string, title: string) {
-  await store().patchSource(id, { title });
+  const name = title.trim();
+  if (name) await store().renameDocument({ kind: "source", id, title: name, updatedAt: Date.now() });
 }
 
 export async function deleteSource(id: string) {

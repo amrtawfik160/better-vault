@@ -110,7 +110,7 @@ function WorkspaceLayout() {
         open={addSourceOpen}
         onOpenChange={setAddSourceOpen}
       />
-      <SourceReader reading={reading} onClose={closeReader} />
+      <SourceReader notebookId={notebook.id} reading={reading} onClose={closeReader} />
       <ToolDialog notebookId={notebook.id} toolId={activeTool} onClose={closeTool} />
       <OutputActionDialogs />
       <ConversationActionDialogs />

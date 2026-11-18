@@ -152,6 +152,18 @@ export function patchedStudyBook(
   };
 }
 
+export function renamedStudyBook(book: StudyBook, title: string, updatedAt: number): StudyBook {
+  const section = book.sections[0];
+  const renameHeading =
+    book.format === "text" && book.sections.length === 1 && section.title === book.title;
+  return {
+    ...book,
+    title,
+    sections: renameHeading ? [{ ...section, title }] : book.sections,
+    updatedAt: Math.max(book.updatedAt, updatedAt),
+  };
+}
+
 export function revisedStudyBook(
   book: StudyRecord | undefined,
   write: StudyBookTextWrite,

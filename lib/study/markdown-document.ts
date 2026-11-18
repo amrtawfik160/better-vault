@@ -5,6 +5,8 @@ import { mathFromMarkdown } from "mdast-util-math";
 import { toHast } from "mdast-util-to-hast";
 import { gfm } from "micromark-extension-gfm";
 import { math } from "micromark-extension-math";
+import { findStudyExcerpt } from "./locators";
+import type { StudyBook } from "./records";
 import {
   containsStudyMath,
   restoreStudyCurrency,
@@ -52,6 +54,15 @@ export function studyDocumentContent(text: string, markdown: boolean) {
   return markdown
     ? studyMarkdownContent(text)
     : { text: text.replace(/\r\n?/g, "\n"), markdown: undefined };
+}
+
+export function findStudyDocumentExcerpt(book: StudyBook, excerpt: string) {
+  return (
+    findStudyExcerpt(book.sections, excerpt) ??
+    (book.sections.some(({ markdown }) => markdown !== undefined)
+      ? findStudyExcerpt(book.sections, studyMarkdownContent(excerpt).text)
+      : undefined)
+  );
 }
 
 export type StudyFormulaMode = "source" | "legacy";

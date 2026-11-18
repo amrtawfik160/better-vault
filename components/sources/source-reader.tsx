@@ -1,13 +1,14 @@
 import { ArrowUpRight01Icon } from "@hugeicons/core-free-icons";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useLocation, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
-import { Button } from "@/components/panelui/button";
-import { startSourceTutor, studyBookForSource } from "@/lib/db/study";
-import { originHref } from "@/lib/study/links";
-import { findStudyExcerpt, locateCitedChunk } from "@/lib/study/locators";
-import { studyMarkdownContent } from "@/lib/study/markdown-document";
+import { Button, buttonVariants } from "@/components/panelui/button";
+import { startSourceTutor, studyBookForSource, useSavedStudyBookForSource } from "@/lib/db/study";
+import { originHref, studyHref } from "@/lib/study/links";
+import { locateCitedChunk } from "@/lib/study/locators";
+import { findStudyDocumentExcerpt } from "@/lib/study/markdown-document";
+import type { StudyBook } from "@/lib/study/records";
 import { studyTextRevision } from "@/lib/study/text-edits";
 import { Icon } from "@/components/icon";
 import { Markdown } from "@/components/chat/markdown";
@@ -23,12 +24,13 @@ import { reflow } from "@/lib/sources/reflow";
 import { cn } from "@/lib/utils";
 
 interface SourceReaderProps {
+  notebookId: string;
   reading: { sourceId: string; passage?: string; snippet?: string } | null;
   onClose: () => void;
 }
 
 /** Shows a source's text, scrolled to a cited passage when there is one. */
-export function SourceReader({ reading, onClose }: SourceReaderProps) {
+export function SourceReader({ notebookId, reading, onClose }: SourceReaderProps) {
   const { t: tCommon } = useTranslation();
   return (
     <Sheet side="right" open={reading !== null} onOpenChange={(open) => (open ? null : onClose())}>
@@ -37,19 +39,40 @@ export function SourceReader({ reading, onClose }: SourceReaderProps) {
         className="w-[min(36rem,calc(100vw-2*var(--sheet-gap)))]"
       >
         <ReviewReturn className="px-3 pt-3" />
-        {reading ? <ReaderBody {...reading} /> : null}
+        {reading ? (
+          <ReaderBody key={reading.sourceId} notebookId={notebookId} {...reading} />
+        ) : null}
       </Sheet.Content>
     </Sheet>
   );
 }
 
-function ReaderBody({ sourceId, passage, snippet }: NonNullable<SourceReaderProps["reading"]>) {
+function readingLink(book: StudyBook, excerpt: string | undefined) {
+  const anchor = excerpt ? findStudyDocumentExcerpt(book, excerpt) : undefined;
+  return studyHref("library", {
+    book: book.id,
+    notebook: book.notebookId,
+    page: anchor?.section,
+    at: anchor?.offset,
+    length: anchor?.length,
+    rev: anchor ? studyTextRevision(book) : undefined,
+    reference: anchor ? "1" : undefined,
+  });
+}
+
+function ReaderBody({
+  notebookId,
+  sourceId,
+  passage,
+  snippet,
+}: NonNullable<SourceReaderProps["reading"]> & { notebookId: string }) {
   const { t, i18n } = useTranslation("sources");
   const read = useSourceWithChunks(sourceId);
   const navigate = useNavigate();
   const returnState = reviewReturnState(useLocation().state);
   const [opening, setOpening] = useState(false);
-  const source = read?.source;
+  const source = read?.source?.notebookId === notebookId ? read.source : undefined;
+  const saved = useSavedStudyBookForSource(notebookId, sourceId, Boolean(read && !source));
   const chunks = read?.chunks;
   const excerpt = snippet?.replace(/…$/u, "").trim();
   const cited = useMemo(
@@ -67,7 +90,24 @@ function ReaderBody({ sourceId, passage, snippet }: NonNullable<SourceReaderProp
   }, [cited]);
 
   if (!read) return null;
-  if (!source) return <Sheet.Header title={t("unavailable")} />;
+  if (!source) {
+    return (
+      <Sheet.Header
+        title={t("unavailable")}
+        description={saved ? t("savedStudyDescription") : undefined}
+      >
+        {saved ? (
+          <Link
+            to={readingLink(saved, excerpt)}
+            state={returnState}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            {t("openSavedStudy")}
+          </Link>
+        ) : null}
+      </Sheet.Header>
+    );
+  }
   const words = countWords(source.text);
 
   async function openStudy(destination: () => Promise<string>) {
@@ -92,26 +132,9 @@ function ReaderBody({ sourceId, passage, snippet }: NonNullable<SourceReaderProp
             size="sm"
             disabled={opening}
             onClick={() =>
-              void openStudy(async () => {
-                const book = await studyBookForSource(source.id);
-                const text = excerpt || cited?.text;
-                const anchor = text
-                  ? (findStudyExcerpt(book.sections, text) ??
-                    (source.kind === "markdown"
-                      ? findStudyExcerpt(book.sections, studyMarkdownContent(text).text)
-                      : undefined))
-                  : undefined;
-                const destination = new URL(
-                  originHref({
-                    kind: "book",
-                    bookId: book.id,
-                    ...(anchor ? { ...anchor, revision: studyTextRevision(book) } : {}),
-                  }),
-                  window.location.href,
-                );
-                destination.searchParams.set("notebook", source.notebookId);
-                return destination.pathname + destination.search;
-              })
+              void openStudy(async () =>
+                readingLink(await studyBookForSource(source.id), excerpt || cited?.text),
+              )
             }
           >
             {t("openStudy")}

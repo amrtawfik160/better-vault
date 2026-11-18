@@ -5,7 +5,11 @@ import { notebookAnswerEvidence } from "@/lib/chat/study";
 import { freshSchedule, nextStudySchedule } from "@/lib/study/schedule";
 import { originHref, studyCitationOrigin } from "@/lib/study/links";
 import { epubMime, readStudyEpub, studyPdfSections } from "@/lib/study/read-file";
-import { studyDocumentContent, studyMarkdownContent } from "@/lib/study/markdown-document";
+import {
+  findStudyDocumentExcerpt,
+  studyDocumentContent,
+  studyMarkdownContent,
+} from "@/lib/study/markdown-document";
 import { clearDocumentRecoveries } from "@/lib/study/document-drafts";
 import { locateStudyMark, resolveStudyRange, studyTextEdit, studyTextRevision } from "@/lib/study/text-edits";
 import { cardEvidenceLimit, type StudyPassage, type StudyTutorSources } from "@/lib/study/passages";
@@ -40,8 +44,8 @@ import type {
 import { createNote } from "./notes";
 import type { Note, StudioOutput } from "./types";
 import { useStoreQuery } from "./live";
-import { createNotebook, deleteNotebook, renameNotebook } from "./notebooks";
-import { addSource, chunksForSource, getChunks, renameSource } from "./sources";
+import { createNotebook, deleteNotebook } from "./notebooks";
+import { addSource, chunksForSource, getChunks } from "./sources";
 import { store } from "./store";
 import { currentVaultId, DEFAULT_VAULT, listVaults, vaultOf } from "./vaults";
 import { getSettings } from "./settings";
@@ -50,6 +54,14 @@ export { freshSchedule } from "@/lib/study/schedule";
 
 export function useStudyRecords() {
   return useStoreQuery(() => store().listStudy(), [], ["study"]);
+}
+
+export function useSavedStudyBookForSource(notebookId: string, sourceId: string, enabled: boolean) {
+  return useStoreQuery(
+    () => (enabled ? store().getStudyBookForSource(notebookId, sourceId) : Promise.resolve(undefined)),
+    [notebookId, sourceId, enabled],
+    ["study"],
+  );
 }
 
 function withCurrentStudyVault<T extends { notebookId?: string; vaultId?: string }>(row: T): T {
@@ -122,6 +134,7 @@ async function studyEvidenceReader(vaultId: string, limit = cardEvidenceLimit) {
   const ownership = { notebooks, vaults, rows: [], defaultVaultId: DEFAULT_VAULT };
   const { notebookOwner } = studyVaultIndex({ ...ownership, notes: [] });
   const sourceReads = new Map<string, ReturnType<typeof readNotebookSource>>();
+  const savedSourceReads = new Map<string, Promise<StudyBook | undefined>>();
   const bookReads = new Map<string, ReturnType<typeof readStudyRowsInVault>>();
 
   async function readNotebookSource(id: string) {
@@ -136,10 +149,36 @@ async function studyEvidenceReader(vaultId: string, limit = cardEvidenceLimit) {
       const pending = sourceReads.get(origin.sourceId) ?? readNotebookSource(origin.sourceId);
       sourceReads.set(origin.sourceId, pending);
       const loaded = await pending;
-      if (!loaded || loaded.source.notebookId !== origin.notebookId) return;
-      const { source, chunks } = loaded;
       const snippet = origin.snippet?.slice(0, 280);
       const quoted = snippet?.replace(/…$/u, "").trim();
+      if (!loaded) {
+        if (!quoted) return;
+        const key = JSON.stringify([origin.notebookId, origin.sourceId]);
+        const saved =
+          savedSourceReads.get(key) ??
+          backend.getStudyBookForSource(origin.notebookId, origin.sourceId);
+        savedSourceReads.set(key, saved);
+        const book = await saved;
+        if (book?.notebookId !== origin.notebookId) return;
+        const range = findStudyDocumentExcerpt(book, quoted);
+        if (!range) return;
+        const { section, offset } = range;
+        const length = Math.min(range.length, limit);
+        return {
+          origin: {
+            kind: "book",
+            bookId: book.id,
+            section,
+            offset,
+            length,
+            revision: studyTextRevision(book),
+          },
+          title: book.title.slice(0, 500),
+          text: book.sections[section].text.slice(offset, offset + length),
+        };
+      }
+      if (loaded.source.notebookId !== origin.notebookId) return;
+      const { source, chunks } = loaded;
       const chunk = locateCitedChunk(chunks, origin.chunkId, quoted);
       if (!chunk) return;
       // A relocated excerpt confirms the saved quote, while its new surroundings may differ.
@@ -437,12 +476,10 @@ export async function addStudyBook(input: {
 
 export async function studyBookForSource(sourceId: string) {
   const backend = store();
-  const existing = (await backend.listStudy()).find(
-    (row): row is StudyBook => row.kind === "book" && row.sourceId === sourceId,
-  );
-  if (existing) return existing;
   const source = await backend.getSource(sourceId);
   if (!source) throw new Error("This source was removed.");
+  const existing = await backend.getStudyBookForSource(source.notebookId, sourceId);
+  if (existing) return existing;
   const original = source.originalFileId ? await backend.getBlob(source.originalFileId) : undefined;
   const book: StudyBook = {
     id: `source-${source.id}`,
@@ -479,11 +516,9 @@ export async function studyBookForSource(sourceId: string) {
       book.sections = [{ title: source.title, ...content }];
     }
   }
-  const inserted = await backend.insertStudy([book]);
-  if (inserted) return book;
-  const current = await backend.getStudy(book.id);
-  if (current?.kind === "book") return current;
-  throw new Error("This source is no longer available in Study.");
+  const linked = await backend.attachStudyBook(book);
+  if (linked) return linked;
+  throw new Error("This source was removed.");
 }
 
 export async function deleteStudyBook(book: StudyBook) {
@@ -640,12 +675,8 @@ export async function startSourceTutor(sourceId: string) {
   const source = await backend.getSource(sourceId);
   const notebook = source && (await backend.getNotebook(source.notebookId));
   if (!source || !notebook) throw new Error("This source was removed.");
-  const book = (await backend.listStudy()).find(
-    (row) =>
-      row.kind === "book" &&
-      row.sourceId === source.id &&
-      row.sections.some(({ text }) => text.trim()),
-  );
+  const saved = await backend.getStudyBookForSource(notebook.id, source.id);
+  const book = saved?.sections.some(({ text }) => text.trim()) ? saved : undefined;
   const thread: StudyThread = {
     id: studyId(),
     kind: "thread",
@@ -782,17 +813,12 @@ export async function saveStudyNote({
 }
 
 export async function renameStudyBook(book: StudyBook, title: string) {
-  const current = await store().getStudy(book.id);
   const next = title.trim();
-  if (!next || current?.kind !== "book") return;
-  if (!current.attachedToNotebook) {
-    await renameNotebook(current.notebookId, next);
-    await renameSource(current.sourceId, next);
-  }
-  await store().patchStudyBook({ id: current.id, change: { title: next }, updatedAt: Date.now() });
+  if (next)
+    await store().renameDocument({ kind: "book", id: book.id, title: next, updatedAt: Date.now() });
 }
 
-export function updateStudyBook(id: string, change: Omit<StudyBookWrite["change"], "title">) {
+export function updateStudyBook(id: string, change: StudyBookWrite["change"]) {
   return store().patchStudyBook({ id, change, updatedAt: Date.now() });
 }
 

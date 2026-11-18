@@ -1,4 +1,5 @@
 import type {
+  StudyBook,
   StudyBookTextWrite,
   StudyBookWrite,
   StudyDocumentRecovery,
@@ -26,6 +27,13 @@ import type {
   Bot,
   BotMessage,
 } from "./types";
+
+type DocumentRename = {
+  kind: "source" | "book";
+  id: string;
+  title: string;
+  updatedAt: number;
+};
 
 /**
  * Where notebooks are stored. The web app keeps them in IndexedDB (Dexie); the
@@ -100,6 +108,7 @@ export interface Backend {
   /** Every source of every notebook, for the search index. */
   listAllSources(): Promise<Source[]>;
   patchSource(id: string, patch: Partial<Source>): Promise<void>;
+  renameDocument(change: DocumentRename): Promise<void>;
   patchNotebookSources(notebookId: string, patch: Partial<Source>): Promise<void>;
   /** Deletes a source with its passages. */
   deleteSource(id: string): Promise<void>;
@@ -142,8 +151,10 @@ export interface Backend {
 
   listStudy(): Promise<StudyRecord[]>;
   getStudy(id: string): Promise<StudyRecord | undefined>;
+  getStudyBookForSource(notebookId: string, sourceId: string): Promise<StudyBook | undefined>;
   putStudy(rows: StudyRecord[]): Promise<void>;
   insertStudy(rows: StudyRecord[]): Promise<number>;
+  attachStudyBook(book: StudyBook): Promise<StudyBook | undefined>;
   patchStudyBook(write: StudyBookWrite): Promise<void>;
   patchStudyThread(write: StudyThreadWrite): Promise<boolean>;
   writeStudyDocumentDraft(row: StudyDocumentRecovery, replaces?: string): Promise<boolean>;
@@ -244,6 +255,7 @@ export const writes = {
   deleteFolder: ["folders", "notebooks"],
   addSource: ["sources", "chunks", "notebooks", "blobs"],
   patchSource: ["sources"],
+  renameDocument: ["sources", "study", "notebooks"],
   patchNotebookSources: ["sources"],
   deleteSource: ["sources", "chunks", "blobs"],
   saveChat: ["messages", "conversations", "notebooks"],
@@ -258,6 +270,7 @@ export const writes = {
   putBlob: ["blobs"],
   putStudy: ["study"],
   insertStudy: ["study"],
+  attachStudyBook: ["study"],
   patchStudyBook: ["study"],
   patchStudyThread: ["study"],
   writeStudyDocumentDraft: ["study"],
@@ -342,6 +355,7 @@ export const backendMethods = [
   "listSources",
   "listAllSources",
   "patchSource",
+  "renameDocument",
   "patchNotebookSources",
   "deleteSource",
   "getChunks",
@@ -364,8 +378,10 @@ export const backendMethods = [
   "getBlob",
   "listStudy",
   "getStudy",
+  "getStudyBookForSource",
   "putStudy",
   "insertStudy",
+  "attachStudyBook",
   "patchStudyBook",
   "patchStudyThread",
   "writeStudyDocumentDraft",

@@ -1,9 +1,9 @@
-import type { StudyRecord } from "@/lib/study/records";
+import type { StudyBook, StudyRecord } from "@/lib/study/records";
 import { canWriteStudyDocumentDraft, studyDocumentDraftId } from "@/lib/study/document-drafts";
 import { DEFAULT_VAULT } from "@/lib/study/vault";
 import { patchedStudyReviewItem } from "@/lib/study/recall";
 import { patchedStudyThread } from "@/lib/study/reports";
-import { patchedStudyBook, revisedStudyBook } from "@/lib/study/text-edits";
+import { patchedStudyBook, renamedStudyBook, revisedStudyBook } from "@/lib/study/text-edits";
 import { detachedVocabularyCard, vocabularyCardId, vocabularyChanges } from "@/lib/study/vocabulary";
 import { updatedStudioPractice } from "@/studio/shared/practice";
 import type { Backend, StoreContent, TableName } from "../backend";
@@ -272,6 +272,16 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
         row.data,
       );
 
+  const studyBooksForSource = (notebookId: string, sourceId: string) =>
+    docs<StudyBook>(
+      db
+        .prepare(
+          `SELECT doc FROM study WHERE notebook_id = ? AND json_extract(doc, '$.kind') = 'book'
+            AND json_extract(doc, '$.sourceId') = ? ORDER BY id`,
+        )
+        .all(notebookId, sourceId),
+    );
+
   return {
     listNotebooks: () =>
       docs<Notebook>(
@@ -405,6 +415,21 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
     patchSource: (id, change) => {
       patch<Source>("sources", id, change);
     },
+    renameDocument: ({ kind, id, title, updatedAt }) =>
+      transaction(db, () => {
+        const entry = kind === "book" ? get<StudyRecord>("study", id) : undefined;
+        const linkedBook = entry?.kind === "book" ? entry : undefined;
+        if (kind === "book" && !linkedBook) return;
+        const sourceId = linkedBook?.sourceId ?? id;
+        const source = get<Source>("sources", sourceId);
+        const notebookId = linkedBook?.notebookId ?? source?.notebookId;
+        if (!notebookId) return;
+        for (const book of studyBooksForSource(notebookId, sourceId))
+          put("study", renamedStudyBook(book, title, updatedAt));
+        if (source?.notebookId === notebookId) patch<Source>("sources", source.id, { title });
+        if (linkedBook && !linkedBook.attachedToNotebook)
+          patch<Notebook>("notebooks", notebookId, { title, updatedAt });
+      }),
     patchNotebookSources: (notebookId, change) =>
       transaction(db, () => {
         const ids = db.prepare("SELECT id FROM sources WHERE notebook_id = ?").all(notebookId);
@@ -527,6 +552,7 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
 
     listStudy: () => docs<StudyRecord>(db.prepare("SELECT doc FROM study").all()),
     getStudy: (id) => get<StudyRecord>("study", id),
+    getStudyBookForSource: (notebookId, sourceId) => studyBooksForSource(notebookId, sourceId)[0],
     putStudy: (rows) =>
       transaction(db, () => {
         for (const row of rows) put("study", row);
@@ -540,6 +566,23 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
           count++;
         }
         return count;
+      }),
+    attachStudyBook: (book) =>
+      transaction(db, () => {
+        const source = get<Source>("sources", book.sourceId);
+        if (source?.notebookId !== book.notebookId || !get<Notebook>("notebooks", book.notebookId))
+          return;
+        const existing = get<StudyRecord>("study", book.id);
+        if (existing) {
+          return existing.kind === "book" &&
+            existing.sourceId === book.sourceId &&
+            existing.notebookId === book.notebookId
+            ? existing
+            : undefined;
+        }
+        const next = renamedStudyBook(book, source.title, book.updatedAt);
+        add("study", next);
+        return next;
       }),
     patchStudyBook: (write) =>
       transaction(db, () => {

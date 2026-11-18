@@ -288,7 +288,7 @@ export type StudyBookWrite = {
   change: Partial<
     Pick<
       StudyBook,
-      "title" | "section" | "bookmarks" | "bookmarkPlaces" | "readingPlace" | "preferredReadingSurface"
+      "section" | "bookmarks" | "bookmarkPlaces" | "readingPlace" | "preferredReadingSurface"
     >
   >;
   updatedAt: number;

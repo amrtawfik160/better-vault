@@ -3,7 +3,7 @@ import { canWriteStudyDocumentDraft, studyDocumentDraftId } from "@/lib/study/do
 import { DEFAULT_VAULT } from "@/lib/study/vault";
 import { patchedStudyReviewItem } from "@/lib/study/recall";
 import { patchedStudyThread } from "@/lib/study/reports";
-import { patchedStudyBook, revisedStudyBook } from "@/lib/study/text-edits";
+import { patchedStudyBook, renamedStudyBook, revisedStudyBook } from "@/lib/study/text-edits";
 import { detachedVocabularyCard, vocabularyCardId, vocabularyChanges } from "@/lib/study/vocabulary";
 import { updatedStudioPractice } from "@/studio/shared/practice";
 import type { Backend } from "./backend";
@@ -31,6 +31,11 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
     db.outputs,
     db.blobs,
   ];
+  const studyBooksForSource = (notebookId: string, sourceId: string) =>
+    db.study
+      .where("notebookId")
+      .equals(notebookId)
+      .filter((row) => row.kind === "book" && row.sourceId === sourceId);
 
   return {
     db,
@@ -151,6 +156,24 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
     patchSource: async (id, patch) => {
       await db.sources.update(id, patch);
     },
+    renameDocument: ({ kind, id, title, updatedAt }) =>
+      db.transaction("rw", [db.sources, db.study, db.notebooks], async () => {
+        const entry = kind === "book" ? await db.study.get(id) : undefined;
+        const linkedBook = entry?.kind === "book" ? entry : undefined;
+        if (kind === "book" && !linkedBook) return;
+        const sourceId = linkedBook?.sourceId ?? id;
+        const source = await db.sources.get(sourceId);
+        const notebookId = linkedBook?.notebookId ?? source?.notebookId;
+        if (!notebookId) return;
+        const books = await studyBooksForSource(notebookId, sourceId).toArray();
+        for (const book of books) {
+          if (book.kind === "book" && book.sourceId === sourceId)
+            await db.study.put(renamedStudyBook(book, title, updatedAt));
+        }
+        if (source?.notebookId === notebookId) await db.sources.update(source.id, { title });
+        if (linkedBook && !linkedBook.attachedToNotebook)
+          await db.notebooks.update(notebookId, { title, updatedAt });
+      }),
     patchNotebookSources: async (notebookId, patch) => {
       await db.sources.where("notebookId").equals(notebookId).modify(patch);
     },
@@ -249,6 +272,10 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
 
     listStudy: () => db.study.toArray(),
     getStudy: (id) => db.study.get(id),
+    getStudyBookForSource: async (notebookId, sourceId) => {
+      const row = await studyBooksForSource(notebookId, sourceId).first();
+      return row?.kind === "book" ? row : undefined;
+    },
     putStudy: async (rows) => {
       await db.study.bulkPut(rows);
     },
@@ -259,6 +286,23 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
         const pending = unique.filter((_, index) => !existing[index]);
         await db.study.bulkAdd(pending);
         return pending.length;
+      }),
+    attachStudyBook: (book) =>
+      db.transaction("rw", [db.study, db.sources, db.notebooks], async () => {
+        const source = await db.sources.get(book.sourceId);
+        if (source?.notebookId !== book.notebookId || !(await db.notebooks.get(book.notebookId)))
+          return;
+        const existing = await db.study.get(book.id);
+        if (existing) {
+          return existing.kind === "book" &&
+            existing.sourceId === book.sourceId &&
+            existing.notebookId === book.notebookId
+            ? existing
+            : undefined;
+        }
+        const next = renamedStudyBook(book, source.title, book.updatedAt);
+        await db.study.add(next);
+        return next;
       }),
     patchStudyBook: (write) =>
       db.transaction("rw", db.study, async () => {
