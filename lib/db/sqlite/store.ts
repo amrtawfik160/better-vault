@@ -3,7 +3,8 @@ import { canWriteStudyDocumentDraft, studyDocumentDraftId } from "@/lib/study/do
 import { DEFAULT_VAULT } from "@/lib/study/vault";
 import { patchedStudyReviewItem } from "@/lib/study/recall";
 import { patchedStudyThread } from "@/lib/study/reports";
-import { patchedStudyBook, renamedStudyBook, revisedStudyBook, withPdfOcr } from "@/lib/study/text-edits";
+import { patchedStudyBook, renamedStudyBook, revisedStudyBook } from "@/lib/study/text-edits";
+import { prepareStudyOcrWrite } from "@/lib/study/ocr-write";
 import { detachedVocabularyCard, vocabularyCardId, vocabularyChanges } from "@/lib/study/vocabulary";
 import { updatedStudioPractice } from "@/studio/shared/practice";
 import type { Backend, StoreContent, TableName } from "../backend";
@@ -647,12 +648,9 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
         const book = revisedStudyBook(get<StudyRecord>("study", write.id), write);
         const source = get<Source>("sources", write.sourceId);
         if (!book || !source || source.notebookId !== book.notebookId || !get<Notebook>("notebooks", book.notebookId)) return false;
-        const recognized = write.ocr ? withPdfOcr(source, book, write) : undefined;
-        if (write.ocr && recognized?.text !== sourceText) return false;
         put("study", book);
-        if (recognized) put("sources", recognized);
         if (write.text !== write.previousText) {
-          if (!recognized) put("sources", {
+          put("sources", {
             ...source,
             text: sourceText,
             charCount: sourceText.length,
@@ -663,6 +661,21 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
         }
         touch(book.notebookId, book.updatedAt);
         return true;
+      }),
+    saveStudyOcrPages: (write) =>
+      transaction(db, () => {
+        const book = get<StudyRecord>("study", write.bookId);
+        if (book?.kind !== "book" || !get<Notebook>("notebooks", book.notebookId)) return "conflict";
+        const prepared = prepareStudyOcrWrite(book, get<Source>("sources", book.sourceId), write);
+        if (prepared.kind !== "ready") return prepared.kind;
+        put("study", prepared.book);
+        put("sources", prepared.source);
+        if (prepared.chunks) {
+          deleteWhere("chunks", "source_id", book.sourceId);
+          for (const chunk of prepared.chunks) put("chunks", chunk);
+        }
+        touch(book.notebookId, prepared.book.updatedAt);
+        return "saved";
       }),
     deleteStudy: (id) =>
       transaction(db, () => {

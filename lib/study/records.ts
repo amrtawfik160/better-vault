@@ -347,9 +347,11 @@ export type StudyBookTextWrite = {
   text: string;
   markdown?: string;
   edit: StudyTextEdit;
-  ocr?: { fileId: string; languages: string[] };
   updatedAt: number;
 };
+export type StudyOcrPage = { section: number; previousText: string; text: string; languages: string[] };
+export type StudyOcrWrite = { bookId: string; fileId: string; pages: StudyOcrPage[]; updatedAt: number };
+export type StudyOcrWriteResult = "saved" | "conflict" | "limit";
 export type StudyThread = StudyRecordOf<"thread">;
 export type StudyTutorDraft = z.infer<typeof studyTutorDraftSchema>;
 export type StudyTutorDraftChange =

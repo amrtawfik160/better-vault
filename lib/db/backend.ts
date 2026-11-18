@@ -3,6 +3,8 @@ import type {
   StudyBookTextWrite,
   StudyBookWrite,
   StudyDocumentRecovery,
+  StudyOcrWrite,
+  StudyOcrWriteResult,
   StudyRecord,
   StudyReviewItemWrite,
   StudyReviewWrite,
@@ -166,6 +168,7 @@ export interface Backend {
     sourceText: string,
     chunks: Chunk[],
   ): Promise<boolean>;
+  saveStudyOcrPages(write: StudyOcrWrite): Promise<StudyOcrWriteResult>;
   deleteStudy(id: string): Promise<void>;
 
   getSetting(key: string): Promise<unknown>;
@@ -278,6 +281,7 @@ export const writes = {
   patchStudyReviewItem: ["study"],
   applyStudyReview: ["study"],
   replaceStudyText: ["study", "sources", "chunks", "notebooks"],
+  saveStudyOcrPages: ["study", "sources", "chunks", "notebooks"],
   deleteStudy: ["study"],
   putSetting: ["settings"],
   clearSettings: ["settings"],
@@ -389,6 +393,7 @@ export const backendMethods = [
   "patchStudyReviewItem",
   "applyStudyReview",
   "replaceStudyText",
+  "saveStudyOcrPages",
   "deleteStudy",
   "getSetting",
   "putSetting",

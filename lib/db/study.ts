@@ -13,8 +13,7 @@ import {
 } from "@/lib/study/markdown-document";
 import { clearDocumentRecoveries } from "@/lib/study/document-drafts";
 import { clearFlashcardDraftsFrom } from "@/lib/study/flashcard-draft-recovery";
-import { locateStudyMark, resolveStudyRange, revisedStudyBook, studyTextEdit, studyTextRevision, withPdfOcr } from "@/lib/study/text-edits";
-import { maxOcrText, ocrLanguages } from "@/lib/study/ocr-format";
+import { locateStudyMark, resolveStudyRange, studyTextEdit, studyTextRevision } from "@/lib/study/text-edits";
 import { cardEvidenceLimit, type StudyDraftPassage, type StudyPassage, type StudyTutorSources } from "@/lib/study/passages";
 import { locateCitedChunk } from "@/lib/study/locators";
 import { vocabularyOrigin } from "@/lib/study/vocabulary";
@@ -33,9 +32,10 @@ import { sectionOf } from "@/lib/notes/syntax";
 import type {
   StudyFollowUp,
   StudyBook,
-  StudyBookTextWrite,
   StudyBookWrite,
   StudyOrigin,
+  StudyOcrPage,
+  StudyOcrWrite,
   StudyThread,
   StudyThreadChange,
   StudyRecordOf,
@@ -1048,38 +1048,14 @@ export class StudyTextConflict extends Error {
   }
 }
 
-export async function saveStudyOcrText({ bookId, section, fileId, previousText, text, languages }: {
-  bookId: string;
-  section: number;
-  fileId: string;
-  previousText: string;
-  text: string;
-  languages: string[];
-}) {
-  const backend = store();
-  const book = await backend.getStudy(bookId);
-  if (book?.kind !== "book" || book.format !== "pdf" || book.fileId !== fileId ||
-    book.sections[section]?.text !== previousText) throw new StudyTextConflict();
-  const body = normaliseText(text);
-  const codes = ocrLanguages.parse([...new Set(languages)]);
-  if (!body || body.length > maxOcrText ||
-    book.sections.reduce((size, entry) => size + entry.text.length, body.length - previousText.length) > 2_000_000)
-    throw new Error("This page needs readable text within the document size limit.");
-  const source = await backend.getSource(book.sourceId);
-  const write: StudyBookTextWrite = {
-    id: book.id,
-    sourceId: book.sourceId,
-    revision: studyTextRevision(book),
-    previousText,
-    text: body,
-    edit: studyTextEdit(section, previousText, body),
-    ocr: { fileId, languages: codes },
-    updatedAt: Date.now(),
-  };
-  const next = revisedStudyBook(book, write);
-  const indexed = source && next ? withPdfOcr(source, next, write) : undefined;
-  if (!indexed || !(await backend.replaceStudyText(write, indexed.text,
-    body === previousText ? [] : chunksForSource(indexed)))) throw new StudyTextConflict();
+export async function saveStudyOcrPages(write: Omit<StudyOcrWrite, "updatedAt">) {
+  const saved = await store().saveStudyOcrPages({ ...write, updatedAt: Date.now() });
+  if (saved === "conflict") throw new StudyTextConflict();
+  if (saved === "limit") throw new Error("The reviewed text exceeds the page or document size limit.");
+}
+
+export function saveStudyOcrText({ bookId, fileId, ...page }: Pick<StudyOcrWrite, "bookId" | "fileId"> & StudyOcrPage) {
+  return saveStudyOcrPages({ bookId, fileId, pages: [page] });
 }
 
 export async function saveStudyText(

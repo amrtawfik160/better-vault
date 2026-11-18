@@ -19,6 +19,7 @@ import {
   saveStudyWord,
   saveStudyReadingPlace,
   saveStudyOcrText,
+  saveStudyOcrPages,
   saveStudyText,
   startSourceTutor,
   startBookTutor,
@@ -299,6 +300,30 @@ describe.each(backends)("%s store", (name, create) => {
       if (saved?.kind !== "book") throw new Error("The book was not restored");
       expect(resolveStudyRange(saved, 0, { offset: 0, length: first.length, revision: 1 }))
         .toEqual({ offset: updated.indexOf(first), length: first.length });
+    });
+
+    it("publishes reviewed scan pages together and keeps the source unchanged after a conflict", async () => {
+      const book = await addStudyBook({ title: "Scan packet", format: "pdf", bytes: Uint8Array.of(37, 80, 68, 70),
+        mime: "application/pdf", sections: [{ title: "Page 1", text: "" }, { title: "Page 2", text: "Native text." }, { title: "Page 3", text: "" }] });
+      if (!book.fileId) throw new Error("The original PDF was not saved");
+      const write = { bookId: book.id, fileId: book.fileId, pages: [
+        { section: 2, previousText: "", text: "Third page reviewed.", languages: ["eng"] },
+        { section: 0, previousText: "", text: "First page reviewed.", languages: ["eng"] },
+      ] };
+      await expect(saveStudyOcrPages({ ...write, pages: [...write.pages,
+        { section: 1, previousText: "Native text.", text: "Should never replace native text.", languages: ["eng"] }] }))
+        .rejects.toBeInstanceOf(StudyTextConflict);
+      expect(await store().getStudy(book.id)).toEqual(book);
+      expect((await getChunks([book.sourceId])).map(({ text }) => text)).toEqual(["Page 2\n\nNative text."]);
+      await saveStudyOcrPages(write);
+      expect(await store().getStudy(book.id)).toMatchObject({ sections: [
+        { text: "First page reviewed.", ocrLanguages: ["eng"] },
+        { text: "Native text." },
+        { text: "Third page reviewed.", ocrLanguages: ["eng"] },
+      ] });
+      expect((await getChunks([book.sourceId])).map(({ text }) => text))
+        .toEqual(["Page 2\n\nNative text.", "First page reviewed.", "Third page reviewed."]);
+      expect(await store().getSource(book.sourceId)).toMatchObject({ studyRevision: 2 });
     });
   });
 

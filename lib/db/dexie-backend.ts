@@ -3,7 +3,8 @@ import { canWriteStudyDocumentDraft, studyDocumentDraftId } from "@/lib/study/do
 import { DEFAULT_VAULT } from "@/lib/study/vault";
 import { patchedStudyReviewItem } from "@/lib/study/recall";
 import { patchedStudyThread } from "@/lib/study/reports";
-import { patchedStudyBook, renamedStudyBook, revisedStudyBook, withPdfOcr } from "@/lib/study/text-edits";
+import { patchedStudyBook, renamedStudyBook, revisedStudyBook } from "@/lib/study/text-edits";
+import { prepareStudyOcrWrite } from "@/lib/study/ocr-write";
 import { detachedVocabularyCard, vocabularyCardId, vocabularyChanges } from "@/lib/study/vocabulary";
 import { updatedStudioPractice } from "@/studio/shared/practice";
 import type { Backend } from "./backend";
@@ -367,12 +368,9 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
         const book = revisedStudyBook(await db.study.get(write.id), write);
         const source = await db.sources.get(write.sourceId);
         if (!book || !source || source.notebookId !== book.notebookId || !(await db.notebooks.get(book.notebookId))) return false;
-        const recognized = write.ocr ? withPdfOcr(source, book, write) : undefined;
-        if (write.ocr && recognized?.text !== sourceText) return false;
         await db.study.put(book);
-        if (recognized) await db.sources.put(recognized);
         if (write.text !== write.previousText) {
-          if (!recognized) await db.sources.put({
+          await db.sources.put({
             ...source,
             text: sourceText,
             charCount: sourceText.length,
@@ -383,6 +381,21 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
         }
         await db.notebooks.update(book.notebookId, { updatedAt: book.updatedAt });
         return true;
+      }),
+    saveStudyOcrPages: (write) =>
+      db.transaction("rw", [db.study, db.sources, db.chunks, db.notebooks], async () => {
+        const book = await db.study.get(write.bookId);
+        if (book?.kind !== "book" || !(await db.notebooks.get(book.notebookId))) return "conflict";
+        const prepared = prepareStudyOcrWrite(book, await db.sources.get(book.sourceId), write);
+        if (prepared.kind !== "ready") return prepared.kind;
+        await db.study.put(prepared.book);
+        await db.sources.put(prepared.source);
+        if (prepared.chunks) {
+          await db.chunks.where("sourceId").equals(book.sourceId).delete();
+          await db.chunks.bulkPut(prepared.chunks);
+        }
+        await db.notebooks.update(book.notebookId, { updatedAt: prepared.book.updatedAt });
+        return "saved";
       }),
     deleteStudy: (id) =>
       db.transaction("rw", db.study, async () => {

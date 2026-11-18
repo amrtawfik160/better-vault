@@ -1,7 +1,4 @@
 import { diffChars } from "diff";
-import type { Source } from "@/lib/db/types";
-import { sourceTextParts } from "@/lib/db/source-text";
-import { normaliseText } from "@/lib/grounding/chunk";
 import type {
   StudyBook,
   StudyBookTextWrite,
@@ -179,38 +176,15 @@ export function revisedStudyBook(
     book.sourceId !== write.sourceId ||
     studyTextRevision(book) !== write.revision ||
     previous.text !== write.previousText ||
-    previous.markdown !== write.previousMarkdown ||
-    (write.ocr && (book.format !== "pdf" || book.fileId !== write.ocr.fileId ||
-      (previous.text.trim() && !previous.ocrLanguages)))
+    previous.markdown !== write.previousMarkdown
   )
     return;
   return {
     ...book,
     sections: book.sections.map((section, index) =>
-      index === write.edit.section ? {
-        ...section, text: write.text, markdown: write.markdown,
-        ...(write.ocr && { ocrLanguages: write.ocr.languages }),
-      } : section,
+      index === write.edit.section ? { ...section, text: write.text, markdown: write.markdown } : section,
     ),
     textEdits: write.text === write.previousText ? book.textEdits : [...(book.textEdits ?? []), write.edit],
     updatedAt: Math.max(book.updatedAt, write.updatedAt),
-  };
-}
-
-export function withPdfOcr(source: Source, book: StudyBook, write: StudyBookTextWrite) {
-  const { ocr } = write;
-  if (!ocr || source.originalFileId !== ocr.fileId || (source.studyRevision ?? 0) !== write.revision) return;
-  const baseLength = source.pdfOcr?.baseLength ?? source.text.length;
-  const pages = { ...source.pdfOcr?.pages, [write.edit.section]: { text: write.text, languages: ocr.languages } };
-  const pdfOcr = { baseLength, pages, edits: book.textEdits ?? [] };
-  // Append recognized pages so existing notebook text and image offsets stay in place.
-  const text = normaliseText(sourceTextParts({ ...source, pdfOcr }).join("\n\n"));
-  return {
-    ...source,
-    text,
-    charCount: text.length,
-    studyRevision: studyTextRevision(book),
-    selected: source.selected || !source.text.trim(),
-    pdfOcr,
   };
 }

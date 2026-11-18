@@ -1,8 +1,8 @@
 import { generateId } from "ai";
-import { chunkText, normaliseText } from "@/lib/grounding/chunk";
+import { normaliseText } from "@/lib/grounding/chunk";
 import { saveBlob } from "./blobs";
 import { useStoreQuery } from "./live";
-import { sourceHasText, sourceTextParts } from "./source-text";
+import { chunksForSource, sourceHasText } from "./source-text";
 import { store } from "./store";
 import type { Chunk, Source, SourceImage, SourceKind, StoredBlob } from "./types";
 
@@ -51,18 +51,7 @@ export async function addSource(input: NewSource): Promise<Source> {
   return source;
 }
 
-export function chunksForSource(
-  source: Pick<Source, "id" | "notebookId" | "text" | "studyRevision" | "pdfOcr">,
-): Chunk[] {
-  const prefix = source.studyRevision ? `${source.id}:${source.studyRevision}` : source.id;
-  return sourceTextParts(source).flatMap((part) => chunkText(part)).map((piece, index) => ({
-    id: `${prefix}:${index}`,
-    notebookId: source.notebookId,
-    sourceId: source.id,
-    index,
-    text: piece,
-  }));
-}
+export { chunksForSource } from "./source-text";
 
 export interface NewSourceImage {
   mime: string;
