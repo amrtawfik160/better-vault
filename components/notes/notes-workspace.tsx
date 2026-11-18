@@ -15,7 +15,6 @@ import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { Icon } from "@/components/icon";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { renderedSelection } from "@/components/study/study-rendered-text";
 import { openCommandPalette } from "@/lib/command";
 import { createNote, renameNote, saveNoteBody } from "@/lib/db/notes";
 import type { Note, NoteLink } from "@/lib/db/types";
@@ -27,8 +26,8 @@ import { useCurrentVault, vaultOf } from "@/lib/db/vaults";
 import { formatRelativeTime } from "@/lib/format";
 import type { GraphNode } from "@/lib/notes/graph";
 import { resolveLink } from "@/lib/notes/resolve";
-import { noteCaptureLimit, noteEditorText, readNoteMatch } from "@/lib/notes/search-match";
-import { extractHeadings, readFrontmatter, sameName } from "@/lib/notes/syntax";
+import { noteEditorText, readNoteMatch } from "@/lib/notes/search-match";
+import { extractHeadings, sameName } from "@/lib/notes/syntax";
 import { routes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import type { CompletionWorld } from "./editor/completion";
@@ -37,6 +36,7 @@ import { GraphView } from "./graph-view";
 import { NoteDetails } from "./note-details";
 import { NoteList } from "./note-list";
 import { NoteReader } from "./note-reader";
+import { readNoteSelection } from "./note-reading-selection";
 import { NoteStudyCards } from "./note-study-cards";
 import { NoteSwitcher } from "./note-switcher";
 import { ShortcutsDialog, keyLabel } from "./shortcuts-dialog";
@@ -136,22 +136,7 @@ export default function NotesWorkspace() {
     if (draft) return draft;
     const body = noteEditorText(note.body);
     const root = readingBody.current;
-    const selected = window.getSelection();
-    if (!root || !selected?.rangeCount || !root.contains(selected.getRangeAt(0).commonAncestorContainer))
-      return { body };
-    const text = selected.toString().trim().slice(0, noteCaptureLimit);
-    if (!text) return { body };
-    const { content, length } = readFrontmatter(body);
-    const range = renderedSelection(root, content);
-    return {
-      body,
-      selection: {
-        text,
-        match: range?.text && range.text.length <= noteCaptureLimit
-          ? { offset: length + range.offset, quote: range.text }
-          : undefined,
-      },
-    };
+    return { body, selection: root ? readNoteSelection(root, body) : undefined };
   }
 
   useEffect(() => write(TABS_KEY, tabs), [tabs]);

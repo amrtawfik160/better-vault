@@ -41,11 +41,7 @@ export function canonicalRenderedRange(
   limit: number,
 ) {
   const projections = Array.from(root.querySelectorAll(projectedSelector));
-  const selection = range.cloneRange();
-  const firstProjection = projectionAt(selection.startContainer);
-  const lastProjection = projectionAt(selection.endContainer);
-  if (firstProjection) selection.setStartBefore(firstProjection);
-  if (lastProjection) selection.setEndAfter(lastProjection);
+  const selection = expandedSelection(range);
   const quote = compact(projectedText(selection, projections).trim().slice(0, limit));
   if (!quote) return;
   const prefix = range.cloneRange();
@@ -67,6 +63,19 @@ export function canonicalRenderedRange(
     if (end < canonical.length && !/\s/u.test(canonical[end])) count++;
   }
   return { offset, text: canonical.slice(offset, end + 1) };
+}
+
+function expandedSelection(range: Range) {
+  const selection = range.cloneRange();
+  const firstProjection = projectionAt(selection.startContainer);
+  const lastProjection = projectionAt(selection.endContainer);
+  if (firstProjection) selection.setStartBefore(firstProjection);
+  if (lastProjection) selection.setEndAfter(lastProjection);
+  return selection;
+}
+
+export function renderedStudySelectionText(root: HTMLElement, range: Range) {
+  return projectedText(expandedSelection(range), Array.from(root.querySelectorAll(projectedSelector)));
 }
 
 type RenderedPiece = { node: Text; offset: number } | { node: Element };

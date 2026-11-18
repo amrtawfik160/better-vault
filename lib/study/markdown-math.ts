@@ -19,7 +19,7 @@ export function restoreStudyCurrency(tree: Parent, source: string) {
     if (node.type === "inlineMath" && start !== undefined && end !== undefined) {
       const original = source.slice(start, end);
       if (/^\$\d[^$]*\$$/.test(original) && /\d/.test(source[end] ?? "")) {
-        const literal: Text = { type: "text", value: original };
+        const literal: Text = { type: "text", value: original, position: node.position };
         tree.children[index] = literal;
       }
     } else if (hasChildren(node)) restoreStudyCurrency(node, source);
@@ -53,6 +53,7 @@ export function wrapStudyFormulas(
           type: "element",
           tagName: block ? "div" : "span",
           properties: { [studyFormulaAttribute]: project(source.slice(start, end)) },
+          position: node.position,
           children: [node],
         };
       } else wrap(node);
