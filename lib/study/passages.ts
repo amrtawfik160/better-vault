@@ -1,4 +1,4 @@
-import type { Note, Source } from "@/lib/db/types";
+import type { Chunk, Note, Source } from "@/lib/db/types";
 import { selectPassages } from "@/lib/grounding/passages";
 import { extractHeadings, sameName } from "@/lib/notes/syntax";
 import type { StudyBook, StudyOrigin, StudyThread } from "./records";
@@ -14,6 +14,9 @@ export type StudyTutorSources = {
   book?: StudyBook;
   books?: readonly StudyBook[];
   notes?: readonly Pick<Note, "id" | "title" | "body">[];
+  notebookSources?: readonly (Pick<Source, "id" | "title" | "notebookId"> & {
+    chunks: readonly Pick<Chunk, "id" | "text">[];
+  })[];
 };
 
 type SourcePassage = StudyPassage & { sourceId: string };
@@ -63,6 +66,12 @@ function rankedPassages(passages: SourcePassage[], query: string, coverSources =
   const chunks = passages.flatMap((passage, index) => {
     const { sourceId, title } = passage;
     if (!sources.has(sourceId)) sources.set(sourceId, { id: sourceId, title, kind: "text" });
+    if (passage.origin.kind === "source") {
+      const id = `${index}:0`;
+      const { origin, text } = passage;
+      ranges.set(id, { origin, title, text });
+      return [{ id, sourceId, title, text }];
+    }
     const chunks: { id: string; sourceId: string; text: string; title: string }[] = [];
     for (let start = 0; start < passage.text.length;) {
       const limit = Math.min(start + size, passage.text.length);
@@ -138,7 +147,7 @@ function bookPassages(book: StudyBook): SourcePassage[] {
 
 export function passagesFor(
   thread: StudyThread,
-  { book, books = [], notes = [] }: StudyTutorSources,
+  { book, books = [], notes = [], notebookSources = [] }: StudyTutorSources,
   input: string,
 ): StudyPassage[] {
   if (thread.scope === "notes" || thread.scope === "materials") {
@@ -146,7 +155,22 @@ export function passagesFor(
     const passages = notes.filter(({ id }) => originNotes.has(id)).flatMap(notePassages);
     if (thread.scope === "materials") {
       const originBooks = new Set(thread.bookIds);
-      passages.push(...books.filter(({ id }) => originBooks.has(id)).flatMap(bookPassages));
+      const chosenBooks = books.filter(({ id }) => originBooks.has(id));
+      passages.push(...chosenBooks.flatMap(bookPassages));
+      const bookSources = new Set(chosenBooks.map(({ sourceId }) => sourceId));
+      const chosenSources = new Set(thread.sourceIds);
+      for (const { id, notebookId, title, chunks } of notebookSources) {
+        if (!chosenSources.has(id) || bookSources.has(id)) continue;
+        for (const chunk of chunks) {
+          if (!chunk.text.trim()) continue;
+          passages.push({
+            sourceId: `source:${id}`,
+            origin: { kind: "source", sourceId: id, notebookId, chunkId: chunk.id },
+            title,
+            text: chunk.text,
+          });
+        }
+      }
     }
     return rankedPassages(passages, studyQuery(input, thread.messages), true);
   }

@@ -19,6 +19,7 @@ export function studyVaultIndex({
   const notebookVaults = new Map(
     notebooks.map((notebook) => [notebook.id, notebook.vaultId ?? defaultVaultId]),
   );
+  const notebookOwner = (id: string) => liveVault(notebookVaults.get(id));
   const noteVaults = new Map(
     notes.map((note) => [
       note.id,
@@ -50,11 +51,12 @@ export function studyVaultIndex({
         case "note":
           return liveVault(noteVaults.get(origin.noteId));
         case "studio":
-          return liveVault(notebookVaults.get(origin.notebookId));
+        case "source":
+          return notebookOwner(origin.notebookId);
       }
     };
     const vault =
-      liveVault(row.notebookId ? notebookVaults.get(row.notebookId) : undefined) ??
+      (row.notebookId ? notebookOwner(row.notebookId) : undefined) ??
       ("bookId" in row ? inherited(row.bookId) : undefined) ??
       fromOrigin() ??
       (row.kind === "session" ? inherited(row.itemId) : undefined) ??
@@ -66,6 +68,7 @@ export function studyVaultIndex({
 
   return {
     owner: (row: StudyRecord) => owner(row) ?? defaultVaultId,
+    notebookOwner,
     noteOwner: (id: string) => liveVault(noteVaults.get(id)) ?? defaultVaultId,
     linkedVault: (params: URLSearchParams) => {
       for (const key of ["book", "thread", "card", "highlight", "word"] as const) {
@@ -74,8 +77,8 @@ export function studyVaultIndex({
         if (row?.kind === key) return owner(row) ?? defaultVaultId;
       }
       const notebook = params.get("notebook");
-      const notebookOwner = notebook ? liveVault(notebookVaults.get(notebook)) : undefined;
-      if (notebookOwner) return notebookOwner;
+      const ownerOfNotebook = notebook ? notebookOwner(notebook) : undefined;
+      if (ownerOfNotebook) return ownerOfNotebook;
       const output = params.get("output");
       if (output) {
         const card = rows.find(

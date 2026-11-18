@@ -5,33 +5,49 @@ import { Button } from "@/components/panelui/button";
 import { Dialog } from "@/components/panelui/dialog";
 import { Input } from "@/components/panelui/input";
 
-export type TutorMaterialSelection = { bookIds: string[]; noteIds: string[] };
-type Material = { id: string; title: string };
+const groups = [
+  ["bookIds", "study.materials.documents"],
+  ["sourceIds", "study.materials.sources"],
+  ["noteIds", "study.materials.notes"],
+] as const;
+type Group = (typeof groups)[number][0];
+export type TutorMaterial = { id: string; title: string; detail?: string };
+export type TutorMaterialOptions = Record<Group, readonly TutorMaterial[]>;
+export type TutorMaterialSelection = Record<Group, string[]>;
+export const emptyTutorSelection: TutorMaterialSelection = { bookIds: [], sourceIds: [], noteIds: [] };
+
 type Props = {
-  books: Material[];
-  notes: Material[];
+  options: TutorMaterialOptions;
   selection: TutorMaterialSelection;
   disabled?: boolean;
   onApply: (selection: TutorMaterialSelection) => void | Promise<void>;
 };
 
 export function availableTutorSelection(
-  books: Material[],
-  notes: Material[],
+  options: TutorMaterialOptions,
   selection: TutorMaterialSelection,
 ) {
+  const available = (key: Group) => {
+    const saved = new Set(selection[key]);
+    return options[key].filter(({ id }) => saved.has(id)).map(({ id }) => id);
+  };
   return {
-    bookIds: books.filter(({ id }) => selection.bookIds.includes(id)).map(({ id }) => id),
-    noteIds: notes.filter(({ id }) => selection.noteIds.includes(id)).map(({ id }) => id),
+    bookIds: available("bookIds"),
+    sourceIds: available("sourceIds"),
+    noteIds: available("noteIds"),
   };
 }
 
-export function TutorMaterialPicker({ books, notes, selection, disabled, onApply }: Props) {
+export function tutorSelectionCount(selection: TutorMaterialSelection) {
+  return groups.reduce((count, [key]) => count + selection[key].length, 0);
+}
+
+export function TutorMaterialPicker({ options, selection, disabled, onApply }: Props) {
   const { t } = useTranslation("home");
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
-  const current = availableTutorSelection(books, notes, selection);
-  const count = current.bookIds.length + current.noteIds.length;
+  const current = availableTutorSelection(options, selection);
+  const count = tutorSelectionCount(current);
 
   return (
     <Dialog
@@ -47,15 +63,14 @@ export function TutorMaterialPicker({ books, notes, selection, disabled, onApply
       </Dialog.Trigger>
       {open ? (
         <MaterialDialog
-          books={books}
-          notes={notes}
+          options={options}
           initial={current}
-          missing={selection.bookIds.length + selection.noteIds.length - count}
+          missing={tutorSelectionCount(selection) - count}
           saving={saving}
           save={async (draft) => {
             setSaving(true);
             try {
-              await onApply(availableTutorSelection(books, notes, draft));
+              await onApply(availableTutorSelection(options, draft));
               setOpen(false);
             } catch (error) {
               toast.error(error instanceof Error ? error.message : String(error));
@@ -70,15 +85,13 @@ export function TutorMaterialPicker({ books, notes, selection, disabled, onApply
 }
 
 function MaterialDialog({
-  books,
-  notes,
+  options,
   initial,
   missing,
   saving,
   save,
 }: {
-  books: Material[];
-  notes: Material[];
+  options: TutorMaterialOptions;
   initial: TutorMaterialSelection;
   missing: number;
   saving: boolean;
@@ -89,15 +102,20 @@ function MaterialDialog({
   const [query, setQuery] = useState("");
   const [draft, setDraft] = useState(initial);
   const search = query.trim().toLowerCase();
-  const matchingBooks = books.filter(({ title }) => title.toLowerCase().includes(search));
-  const matchingNotes = notes.filter(({ title }) => title.toLowerCase().includes(search));
+  const matches = groups.map(([key, label]) => ({
+    key,
+    label,
+    items: options[key].filter(({ title, detail }) =>
+      `${title} ${detail ?? ""}`.toLowerCase().includes(search),
+    ),
+  }));
 
-  function choices(items: Material[], list: keyof TutorMaterialSelection, label: string) {
+  function choices(items: readonly TutorMaterial[], list: Group, label: string) {
     if (!items.length) return null;
     return (
-      <fieldset className="mt-4 space-y-0.5">
+      <fieldset key={list} className="mt-4 space-y-0.5">
         <legend className="mb-1 text-sm font-medium text-muted-foreground">{label}</legend>
-        {items.map(({ id, title }) => (
+        {items.map(({ id, title, detail }) => (
           <label
             key={id}
             className="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-2 text-sm hover:bg-accent"
@@ -119,6 +137,11 @@ function MaterialDialog({
             />
             <span dir="auto" className="min-w-0 wrap-break-word">
               {title}
+              {detail ? (
+                <span dir="auto" className="block text-xs text-muted-foreground">
+                  {detail}
+                </span>
+              ) : null}
             </span>
           </label>
         ))}
@@ -145,9 +168,8 @@ function MaterialDialog({
             {t("study.materials.unavailable", { count: missing })}
           </p>
         ) : null}
-        {choices(matchingBooks, "bookIds", t("study.materials.documents"))}
-        {choices(matchingNotes, "noteIds", t("study.materials.notes"))}
-        {!matchingBooks.length && !matchingNotes.length ? (
+        {matches.map(({ key, label, items }) => choices(items, key, t(label)))}
+        {matches.every(({ items }) => !items.length) ? (
           <p className="mt-3 text-sm text-muted-foreground">
             {t(search ? "study.materials.noMatches" : "study.materials.empty")}
           </p>
@@ -158,7 +180,7 @@ function MaterialDialog({
           {common("actions.cancel")}
         </Dialog.Close>
         <Button type="button" disabled={saving} onClick={() => void save(draft)}>
-          {t("study.materials.apply", { count: draft.bookIds.length + draft.noteIds.length })}
+          {t("study.materials.apply", { count: tutorSelectionCount(draft) })}
         </Button>
       </Dialog.Footer>
     </Dialog.Content>

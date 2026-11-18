@@ -24,7 +24,7 @@ import { createNote } from "./notes";
 import type { Note, Source, StudioOutput } from "./types";
 import { useStoreQuery } from "./live";
 import { createNotebook, deleteNotebook, renameNotebook } from "./notebooks";
-import { addSource, chunksForSource, renameSource } from "./sources";
+import { addSource, chunksForSource, getChunks, renameSource } from "./sources";
 import { store } from "./store";
 import { currentVaultId, DEFAULT_VAULT, listVaults, vaultOf } from "./vaults";
 import { getSettings } from "./settings";
@@ -60,9 +60,11 @@ export async function readStudyTutorSources(
   const noteIds = new Set(
     thread.scope === "materials" || thread.scope === "notes" ? thread.noteIds : [],
   );
-  const [records, savedNotes, notebooks, vaults] = await Promise.all([
+  const sourceIds = thread.scope === "materials" ? [...new Set(thread.sourceIds)] : [];
+  const [records, savedNotes, savedSources, notebooks, vaults] = await Promise.all([
     Promise.all([...bookIds].map((id) => backend.getStudy(id))),
     Promise.all([...noteIds].map((id) => backend.getNote(id))),
+    sourceIds.length ? backend.getSources(sourceIds) : [],
     backend.listNotebooks(),
     listVaults(),
   ]);
@@ -77,10 +79,28 @@ export async function readStudyTutorSources(
   });
   if (scope.owner(thread) !== vaultId) return {};
   const visible = books.filter((book) => scope.owner(book) === vaultId);
+  const notebookSources = savedSources.filter(
+    ({ notebookId }) => scope.notebookOwner(notebookId) === vaultId,
+  );
+  const sourceChunks = notebookSources.length
+    ? await getChunks(notebookSources.map(({ id }) => id))
+    : [];
+  const chunksBySource = new Map<string, typeof sourceChunks>();
+  for (const chunk of sourceChunks) {
+    const chunks = chunksBySource.get(chunk.sourceId);
+    if (chunks) chunks.push(chunk);
+    else chunksBySource.set(chunk.sourceId, [chunk]);
+  }
   return {
     book: visible.find(({ id }) => id === thread.bookId),
     books: visible,
     notes: notes.filter(({ id }) => scope.noteOwner(id) === vaultId),
+    notebookSources: notebookSources.map(({ id, notebookId, title }) => ({
+      id,
+      notebookId,
+      title,
+      chunks: chunksBySource.get(id) ?? [],
+    })),
   };
 }
 
@@ -294,6 +314,33 @@ export async function startNoteTutor(note: Pick<Note, "id" | "vaultId" | "notebo
     notebookId: note.notebookId ?? undefined,
     noteIds: [note.id],
     vaultId: note.vaultId,
+    ...(await studyConversationDefaults("book")),
+    messages: [],
+    updatedAt: Date.now(),
+  };
+  await putStudyRecords(thread);
+  return thread;
+}
+
+export async function startSourceTutor(sourceId: string) {
+  const backend = store();
+  const source = await backend.getSource(sourceId);
+  const notebook = source && (await backend.getNotebook(source.notebookId));
+  if (!source || !notebook) throw new Error("This source was removed.");
+  const book = (await backend.listStudy()).find(
+    (row) =>
+      row.kind === "book" &&
+      row.sourceId === source.id &&
+      row.sections.some(({ text }) => text.trim()),
+  );
+  const thread: StudyThread = {
+    id: studyId(),
+    kind: "thread",
+    title: source.title,
+    goal: "book",
+    scope: "materials",
+    vaultId: vaultOf(notebook),
+    ...(book ? { bookIds: [book.id] } : { sourceIds: [source.id] }),
     ...(await studyConversationDefaults("book")),
     messages: [],
     updatedAt: Date.now(),

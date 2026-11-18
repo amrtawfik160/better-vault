@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/panelui/button";
-import { studyBookForSource } from "@/lib/db/study";
+import { startSourceTutor, studyBookForSource } from "@/lib/db/study";
 import { originHref } from "@/lib/study/links";
 import { findStudyExcerpt, locateCitedChunk } from "@/lib/study/locators";
 import { studyTextRevision } from "@/lib/study/text-edits";
@@ -69,40 +69,56 @@ function ReaderBody({ sourceId, passage, snippet }: NonNullable<SourceReaderProp
   if (!source) return <Sheet.Header title={t("unavailable")} />;
   const words = countWords(source.text);
 
+  async function openStudy(destination: () => Promise<string>) {
+    setOpening(true);
+    try {
+      navigate(await destination(), { state: returnState });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+      setOpening(false);
+    }
+  }
+
   return (
     <>
       <Sheet.Header
         title={source.title}
         description={`${t(`kinds.${source.kind}`)} · ${t("words", { count: words, formattedCount: words.toLocaleString(i18n.language) })}`}
       >
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-fit"
-          disabled={opening}
-          onClick={() => {
-            setOpening(true);
-            void studyBookForSource(source.id)
-              .then((book) => {
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={opening}
+            onClick={() =>
+              void openStudy(async () => {
+                const book = await studyBookForSource(source.id);
                 const text = excerpt || cited?.text;
                 const anchor = text ? findStudyExcerpt(book.sections, text) : undefined;
-                navigate(
-                  originHref({
-                    kind: "book",
-                    bookId: book.id,
-                    ...(anchor ? { ...anchor, revision: studyTextRevision(book) } : {}),
-                  }),
-                  { state: returnState },
-                );
+                return originHref({
+                  kind: "book",
+                  bookId: book.id,
+                  ...(anchor ? { ...anchor, revision: studyTextRevision(book) } : {}),
+                });
               })
-              .catch((error: Error) => {
-                toast.error(error.message);
-                setOpening(false);
-              });
-          }}
-        >
-          {t("openStudy")}
-        </Button>
+            }
+          >
+            {t("openStudy")}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={opening}
+            onClick={() =>
+              void openStudy(async () => {
+                const thread = await startSourceTutor(source.id);
+                return originHref({ kind: "tutor", threadId: thread.id });
+              })
+            }
+          >
+            {t("askTutor")}
+          </Button>
+        </div>
         {source.url ? (
           <a
             href={source.url}

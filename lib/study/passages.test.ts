@@ -172,6 +172,49 @@ describe("Tutor grounding", () => {
       { kind: "note", noteId: "n" },
     ]);
   });
+
+  it("cites an original notebook chunk and deduplicates material already selected in Study", () => {
+    const material = {
+      ...thread,
+      scope: "materials",
+      bookIds: [book.id],
+      sourceIds: ["method", book.sourceId],
+    } satisfies StudyThread;
+    const passages = passagesFor(
+      material,
+      {
+        books: [book],
+        notebookSources: [
+          {
+            id: "method",
+            notebookId: "research",
+            title: "Method",
+            chunks: [{ id: "method:17", text: "Vary the input to measure the frequency response." }],
+          },
+          {
+            id: book.sourceId,
+            notebookId: book.notebookId,
+            title: book.title,
+            chunks: [{ id: "duplicate:0", text: "ALREADY IN STUDY" }],
+          },
+          {
+            id: "unselected",
+            notebookId: "research",
+            title: "Other method",
+            chunks: [{ id: "unselected:0", text: "NOT SELECTED" }],
+          },
+        ],
+      },
+      "Compare Nyquist and the frequency response measurement",
+    );
+    const citation = passages.find(({ title }) => title === "Method");
+    expect(citation?.text).toBe("Vary the input to measure the frequency response.");
+    const url = citation && new URL(originHref(citation.origin), "https://deeple.test");
+    expect(url?.pathname).toBe("/notebook/research");
+    expect(url?.searchParams.get("source")).toBe("method");
+    expect(url?.searchParams.get("passage")).toBe("method:17");
+    expect(passages.some(({ text }) => /ALREADY IN STUDY|NOT SELECTED/.test(text))).toBe(false);
+  });
 });
 
 describe("notebook citation handoff", () => {

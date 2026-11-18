@@ -10,6 +10,7 @@ import {
   rateStudyItem,
   readStudyTutorSources,
   saveStudyText,
+  startSourceTutor,
   StudyTextConflict,
   updateStudyBook,
   updateStudyReport,
@@ -757,6 +758,19 @@ describe.each(backends)("%s store", (name, create) => {
         vaultId: other,
         body: "Private note text",
       });
+      const sourceNotebook = await createNotebook("Research notebook", { vaultId: work });
+      const source = await addSource({
+        notebookId: sourceNotebook,
+        title: "Working paper",
+        kind: "text",
+        text: "Working paper passage",
+      });
+      const privateSource = await addSource({
+        notebookId: external.notebookId,
+        title: "Private working paper",
+        kind: "text",
+        text: "Private working paper passage",
+      });
       const thread = {
         id: "selected-materials",
         kind: "thread",
@@ -766,6 +780,7 @@ describe.each(backends)("%s store", (name, create) => {
         vaultId: work,
         bookIds: [first.id, second.id, external.id],
         noteIds: [note.id, privateNote.id],
+        sourceIds: [source.id, privateSource.id],
         messages: [],
         updatedAt: 0,
       } satisfies import("@/lib/study/records").StudyThread;
@@ -773,10 +788,30 @@ describe.each(backends)("%s store", (name, create) => {
       const sources = await readStudyTutorSources(thread, work);
       expect(sources.books?.map(({ id }) => id)).toEqual([first.id, second.id]);
       expect(sources.notes?.map(({ id }) => id)).toEqual([note.id]);
+      expect(sources.notebookSources).toMatchObject([
+        { id: source.id, chunks: [{ id: `${source.id}:0`, text: source.text }] },
+      ]);
       await updateNotebook(second.notebookId, { vaultId: other });
+      await updateNotebook(sourceNotebook, { vaultId: other });
       const moved = await readStudyTutorSources(thread, work);
       expect(moved.books?.map(({ id }) => id)).toEqual([first.id]);
+      expect(moved.notebookSources).toEqual([]);
       expect(await readStudyTutorSources(thread, other)).toEqual({});
+
+      const directThread = await startSourceTutor(source.id);
+      expect(directThread).toMatchObject({
+        scope: "materials",
+        vaultId: other,
+        sourceIds: [source.id],
+      });
+      expect(await store().listStudy()).not.toContainEqual(
+        expect.objectContaining({ kind: "book", sourceId: source.id }),
+      );
+      const reader = await studyBookForSource(source.id);
+      expect(await startSourceTutor(source.id)).toMatchObject({ bookIds: [reader.id] });
+      expect((await readStudyTutorSources(directThread, other)).notebookSources).toHaveLength(1);
+      await deleteSource(source.id);
+      expect((await readStudyTutorSources(directThread, other)).notebookSources).toEqual([]);
 
       const backup = JSON.parse(JSON.stringify(await exportBackup()));
       await deleteAllData();
@@ -785,6 +820,7 @@ describe.each(backends)("%s store", (name, create) => {
         scope: "materials",
         bookIds: thread.bookIds,
         noteIds: thread.noteIds,
+        sourceIds: thread.sourceIds,
       });
     });
 

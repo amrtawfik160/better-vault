@@ -200,7 +200,7 @@
       "context": "Context",
       "scope": "Selected material",
       "choose": "Choose study material",
-      "description": "Tutor searches the documents and notes you choose in this vault and cites the passages it uses.",
+      "description": "Tutor searches the material you choose in this vault and cites the passages it uses.",
       "selected_one": "{{count}} item selected",
       "selected_other": "{{count}} items selected",
       "threadTitle_one": "{{title}} and {{count}} more",
@@ -210,12 +210,13 @@
       "apply_zero": "Clear selection",
       "apply_one": "Use {{count}} item",
       "apply_other": "Use {{count}} items",
-      "search": "Find documents and notes",
+      "search": "Find study material",
       "documents": "Study documents",
+      "sources": "Notebook sources",
       "notes": "Notes",
-      "empty": "Add a study document or write a note in this vault first.",
+      "empty": "Add a document, notebook source, or note in this vault first.",
       "noMatches": "No titles match your search.",
-      "noReadableSelection": "Choose a document or note with readable text to continue."
+      "noReadableSelection": "Choose material with readable text to continue."
     },
     "reader": {
       "editConflict": "This document changed while you were editing it. Copy your draft, then reopen the editor to see the latest text.",

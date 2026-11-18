@@ -7,6 +7,10 @@ import { StudyOriginLink } from "./study-origin-link";
 import {
   TutorMaterialPicker,
   availableTutorSelection,
+  emptyTutorSelection,
+  tutorSelectionCount,
+  type TutorMaterial,
+  type TutorMaterialOptions,
   type TutorMaterialSelection,
 } from "./tutor-material-picker";
 import { StudyFlashcardDraftDialog, type FlashcardSource } from "./study-flashcard-generator";
@@ -82,16 +86,36 @@ type VoiceCapture = {
 
 type LiveVoice = ReturnType<typeof startStudyVoiceSession> & { abort: AbortController };
 
+function tutorMaterialOptions(
+  scope: StudyThread["scope"],
+  books: StudyBook[],
+  notes: Note[],
+  sources: TutorMaterial[],
+  selection: TutorMaterialSelection,
+): TutorMaterialOptions {
+  if (scope !== "materials") return { bookIds: [], sourceIds: [], noteIds: notes };
+  const bookSources = new Set(books.map(({ sourceId }) => sourceId));
+  const savedSources = new Set(selection.sourceIds);
+  const sourcesInUse = new Set(sources.filter(({ id }) => savedSources.has(id)).map(({ id }) => id));
+  return {
+    bookIds: books.filter(({ sourceId }) => !sourcesInUse.has(sourceId)),
+    sourceIds: sources.filter(({ id }) => !bookSources.has(id) || savedSources.has(id)),
+    noteIds: notes,
+  };
+}
+
 export function TutorIndex({
   threads,
   books,
   notes,
+  notebookSources,
   vaultId,
   open,
 }: {
   threads: StudyThread[];
   books: StudyBook[];
   notes: Note[];
+  notebookSources: TutorMaterial[];
   vaultId: string;
   open: (thread: StudyThread) => void;
 }) {
@@ -99,7 +123,7 @@ export function TutorIndex({
   const [goal, setGoal] = useState<StudyThread["goal"]>("book");
   const [scope, setScope] = useState<StudyThread["scope"]>("general");
   const [bookId, setBookId] = useState("");
-  const [selection, setSelection] = useState<TutorMaterialSelection>({ bookIds: [], noteIds: [] });
+  const [materialSelection, setSelection] = useState(emptyTutorSelection);
   const [query, setQuery] = useState("");
   const [deleting, setDeleting] = useState<StudyThread | null>(null);
   const savedSettings = useSettings();
@@ -109,12 +133,19 @@ export function TutorIndex({
     [books],
   );
   const readableNotes = useMemo(() => notes.filter(({ body }) => body.trim()), [notes]);
-  const selected = availableTutorSelection(
-    scope === "materials" ? readableBooks : [],
+  const selection =
+    scope === "materials"
+      ? materialSelection
+      : { ...emptyTutorSelection, noteIds: materialSelection.noteIds };
+  const materialOptions = tutorMaterialOptions(
+    scope,
+    readableBooks,
     readableNotes,
+    notebookSources,
     selection,
   );
-  const selectedCount = selected.bookIds.length + selected.noteIds.length;
+  const selected = availableTutorSelection(materialOptions, selection);
+  const selectedCount = tutorSelectionCount(selected);
   const ready = !curated || selectedCount > 0;
 
   return (
@@ -131,6 +162,7 @@ export function TutorIndex({
               : undefined;
           const materialTitle = curated
             ? (readableBooks.find(({ id }) => id === selected.bookIds[0])?.title ??
+              notebookSources.find(({ id }) => id === selected.sourceIds[0])?.title ??
               readableNotes.find(({ id }) => id === selected.noteIds[0])?.title)
             : undefined;
           const subject =
@@ -208,17 +240,12 @@ export function TutorIndex({
           ) : null}
           {curated ? (
             <TutorMaterialPicker
-              books={scope === "materials" ? readableBooks : []}
-              notes={readableNotes}
-              selection={{
-                bookIds: scope === "materials" ? selection.bookIds : [],
-                noteIds: selection.noteIds,
-              }}
+              options={materialOptions}
+              selection={selection}
               onApply={(change) =>
-                setSelection((current) => ({
-                  bookIds: scope === "materials" ? change.bookIds : current.bookIds,
-                  noteIds: change.noteIds,
-                }))
+                setSelection((current) =>
+                  scope === "materials" ? change : { ...current, noteIds: change.noteIds },
+                )
               }
             />
           ) : null}
@@ -323,6 +350,7 @@ export function StudyTutor({
   vaultId,
   vaultNotes,
   vaultBooks,
+  notebookSources,
   book,
   openReport,
   requestedReportId,
@@ -335,6 +363,7 @@ export function StudyTutor({
   vaultId: string;
   vaultNotes: Note[];
   vaultBooks: StudyBook[];
+  notebookSources: TutorMaterial[];
   book?: StudyBook;
   openReport?: boolean;
   requestedReportId?: string;
@@ -375,10 +404,18 @@ export function StudyTutor({
   const readableNotes = useMemo(() => vaultNotes.filter(({ body }) => body.trim()), [vaultNotes]);
   const selection = {
     bookIds: thread.scope === "materials" ? (thread.bookIds ?? []) : [],
+    sourceIds: thread.scope === "materials" ? (thread.sourceIds ?? []) : [],
     noteIds: thread.noteIds ?? [],
   };
-  const selected = availableTutorSelection(readableBooks, readableNotes, selection);
-  const contextReady = !curated || !!(selected.bookIds.length || selected.noteIds.length);
+  const materialOptions = tutorMaterialOptions(
+    thread.scope,
+    readableBooks,
+    readableNotes,
+    notebookSources,
+    selection,
+  );
+  const selected = availableTutorSelection(materialOptions, selection);
+  const contextReady = !curated || tutorSelectionCount(selected) > 0;
   const controller = useRef<AbortController | null>(null);
   const voice = useRef<VoiceCapture | null>(null);
   const live = useRef<LiveVoice | null>(null);
@@ -856,8 +893,7 @@ export function StudyTutor({
         {curated ? (
           <div className="flex basis-full flex-wrap items-center gap-2">
             <TutorMaterialPicker
-              books={readableBooks}
-              notes={readableNotes}
+              options={materialOptions}
               selection={selection}
               disabled={workPending}
               onApply={(next) =>

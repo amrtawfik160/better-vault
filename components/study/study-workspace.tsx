@@ -17,6 +17,7 @@ import { SettingsSheet } from "@/components/settings/settings-sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { startBookTutor, useStudyRecords } from "@/lib/db/study";
 import { useNotes } from "@/lib/db/notes";
+import { useSourceTitles } from "@/lib/db/sources";
 import { currentVaultId, DEFAULT_VAULT, setCurrentVault } from "@/lib/db/vaults";
 import type { Notebook, Vault } from "@/lib/db/types";
 import {
@@ -350,8 +351,9 @@ export default function StudyWorkspace({
   const [settings, setSettings] = useState(false);
   const saved = useStudyRecords();
   const notes = useNotes();
-  const ready = saved !== undefined && notes !== undefined;
   const tab: Tab = tabs.find((entry) => entry === params.get("tab")) ?? "today";
+  const ready = saved !== undefined && notes !== undefined;
+  const sourceTitles = useSourceTitles(tab === "tutor");
   const selection = tab === "review" ? reviewSelection(location.state) : undefined;
   const scope = useMemo(
     () =>
@@ -383,6 +385,10 @@ export default function StudyWorkspace({
   const threads = rows.filter((row) => row.kind === "thread");
   const words = rows.filter((row) => row.kind === "word");
   const vaultNotes = (notes ?? []).filter((note) => scope.noteOwner(note.id) === studyVaultId);
+  const notebookTitles = new Map(notebooks.map(({ id, title }) => [id, title]));
+  const notebookSources = (sourceTitles ?? [])
+    .filter(({ notebookId }) => scope.notebookOwner(notebookId) === studyVaultId)
+    .map(({ id, title, notebookId }) => ({ id, title, detail: notebookTitles.get(notebookId) }));
   const bookId = params.get("book");
   const book = books.find((entry) => entry.id === bookId);
   const unavailableBook = Boolean(ready && bookId && !book);
@@ -608,6 +614,7 @@ export default function StudyWorkspace({
             vaultId={studyVaultId}
             vaultNotes={vaultNotes}
             vaultBooks={books}
+            notebookSources={notebookSources}
             book={books.find((item) => item.id === thread.bookId)}
             openReport={params.get("report") === "1"}
             requestedReportId={params.get("reportId") ?? undefined}
@@ -620,6 +627,7 @@ export default function StudyWorkspace({
           <TutorIndex
             books={books}
             notes={vaultNotes}
+            notebookSources={notebookSources}
             threads={threads}
             vaultId={studyVaultId}
             open={openThread}

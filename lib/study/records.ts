@@ -32,6 +32,12 @@ export const studyOriginSchema = z.discriminatedUnion("kind", [
     revision: index.optional(),
   }),
   z.object({ kind: z.literal("note"), noteId: z.string(), heading: z.string().optional() }),
+  z.object({
+    kind: z.literal("source"),
+    notebookId: z.string(),
+    sourceId: z.string(),
+    chunkId: z.string(),
+  }),
   z.object({ kind: z.literal("tutor"), threadId: z.string(), message: index.optional() }),
   z.object({ kind: z.literal("report"), threadId: z.string(), reportId: z.string().optional() }),
   z.object({ kind: z.literal("studio"), notebookId: z.string(), outputId: z.string() }),
@@ -164,6 +170,7 @@ export const studyRecordSchema = z.discriminatedUnion("kind", [
     revision: index.optional(),
     noteIds: z.array(z.string()).optional(),
     bookIds: z.array(z.string()).optional(),
+    sourceIds: z.array(z.string()).optional(),
     messages: z.array(
       z.object({
         role: z.enum(["user", "assistant"]),

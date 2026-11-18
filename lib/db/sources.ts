@@ -141,15 +141,17 @@ export function useSourceWithChunks(
 }
 
 /** Every source's title and notebook, for `[[src:…]]` links in notes. */
-export function useSourceTitles(): Pick<Source, "id" | "notebookId" | "title">[] | undefined {
+export function useSourceTitles(
+  enabled = true,
+): Pick<Source, "id" | "notebookId" | "title">[] | undefined {
   return useStoreQuery(
     async () =>
-      (await store().listAllSources()).map(({ id, notebookId, title }) => ({
+      (enabled ? await store().listAllSources() : []).map(({ id, notebookId, title }) => ({
         id,
         notebookId,
         title,
       })),
-    [],
+    [enabled],
     ["sources"],
   );
 }
