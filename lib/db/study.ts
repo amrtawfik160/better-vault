@@ -16,6 +16,7 @@ import type {
   StudyRating,
   StudyRecord,
   StudySection,
+  StudyReportChange,
 } from "@/lib/study/records";
 import { createNote } from "./notes";
 import type { Note, Source, StudioOutput } from "./types";
@@ -53,6 +54,10 @@ export async function updateStudyThread(
 ) {
   if (!(await store().patchStudyThread({ id, change, append, updatedAt: Date.now() })))
     throw new Error("This Tutor conversation is no longer available.");
+}
+
+export function updateStudyReport(id: string, report: StudyReportChange) {
+  return store().patchStudyThread({ id, report, change: {}, append: [], updatedAt: Date.now() });
 }
 
 export async function studyConversationDefaults(goal: StudyThread["goal"]) {

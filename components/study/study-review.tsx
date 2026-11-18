@@ -62,6 +62,7 @@ export function StudyReview({
   collection,
   initialPractice,
   vaultId,
+  libraryHref,
 }: {
   cards: Card[];
   highlights: Highlight[];
@@ -70,6 +71,7 @@ export function StudyReview({
   collection?: string;
   initialPractice?: boolean;
   vaultId: string;
+  libraryHref?: string;
 }) {
   const { t } = useTranslation("home");
   const now = useReviewClock();
@@ -289,7 +291,7 @@ export function StudyReview({
               </Button>
             ) : null}
             <Link
-              to={studyHref(useHighlights ? "highlights" : "cards")}
+              to={libraryHref ?? studyHref(useHighlights ? "highlights" : "cards")}
               className="underline underline-offset-4"
             >
               {useHighlights ? "Open highlights" : "Open flashcards"}

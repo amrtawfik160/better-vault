@@ -11,6 +11,7 @@ import {
   saveStudyText,
   StudyTextConflict,
   updateStudyBook,
+  updateStudyReport,
   updateStudyThread,
 } from "./study";
 import { DatabaseSync } from "node:sqlite";
@@ -27,6 +28,7 @@ import { setStoreForTests, store } from "./store";
 import { conversationTitle } from "@/lib/chat/title";
 import { studyVaultIndex } from "@/lib/study/vault";
 import { resolveStudyRange } from "@/lib/study/text-edits";
+import { matchesStudyReport, plannedStudySteps, studyReports } from "@/lib/study/reports";
 import {
   deleteConversation,
   latestConversation,
@@ -721,6 +723,116 @@ describe.each(backends)("%s store", (name, create) => {
         updatedAt: 0,
       });
       expect(await store().getStudy("standalone")).toMatchObject({ front: "Question" });
+    });
+
+    it("keeps dated reports, flashcard origins and follow-ups through regeneration and backup", async () => {
+      const legacy = {
+        summary: "First report",
+        corrections: [],
+        nextSteps: ["Draw the original proof."],
+      };
+      await putStudyRecords({
+        id: "thread-report",
+        kind: "thread",
+        title: "Consensus",
+        goal: "teach-back",
+        scope: "general",
+        messages: [],
+        updatedAt: 0,
+        report: legacy,
+        practiceLanguage: "en-US",
+      });
+      const origin = { kind: "report", threadId: "thread-report" } as const;
+      await putStudyRecords({
+        id: "first-card",
+        kind: "card",
+        front: "Proof",
+        back: "Shared replica",
+        tags: [],
+        updatedAt: 0,
+        schedule: freshSchedule(0),
+        origin,
+      });
+      expect(
+        await updateStudyReport("thread-report", {
+          kind: "step",
+          reportId: "legacy",
+          action: "plan",
+          index: 0,
+        }),
+      ).toBe(true);
+      const newReport = {
+        ...legacy,
+        id: "second-report",
+        summary: "New report",
+        nextSteps: ["Explain the replacement proof."],
+      };
+      const writes = await Promise.all([
+        updateStudyReport("thread-report", {
+          kind: "save",
+          report: newReport,
+          practiceLanguage: null,
+        }),
+        updateStudyReport("thread-report", {
+          kind: "step",
+          reportId: "legacy",
+          action: "complete",
+          index: 0,
+        }),
+        updateStudyReport("thread-report", {
+          kind: "feedback",
+          reportId: "legacy",
+          helpful: true,
+          key: "technical-0",
+        }),
+        updateStudyThread("thread-report", {}, [
+          { role: "user", text: "How do the proofs differ?" },
+        ]),
+      ]);
+      expect(writes.slice(0, 3)).toEqual([true, true, true]);
+      expect(
+        await updateStudyReport("thread-report", {
+          kind: "step",
+          reportId: "second-report",
+          action: "plan",
+          index: 2,
+        }),
+      ).toBe(false);
+      const backup = JSON.parse(JSON.stringify(await exportBackup()));
+      await deleteAllData();
+      await importBackup(backup);
+      const thread = await store().getStudy("thread-report");
+      if (thread?.kind !== "thread") throw new Error("The Tutor conversation was not restored");
+      expect(thread.practiceLanguage).toBeUndefined();
+      expect(thread.messages).toEqual([{ role: "user", text: "How do the proofs differ?" }]);
+      expect(studyReports(thread)).toMatchObject([
+        newReport,
+        { summary: "First report", feedback: { "technical-0": true } },
+      ]);
+      expect(plannedStudySteps([thread])).toMatchObject([
+        { text: "Draw the original proof.", reportId: "legacy", completedAt: expect.any(Number) },
+      ]);
+      const card = await store().getStudy("first-card");
+      expect(card?.kind === "card" && matchesStudyReport(card.origin, thread.id, "legacy")).toBe(
+        true,
+      );
+      expect(
+        card?.kind === "card" && matchesStudyReport(card.origin, thread.id, "second-report"),
+      ).toBe(false);
+      expect(
+        await updateStudyReport(thread.id, {
+          kind: "step",
+          reportId: "legacy",
+          action: "reopen",
+          index: 0,
+        }),
+      ).toBe(true);
+      const reopened = await store().getStudy(thread.id);
+      expect(
+        reopened?.kind === "thread" && plannedStudySteps([reopened])[0].completedAt,
+      ).toBeUndefined();
+      await store().deleteStudy(thread.id);
+      expect(await updateStudyReport(thread.id, { kind: "save", report: newReport })).toBe(false);
     });
 
     it("saves passage positions and notebook chunks atomically with a text edit", async () => {

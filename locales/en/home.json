@@ -175,6 +175,27 @@
       "notebookCards": "Notebook flashcards",
       "cue": "Recall question"
     },
+    "followUps": {
+      "title": "Tutor follow-ups",
+      "nextSteps": "Next steps",
+      "add": "Add to Today",
+      "remove": "Remove from Today",
+      "complete": "Mark done",
+      "reopen": "Reopen on Today",
+      "done": "Done",
+      "completedToday_one": "{{count}} completed today",
+      "completedToday_other": "{{count}} completed today",
+      "lastReport": "Latest Tutor report",
+      "reportHistory": "Session reports",
+      "latest": "Latest report",
+      "earlier": "Earlier report",
+      "deleteConversationBody": "The conversation, its session reports, and their follow-ups will be removed.",
+      "unavailable": "This session report is unavailable.",
+      "reportCards": "Report flashcards",
+      "viewCards_one": "View {{count}} report flashcard",
+      "viewCards_other": "View {{count}} report flashcards",
+      "reviewCards": "Review report flashcards"
+    },
     "reader": {
       "editConflict": "This document changed while you were editing it. Copy your draft, then reopen the editor to see the latest text.",
       "passageChanged": "This link no longer points to an exact passage.",

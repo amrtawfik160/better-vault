@@ -1,4 +1,5 @@
 import type { StudyRecord } from "@/lib/study/records";
+import { patchedStudyThread } from "@/lib/study/reports";
 import { patchedStudyBook, revisedStudyBook } from "@/lib/study/text-edits";
 import type { Backend, StoreContent, TableName } from "../backend";
 import type {
@@ -531,16 +532,13 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
         const book = get<StudyRecord>("study", write.id);
         if (book?.kind === "book") put("study", patchedStudyBook(book, write));
       }),
-    patchStudyThread: ({ id, change, append, updatedAt }) =>
+    patchStudyThread: (write) =>
       transaction(db, () => {
-        const thread = get<StudyRecord>("study", id);
+        const thread = get<StudyRecord>("study", write.id);
         if (thread?.kind !== "thread") return false;
-        put("study", {
-          ...thread,
-          ...change,
-          messages: [...thread.messages, ...append],
-          updatedAt: Math.max(thread.updatedAt, updatedAt),
-        });
+        const next = patchedStudyThread(thread, write);
+        if (!next) return false;
+        put("study", next);
         return true;
       }),
     applyStudyReview: ({ id, previousDueAt, schedule, activity }) =>

@@ -3,8 +3,10 @@ import { Link, useLocation, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { StudyOriginLink } from "./study-origin-link";
+import { StudyFollowUps } from "./study-follow-ups";
 import { queryIndex, studyHref } from "@/lib/study/links";
 import { weakStudyCards } from "@/lib/study/recall";
+import { matchesStudyReport, studyReportKey } from "@/lib/study/reports";
 import { reviewReturnState, reviewSelection } from "@/lib/study/review-session";
 import { studyVaultIndex } from "@/lib/study/vault";
 import { studyTextRevision } from "@/lib/study/text-edits";
@@ -53,6 +55,13 @@ function DailyStudy({
   const today = new Date(now);
   today.setHours(0, 0, 0, 0);
   const sessions = rows.filter((item) => item.kind === "session");
+  const threads = rows.filter((item) => item.kind === "thread");
+  const recentReport = threads
+    .flatMap((thread) => (thread.report ? [{ thread, report: thread.report }] : []))
+    .sort(
+      (a, b) =>
+        (b.report.generatedAt ?? b.thread.updatedAt) - (a.report.generatedAt ?? a.thread.updatedAt),
+    )[0];
   const activity = sessions.filter((item) => item.updatedAt >= today.getTime());
   const dueCards = rows.filter((item) => item.kind === "card" && item.schedule.dueAt <= now).length;
   const dueHighlights = rows.filter(
@@ -110,7 +119,18 @@ function DailyStudy({
             Teach it back
           </Button>
         ) : null}
+        {recentReport ? (
+          <StudyOriginLink
+            label={t("study.followUps.lastReport")}
+            origin={{
+              kind: "report",
+              threadId: recentReport.thread.id,
+              reportId: studyReportKey(recentReport.report),
+            }}
+          />
+        ) : null}
       </div>
+      <StudyFollowUps threads={threads} today={today.getTime()} />
       {activity.length ? (
         <div className="grid gap-3 sm:grid-cols-3">
           {(
@@ -366,6 +386,9 @@ export default function StudyWorkspace({
   const book = books.find((entry) => entry.id === bookId);
   const unavailableBook = Boolean(ready && bookId && !book);
   const thread = threads.find((entry) => entry.id === params.get("thread"));
+  const fromReport = params.get("fromReport");
+  const reportFilter = fromReport && thread ? { thread: thread.id, fromReport } : undefined;
+  const reportCollection = fromReport ? t("study.followUps.reportCards") : undefined;
   const page = queryIndex(params.get("page"));
   const at = queryIndex(params.get("at"));
   const length = queryIndex(params.get("length"));
@@ -389,6 +412,7 @@ export default function StudyWorkspace({
           : row.notebookId === book.notebookId)) &&
       (!notebookId || row.notebookId === notebookId) &&
       (!output || (row.origin?.kind === "studio" && row.origin.outputId === output)) &&
+      (!fromReport || matchesStudyReport(row.origin, thread?.id ?? null, fromReport)) &&
       (!cardId || row.id === cardId),
   );
   const filteredHighlights = book
@@ -504,6 +528,7 @@ export default function StudyWorkspace({
         <CardLibrary
           cards={filteredCards}
           filter={
+            reportCollection ??
             book?.title ??
             (output
               ? "Studio flashcards"
@@ -515,7 +540,7 @@ export default function StudyWorkspace({
           }
           clearFilter={() => go("cards")}
           creation={
-            output || cardId
+            output || cardId || fromReport
               ? false
               : book
                 ? {
@@ -531,6 +556,7 @@ export default function StudyWorkspace({
               "review",
               {
                 ...bookFilter,
+                ...reportFilter,
                 ...(notebookId ? { notebook: notebookId } : {}),
                 ...(output ? { output } : {}),
                 ...(cardId ? { card: cardId } : {}),
@@ -549,12 +575,13 @@ export default function StudyWorkspace({
           useHighlights={params.get("kind") === "highlights"}
           books={books}
           initialPractice={weakMode}
+          libraryHref={reportFilter ? studyHref("cards", reportFilter) : undefined}
           collection={
             weakMode
               ? t("study.recall.weakSet")
               : reviewIds
                 ? t("study.recall.cardSelection", { count: reviewIds.size })
-                : book?.title
+                : (reportCollection ?? book?.title)
           }
         />
       ) : null}
@@ -575,12 +602,14 @@ export default function StudyWorkspace({
       {ready && tab === "tutor" ? (
         thread ? (
           <StudyTutor
-            key={`${thread.id}:${params.get("report") ?? ""}`}
+            key={`${thread.id}:${params.get("report") ?? ""}:${params.get("reportId") ?? ""}`}
             thread={thread}
             vaultId={studyVaultId}
             vaultNotes={(notes ?? []).filter((note) => scope.noteOwner(note.id) === studyVaultId)}
             book={books.find((item) => item.id === thread.bookId)}
             openReport={params.get("report") === "1"}
+            requestedReportId={params.get("reportId") ?? undefined}
+            reportCards={cards}
             focusMessage={queryIndex(params.get("message"))}
             back={() => go("tutor")}
             setup={() => setSettings(true)}

@@ -41,7 +41,11 @@ export function originHref(origin: StudyOrigin) {
     case "tutor":
       return studyHref("tutor", { thread: origin.threadId, message: origin.message });
     case "report":
-      return studyHref("tutor", { thread: origin.threadId, report: "1" });
+      return studyHref("tutor", {
+        thread: origin.threadId,
+        report: "1",
+        reportId: origin.reportId,
+      });
     case "studio":
       return withQuery(routes.notebook(origin.notebookId), { output: origin.outputId });
     case "word":

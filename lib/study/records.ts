@@ -33,7 +33,7 @@ export const studyOriginSchema = z.discriminatedUnion("kind", [
   }),
   z.object({ kind: z.literal("note"), noteId: z.string() }),
   z.object({ kind: z.literal("tutor"), threadId: z.string(), message: index.optional() }),
-  z.object({ kind: z.literal("report"), threadId: z.string() }),
+  z.object({ kind: z.literal("report"), threadId: z.string(), reportId: z.string().optional() }),
   z.object({ kind: z.literal("studio"), notebookId: z.string(), outputId: z.string() }),
   z.object({ kind: z.literal("word"), wordId: z.string() }),
 ]);
@@ -72,9 +72,13 @@ export const studyReportReplySchema = z.object({
 });
 const feedback = z.record(z.string(), z.boolean());
 const studyReportSchema = studyReportReplySchema.extend({
+  id: z.string().optional(),
   helpful: z.boolean().optional(),
   feedback: feedback.optional(),
   generatedAt: z.number().optional(),
+  plannedSteps: z
+    .record(z.string(), z.object({ savedAt: z.number(), completedAt: z.number().optional() }))
+    .optional(),
   languageStatus: z.enum(["not-requested", "insufficient", "reviewed"]).optional(),
 });
 
@@ -168,6 +172,7 @@ export const studyRecordSchema = z.discriminatedUnion("kind", [
       }),
     ),
     report: studyReportSchema.optional(),
+    pastReports: z.array(studyReportSchema).optional(),
   }),
 ]);
 
@@ -194,13 +199,23 @@ export type StudyBookTextWrite = {
 };
 export type StudyThread = StudyRecordOf<"thread">;
 export type StudyThreadChange = Partial<
-  Omit<StudyThread, "id" | "kind" | "messages" | "updatedAt">
+  Omit<StudyThread, "id" | "kind" | "messages" | "updatedAt" | "report" | "pastReports">
 >;
+export type StudyReportChange =
+  | { kind: "save"; report: StudyReport & { id: string }; practiceLanguage?: string | null }
+  | { kind: "feedback"; reportId: string; key: string; helpful: boolean }
+  | {
+      kind: "step";
+      reportId: string;
+      index: number;
+      action: "plan" | "remove" | "complete" | "reopen";
+    };
 export type StudyThreadWrite = {
   id: string;
   change: StudyThreadChange;
   append: StudyThread["messages"];
   updatedAt: number;
+  report?: StudyReportChange;
 };
 export type StudySchedule = z.infer<typeof schedule>;
 export type StudySection = z.infer<typeof section>;

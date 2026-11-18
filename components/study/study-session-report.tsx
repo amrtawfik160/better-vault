@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/panelui/button";
 import type { StudyReport } from "@/lib/study/records";
@@ -21,6 +21,8 @@ export function StudySessionReport({
   onSaveWord,
   onSaveNote,
   onFeedback,
+  onPlanStep,
+  actions,
 }: {
   report: StudyReport;
   onSaveCard: (front: string, back: string, key: string) => void;
@@ -28,8 +30,11 @@ export function StudySessionReport({
   onSaveWord: (word: Vocabulary, key: string) => void;
   onSaveNote: () => void;
   onFeedback: (key: string, value: boolean) => void;
+  onPlanStep: (index: number, action: "plan" | "remove" | "reopen") => void;
+  actions?: ReactNode;
 }) {
   const { t } = useTranslation("home");
+  const nextStepId = useId();
   const technical = [
     ...(report.technicalFeedback ?? []).map(({ text }) => text),
     ...report.corrections,
@@ -69,6 +74,7 @@ export function StudySessionReport({
       <p dir="auto" className="whitespace-pre-wrap">
         {report.summary}
       </p>
+      {actions}
       {technical.length > 0 ? (
         <ReportSection title="Technical feedback">
           <ul className="space-y-2">
@@ -157,14 +163,35 @@ export function StudySessionReport({
           </ul>
         </ReportSection>
       ) : null}
-      {report.nextSteps.length > 0 ? (
-        <ReportSection title="Next steps">
-          <ul className="list-disc space-y-1 ps-5 text-sm">
-            {report.nextSteps.map((text, index) => (
-              <li key={index} dir="auto">
-                {text}
-              </li>
-            ))}
+      {report.nextSteps.some((text) => text.trim()) ? (
+        <ReportSection title={t("study.followUps.nextSteps")}>
+          <ul className="divide-y rounded-xl border px-3 text-sm">
+            {report.nextSteps.map((text, index) => {
+              if (!text.trim()) return null;
+              const state = report.plannedSteps?.[index];
+              const done = state?.completedAt !== undefined;
+              const action = done ? "reopen" : state ? "remove" : "plan";
+              const label = done ? "reopen" : state ? "remove" : "add";
+              const id = `${nextStepId}-${index}`;
+              return (
+                <li key={index} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+                  <p id={id} dir="auto" className="min-w-0 flex-1 wrap-break-word">
+                    {text}
+                  </p>
+                  {done ? (
+                    <span className="text-muted-foreground">{t("study.followUps.done")}</span>
+                  ) : null}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    aria-describedby={id}
+                    onClick={() => onPlanStep(index, action)}
+                  >
+                    {t(`study.followUps.${label}`)}
+                  </Button>
+                </li>
+              );
+            })}
           </ul>
         </ReportSection>
       ) : null}

@@ -1,4 +1,5 @@
 import type { StudyRecord } from "@/lib/study/records";
+import { patchedStudyThread } from "@/lib/study/reports";
 import { patchedStudyBook, revisedStudyBook } from "@/lib/study/text-edits";
 import type { Backend } from "./backend";
 import { BetterVaultDatabase } from "./database";
@@ -250,16 +251,12 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
         const book = await db.study.get(write.id);
         if (book?.kind === "book") await db.study.put(patchedStudyBook(book, write));
       }),
-    patchStudyThread: ({ id, change, append, updatedAt }) =>
+    patchStudyThread: (write) =>
       db.transaction("rw", db.study, async () => {
-        const thread = await db.study.get(id);
+        const thread = await db.study.get(write.id);
         if (thread?.kind !== "thread") return false;
-        const next = {
-          ...thread,
-          ...change,
-          messages: [...thread.messages, ...append],
-          updatedAt: Math.max(thread.updatedAt, updatedAt),
-        };
+        const next = patchedStudyThread(thread, write);
+        if (!next) return false;
         await db.study.put(next);
         return true;
       }),

@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { useNavigate } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { StudySessionReport } from "./study-session-report";
 import { StudyOriginLink } from "./study-origin-link";
 import { StudyFlashcardDraftDialog, type FlashcardSource } from "./study-flashcard-generator";
 import { originHref, studyHref } from "@/lib/study/links";
-import { Button } from "@/components/panelui/button";
+import { Button, buttonVariants } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
 import { modelKey, parseModelKey } from "@/lib/ai/catalog";
 import {
@@ -29,9 +29,11 @@ import {
   studyConversationDefaults,
   studyId,
   updateStudyThread,
+  updateStudyReport,
 } from "@/lib/db/study";
 import { askStudyModel } from "@/lib/study/client";
 import { passagesFor, tutorBookOrigin } from "@/lib/study/passages";
+import { matchesStudyReport, studyReportKey, studyReports } from "@/lib/study/reports";
 import { Markdown } from "@/components/chat/markdown";
 import { recordStudyVoice, transcribeStudyVoice } from "@/lib/study/voice";
 import {
@@ -46,6 +48,8 @@ import {
   type StudyBook,
   type StudyThread,
   type StudyThreadChange,
+  type StudyRecordOf,
+  type StudyReportChange,
   type StudyOrigin,
 } from "@/lib/study/records";
 
@@ -83,6 +87,7 @@ export function TutorIndex({
   vaultId: string;
   open: (thread: StudyThread) => void;
 }) {
+  const { t } = useTranslation("home");
   const [goal, setGoal] = useState<StudyThread["goal"]>("book");
   const [scope, setScope] = useState<StudyThread["scope"]>("general");
   const [bookId, setBookId] = useState("");
@@ -228,7 +233,13 @@ export function TutorIndex({
                 {thread.title}
               </button>
               {thread.report ? (
-                <StudyOriginLink origin={{ kind: "report", threadId: thread.id }} />
+                <StudyOriginLink
+                  origin={{
+                    kind: "report",
+                    threadId: thread.id,
+                    reportId: studyReportKey(thread.report),
+                  }}
+                />
               ) : null}
               <Button size="sm" variant="ghost" onClick={() => setDeleting(thread)}>
                 Delete
@@ -242,7 +253,7 @@ export function TutorIndex({
           if (!open) setDeleting(null);
         }}
         title="Delete conversation?"
-        body="The conversation and its session report will be removed."
+        body={t("study.followUps.deleteConversationBody")}
         confirmLabel="Delete"
         onConfirm={async () => {
           if (deleting) await removeStudyRecord(deleting.id);
@@ -259,6 +270,8 @@ export function StudyTutor({
   vaultNotes,
   book,
   openReport,
+  requestedReportId,
+  reportCards,
   focusMessage,
   back,
   setup,
@@ -268,16 +281,19 @@ export function StudyTutor({
   vaultNotes: Note[];
   book?: StudyBook;
   openReport?: boolean;
+  requestedReportId?: string;
+  reportCards: StudyRecordOf<"card">[];
   focusMessage?: number;
   back: () => void;
   setup: () => void;
 }) {
-  const { t } = useTranslation("home");
+  const { t, i18n } = useTranslation("home");
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState(thread.title);
   const [showReport, setShowReport] = useState(openReport ?? false);
+  const [selectedReportId, setSelectedReportId] = useState(requestedReportId);
   const navigate = useNavigate();
   const [voiceState, setVoiceState] = useState<"opening" | "recording" | "transcribing" | null>(
     null,
@@ -298,6 +314,20 @@ export function StudyTutor({
   const settings = useSettings();
   const model = settings ? activeModel(settings) : null;
   const models = settings ? availableModels(settings) : [];
+  const reports = studyReports(thread);
+  const visibleReport = selectedReportId
+    ? reports.find((entry) => studyReportKey(entry) === selectedReportId)
+    : openReport
+      ? (reports.find((entry) => !entry.id) ?? reports[0])
+      : reports[0];
+  const reportId = visibleReport ? studyReportKey(visibleReport) : undefined;
+  const reportCardCount = reportId
+    ? reportCards.filter((card) => matchesStudyReport(card.origin, thread.id, reportId)).length
+    : 0;
+  const reportDate = new Intl.DateTimeFormat(i18n.language, {
+    dateStyle: "medium",
+    timeStyle: "medium",
+  });
   const conversation = [
     ...thread.messages.map((entry, index) => ({ entry, index })),
     ...temporaryTurns.map((entry) => ({ entry, index: undefined })),
@@ -329,9 +359,9 @@ export function StudyTutor({
   useEffect(() => {
     if (focusMessage !== undefined)
       document.getElementById(`study-message-${focusMessage}`)?.scrollIntoView({ block: "center" });
-    if (openReport)
+    if (showReport)
       document.getElementById("study-session-report")?.scrollIntoView({ block: "start" });
-  }, [focusMessage, openReport, showReport]);
+  }, [focusMessage, reportId, showReport]);
 
   async function save(change: StudyThreadChange) {
     await updateStudyThread(thread.id, change);
@@ -533,7 +563,7 @@ export function StudyTutor({
         signal: abort.signal,
       });
       if (!abort.signal.aborted && result.report) {
-        const requested = thread.corrections && thread.corrections !== "off";
+        const requested = context.corrections && context.corrections !== "off";
         const hasLanguageEvidence = history.some(
           (entry) => entry.role === "user" && entry.text.trim().split(/\s+/).length >= 5,
         );
@@ -542,16 +572,21 @@ export function StudyTutor({
             ? "reviewed"
             : "insufficient"
           : "not-requested";
-        await save({
-          practiceLanguage: language.trim() || undefined,
+        const reportId = studyId();
+        const saved = await updateStudyReport(thread.id, {
+          kind: "save",
+          practiceLanguage: context.practiceLanguage ?? null,
           report: {
             ...result.report,
+            id: reportId,
             generatedAt,
             languageStatus,
             languageFeedback: languageStatus === "reviewed" ? result.report.languageFeedback : [],
             vocabulary: languageStatus === "reviewed" ? result.report.vocabulary : [],
           },
         });
+        if (!saved) throw new Error(t("study.followUps.unavailable"));
+        setSelectedReportId(reportId);
         setShowReport(true);
         setVoicePractice(false);
         saveTemporaryTurns([]);
@@ -601,6 +636,14 @@ export function StudyTutor({
       notebookId: thread.notebookId,
       tags: book ? [book.title] : [],
     });
+  }
+
+  function changeReport(change: StudyReportChange) {
+    void updateStudyReport(thread.id, change)
+      .then((saved) => {
+        if (!saved) toast.error(t("study.followUps.unavailable"));
+      })
+      .catch((error: Error) => toast.error(error.message));
   }
 
   function makeCard(front: string, back: string, origin: StudyOrigin, id: string) {
@@ -1019,11 +1062,17 @@ export function StudyTutor({
           </p>
         ) : null}
       </form>
-      {conversation.length || thread.report ? (
+      {conversation.length || reports.length || showReport ? (
         <div className="space-y-3">
           <div className="flex flex-wrap gap-2">
-            {thread.report ? (
-              <Button variant="outline" onClick={() => setShowReport(!showReport)}>
+            {reports.length ? (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (!showReport) setSelectedReportId(studyReportKey(reports[0]));
+                  setShowReport(!showReport);
+                }}
+              >
                 {showReport ? "Hide report" : "Show report"}
               </Button>
             ) : null}
@@ -1036,28 +1085,77 @@ export function StudyTutor({
                 ? t("study.voice.endAndReport")
                 : voicePractice
                   ? "Finish voice practice and generate report"
-                  : thread.report
+                  : reports.length
                     ? "Regenerate report"
                     : "Generate session report"}
             </Button>
           </div>
-          {showReport && thread.report ? (
+          {showReport && reports.length > 1 ? (
+            <label className="flex flex-wrap items-center gap-2 text-sm">
+              {t("study.followUps.reportHistory")}
+              <select
+                className={optionClass}
+                value={reportId ?? ""}
+                onChange={(event) => setSelectedReportId(event.target.value)}
+              >
+                {reportId ? null : (
+                  <option value="" disabled>
+                    {t("study.followUps.unavailable")}
+                  </option>
+                )}
+                {reports.map((entry, index) => (
+                  <option value={studyReportKey(entry)} key={studyReportKey(entry)}>
+                    {index === 0
+                      ? t("study.followUps.latest")
+                      : entry.generatedAt === undefined
+                        ? t("study.followUps.earlier")
+                        : reportDate.format(entry.generatedAt)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {showReport && !visibleReport ? (
+            <p role="status" className="text-sm text-muted-foreground">
+              {t("study.followUps.unavailable")}
+            </p>
+          ) : null}
+          {showReport && visibleReport && reportId ? (
             <StudySessionReport
-              report={thread.report}
-              onDraftCard={(text) => draftCards(text, { kind: "report", threadId: thread.id })}
-              onFeedback={(key, value) => {
-                const report = thread.report;
-                if (report)
-                  void save({
-                    report: { ...report, feedback: { ...report.feedback, [key]: value } },
-                  });
-              }}
+              report={visibleReport}
+              actions={
+                reportCardCount ? (
+                  <div className="flex flex-wrap gap-2">
+                    <Link
+                      className={buttonVariants({ variant: "outline", size: "sm" })}
+                      to={studyHref("cards", { thread: thread.id, fromReport: reportId })}
+                    >
+                      {t("study.followUps.viewCards", { count: reportCardCount })}
+                    </Link>
+                    <Link
+                      className={buttonVariants({ variant: "outline", size: "sm" })}
+                      to={studyHref("review", { thread: thread.id, fromReport: reportId })}
+                    >
+                      {t("study.followUps.reviewCards")}
+                    </Link>
+                  </div>
+                ) : null
+              }
+              onDraftCard={(text) =>
+                draftCards(text, { kind: "report", threadId: thread.id, reportId })
+              }
+              onFeedback={(key, helpful) =>
+                changeReport({ kind: "feedback", reportId, key, helpful })
+              }
+              onPlanStep={(index, action) =>
+                changeReport({ kind: "step", reportId, index, action })
+              }
               onSaveCard={(front, back, key) =>
                 makeCard(
                   front,
                   back,
-                  { kind: "report", threadId: thread.id },
-                  `report-card-${thread.id}-${thread.report?.generatedAt ?? 0}-${key}`,
+                  { kind: "report", threadId: thread.id, reportId },
+                  `report-card-${thread.id}-${visibleReport.id ?? visibleReport.generatedAt ?? 0}-${key}`,
                 )
               }
               onSaveWord={(word, key) => {
@@ -1069,9 +1167,9 @@ export function StudyTutor({
                     context: word.example,
                     note: word.definition,
                     notebookId: thread.notebookId,
-                    origin: { kind: "report", threadId: thread.id },
+                    origin: { kind: "report", threadId: thread.id, reportId },
                   },
-                  `report-word-${thread.id}-${thread.report?.generatedAt ?? 0}-${key}`,
+                  `report-word-${thread.id}-${visibleReport.id ?? visibleReport.generatedAt ?? 0}-${key}`,
                 )
                   .then((saved) =>
                     toast.success("Saved to vocabulary", {
@@ -1084,8 +1182,7 @@ export function StudyTutor({
                   .catch((error: Error) => toast.error(error.message));
               }}
               onSaveNote={() => {
-                const report = thread.report;
-                if (!report) return;
+                const report = visibleReport;
                 saveNote(
                   [
                     report.summary,
@@ -1102,7 +1199,7 @@ export function StudyTutor({
                   ]
                     .filter(Boolean)
                     .join("\n\n"),
-                  { kind: "report", threadId: thread.id },
+                  { kind: "report", threadId: thread.id, reportId },
                 );
               }}
             />
@@ -1119,7 +1216,14 @@ export function StudyTutor({
                 label: t("study.capture.viewCards"),
                 onClick: () =>
                   navigate(
-                    studyHref("cards", thread.notebookId ? { notebook: thread.notebookId } : {}),
+                    studyHref(
+                      "cards",
+                      draftSource.origin.kind === "report"
+                        ? { thread: thread.id, fromReport: draftSource.origin.reportId ?? "legacy" }
+                        : thread.notebookId
+                          ? { notebook: thread.notebookId }
+                          : {},
+                    ),
                   ),
               },
             })
