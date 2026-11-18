@@ -3,7 +3,7 @@ import { chunkText, normaliseText } from "@/lib/grounding/chunk";
 import { saveBlob } from "./blobs";
 import { useStoreQuery } from "./live";
 import { store } from "./store";
-import type { Chunk, Source, SourceImage, SourceKind } from "./types";
+import type { Chunk, Source, SourceImage, SourceKind, StoredBlob } from "./types";
 
 export interface NewSource {
   notebookId: string;
@@ -12,23 +12,36 @@ export interface NewSource {
   text: string;
   url?: string;
   fileName?: string;
+  original?: Pick<StoredBlob, "data" | "mime">;
 }
 
 /** Adds a source and splits it into passages. Throws if it has no text. */
 export async function addSource(input: NewSource): Promise<Source> {
   const text = normaliseText(input.text);
   if (!text) throw new Error("empty-source");
+  const id = generateId();
+  const now = Date.now();
+  const original = input.original
+    ? {
+        id: generateId(),
+        sourceId: id,
+        notebookId: input.notebookId,
+        createdAt: now,
+        ...input.original,
+      }
+    : undefined;
   const source: Source = {
-    id: generateId(),
+    id,
     notebookId: input.notebookId,
     title: input.title.trim() || "Untitled",
     kind: input.kind,
     url: input.url,
     fileName: input.fileName,
+    originalFileId: original?.id,
     text,
     charCount: text.length,
     selected: true,
-    createdAt: Date.now(),
+    createdAt: now,
   };
   const chunks: Chunk[] = chunkText(text).map((piece, index) => ({
     id: `${source.id}:${index}`,
@@ -37,7 +50,7 @@ export async function addSource(input: NewSource): Promise<Source> {
     index,
     text: piece,
   }));
-  await store().addSource(source, chunks, Date.now());
+  await store().addSource(source, chunks, now, original);
   return source;
 }
 
@@ -85,6 +98,10 @@ export async function deleteSource(id: string) {
 /** A notebook's sources, oldest first. `undefined` while loading. */
 export function useSources(notebookId: string): Source[] | undefined {
   return useStoreQuery(() => store().listSources(notebookId), [notebookId], ["sources"]);
+}
+
+export function useSource(id: string) {
+  return useStoreQuery(async () => (await store().getSource(id)) ?? null, [id], ["sources"]);
 }
 
 /** The passages of the given sources, in reading order. */

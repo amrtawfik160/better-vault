@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/panelui/button";
 import type { StudyReport } from "@/lib/study/records";
 
@@ -16,16 +17,19 @@ type Vocabulary = NonNullable<StudyReport["vocabulary"]>[number];
 export function StudySessionReport({
   report,
   onSaveCard,
+  onDraftCard,
   onSaveWord,
   onSaveNote,
   onFeedback,
 }: {
   report: StudyReport;
   onSaveCard: (front: string, back: string, key: string) => void;
+  onDraftCard: (feedback: string) => void;
   onSaveWord: (word: Vocabulary, key: string) => void;
   onSaveNote: () => void;
   onFeedback: (key: string, value: boolean) => void;
 }) {
+  const { t } = useTranslation("home");
   const technical = [
     ...(report.technicalFeedback ?? []).map(({ text }) => text),
     ...report.corrections,
@@ -74,18 +78,8 @@ export function StudySessionReport({
                   {text}
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      onSaveCard(
-                        "What should I correct from this session?",
-                        text,
-                        `technical-${index}`,
-                      )
-                    }
-                  >
-                    Save flashcard
+                  <Button variant="outline" size="sm" onClick={() => onDraftCard(text)}>
+                    {t("study.capture.draftFromFeedback")}
                   </Button>
                   {feedback(`technical-${index}`)}
                 </div>

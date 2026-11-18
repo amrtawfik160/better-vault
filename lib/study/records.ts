@@ -110,6 +110,7 @@ export const studyRecordSchema = z.discriminatedUnion("kind", [
     offset: z.number().int().nonnegative(),
     color: z.enum(["yellow", "green", "blue", "pink"]),
     note: z.string(),
+    cue: z.string().optional(),
     schedule,
   }),
   base.extend({
@@ -164,6 +165,15 @@ export type StudyRecord = z.infer<typeof studyRecordSchema>;
 export type StudyRecordOf<K extends StudyRecord["kind"]> = Extract<StudyRecord, { kind: K }>;
 export type StudyBook = StudyRecordOf<"book">;
 export type StudyThread = StudyRecordOf<"thread">;
+export type StudyThreadChange = Partial<
+  Omit<StudyThread, "id" | "kind" | "messages" | "updatedAt">
+>;
+export type StudyThreadWrite = {
+  id: string;
+  change: StudyThreadChange;
+  append: StudyThread["messages"];
+  updatedAt: number;
+};
 export type StudySchedule = z.infer<typeof schedule>;
 export type StudySection = z.infer<typeof section>;
 export type StudyReviewWrite = {

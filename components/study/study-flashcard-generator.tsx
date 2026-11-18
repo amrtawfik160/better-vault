@@ -1,14 +1,57 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/panelui/button";
+import { Dialog } from "@/components/panelui/dialog";
 import { Input } from "@/components/panelui/input";
+import { Textarea } from "@/components/panelui/textarea";
 import { newStudyCard, putStudyRecords } from "@/lib/db/study";
 import { askStudyModel } from "@/lib/study/client";
+import type { StudyOrigin } from "@/lib/study/records";
 
 type Draft = { front: string; back: string };
+export type FlashcardSource = {
+  title: string;
+  text: string;
+  origin: StudyOrigin;
+  notebookId?: string;
+  tags: string[];
+};
 
-export function StudyFlashcardGenerator({ close }: { close: () => void }) {
-  const [input, setInput] = useState("");
+export function StudyFlashcardDraftDialog({
+  source,
+  onClose,
+  onSave,
+}: {
+  source: FlashcardSource;
+  onClose: () => void;
+  onSave: (count: number) => void;
+}) {
+  const { t } = useTranslation("home");
+  const { t: common } = useTranslation();
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <Dialog.Content closeLabel={common("actions.close")}>
+        <Dialog.Header title={t("study.capture.draftCards")} description={source.title} />
+        <Dialog.Body>
+          <StudyFlashcardGenerator close={onClose} source={source} onSave={onSave} />
+        </Dialog.Body>
+      </Dialog.Content>
+    </Dialog>
+  );
+}
+
+export function StudyFlashcardGenerator({
+  close,
+  source,
+  onSave,
+}: {
+  close: () => void;
+  source?: FlashcardSource;
+  onSave?: (count: number) => void;
+}) {
+  const { t } = useTranslation("home");
+  const [input, setInput] = useState(source?.text.slice(0, 12000) ?? "");
   const [count, setCount] = useState(5);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [working, setWorking] = useState(false);
@@ -29,7 +72,12 @@ export function StudyFlashcardGenerator({ close }: { close: () => void }) {
         signal: request.signal,
       });
       if (!request.signal.aborted) {
-        const cards = (answer.cards ?? []).filter(({ front, back }) => front.trim() && back.trim());
+        const unique = new Map(
+          (answer.cards ?? [])
+            .filter(({ front, back }) => front.trim() && back.trim())
+            .map((card) => [card.front.trim().toLocaleLowerCase(), card]),
+        );
+        const cards = [...unique.values()];
         if (!cards.length) toast.error("The model returned no flashcards.");
         else setDrafts(cards);
       }
@@ -47,11 +95,20 @@ export function StudyFlashcardGenerator({ close }: { close: () => void }) {
   async function save() {
     const cards = drafts
       .filter(({ front, back }) => front.trim() && back.trim())
-      .map(({ front, back }) => newStudyCard({ front: front.trim(), back: back.trim(), tags: [] }));
+      .map(({ front, back }) =>
+        newStudyCard({
+          front: front.trim(),
+          back: back.trim(),
+          notebookId: source?.notebookId,
+          origin: source?.origin,
+          tags: source?.tags ?? [],
+        }),
+      );
     if (!cards.length) return;
     setSaving(true);
     try {
       await putStudyRecords(...cards);
+      onSave?.(cards.length);
       close();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
@@ -62,12 +119,10 @@ export function StudyFlashcardGenerator({ close }: { close: () => void }) {
 
   return (
     <section
-      className="space-y-4 rounded-2xl border bg-card p-4"
-      aria-labelledby="study-draft-cards"
+      className={source ? "space-y-4" : "space-y-4 rounded-2xl border bg-card p-4"}
+      aria-label={source ? t("study.capture.draftCards") : undefined}
     >
-      <h3 id="study-draft-cards" className="text-base font-semibold">
-        Generate from text
-      </h3>
+      {!source ? <h3 className="text-base font-semibold">Generate from text</h3> : null}
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -75,13 +130,14 @@ export function StudyFlashcardGenerator({ close }: { close: () => void }) {
         }}
         className="space-y-2"
       >
-        <textarea
+        <Textarea
           aria-label="Text for flashcards"
           placeholder="Paste the material you want to study"
           dir="auto"
-          className="min-h-28 w-full rounded-lg border bg-background p-3 text-sm"
+          minRows={4}
           value={input}
           disabled={working || saving}
+          readOnly={Boolean(source)}
           onChange={(event) => setInput(event.target.value)}
           maxLength={12000}
         />

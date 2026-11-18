@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link, useLocation, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { StudyOriginLink } from "./study-origin-link";
 import { queryIndex, studyHref } from "@/lib/study/links";
+import { weakStudyCards } from "@/lib/study/recall";
 import { Button } from "@/components/panelui/button";
 import { Card } from "@/components/panelui/card";
 import { Tabs } from "@/components/panelui/tabs";
@@ -42,6 +43,7 @@ function DailyStudy({
   read: (book: StudyBook) => void;
   teachBack: (book: StudyBook) => void;
 }) {
+  const { t } = useTranslation("home");
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
@@ -55,6 +57,7 @@ function DailyStudy({
   const dueHighlights = rows.filter(
     (item) => item.kind === "highlight" && item.schedule.dueAt <= now,
   ).length;
+  const weakCards = weakStudyCards(rows);
   const lastRead =
     books
       .filter((entry) => entry.lastReadAt !== undefined)
@@ -77,37 +80,28 @@ function DailyStudy({
             {new Intl.DateTimeFormat(undefined, { dateStyle: "full" }).format(today)}
           </p>
         </div>
-        <p className="text-sm font-medium">{streak} day study streak</p>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-3">
-        {(
-          [
-            ["Reading", "reading"],
-            ["Review", "review"],
-            ["Speaking", "speaking"],
-          ] as const
-        ).map(([label, key]) => (
-          <Card size="sm" key={key}>
-            <Card.Content>
-              <p className="text-sm text-muted-foreground">{label}</p>
-              <p className="mt-1 text-xl font-semibold tabular-nums">
-                {Math.floor(
-                  activity
-                    .filter((item) => item.activity === key)
-                    .reduce((n, item) => n + item.seconds, 0) / 60,
-                )}{" "}
-                min
-              </p>
-            </Card.Content>
-          </Card>
-        ))}
+        {streak ? (
+          <p className="text-sm font-medium">{t("study.today.streak", { count: streak })}</p>
+        ) : null}
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button onClick={() => go("review")}>{dueCards} flashcards due</Button>
-        <Button variant="outline" onClick={() => go("review", { kind: "highlights" })}>
-          {dueHighlights} highlights due
-        </Button>
-        <Button variant="outline" onClick={() => (lastRead ? read(lastRead) : go("library"))}>
+        {dueCards ? (
+          <Button onClick={() => go("review")}>
+            {t("study.today.cardsDue", { count: dueCards })}
+          </Button>
+        ) : null}
+        {dueHighlights ? (
+          <Button
+            variant={dueCards ? "outline" : "default"}
+            onClick={() => go("review", { kind: "highlights" })}
+          >
+            {t("study.today.highlightsDue", { count: dueHighlights })}
+          </Button>
+        ) : null}
+        <Button
+          variant={dueCards || dueHighlights ? "outline" : "default"}
+          onClick={() => (lastRead ? read(lastRead) : go("library"))}
+        >
           {lastRead ? "Continue reading" : "Add a document"}
         </Button>
         {lastRead ? (
@@ -116,6 +110,31 @@ function DailyStudy({
           </Button>
         ) : null}
       </div>
+      {activity.length ? (
+        <div className="grid gap-3 sm:grid-cols-3">
+          {(
+            [
+              ["Reading", "reading"],
+              ["Review", "review"],
+              ["Speaking", "speaking"],
+            ] as const
+          ).map(([label, key]) => (
+            <Card size="sm" key={key}>
+              <Card.Content>
+                <p className="text-sm text-muted-foreground">{label}</p>
+                <p className="mt-1 text-xl font-semibold tabular-nums">
+                  {Math.floor(
+                    activity
+                      .filter((item) => item.activity === key)
+                      .reduce((n, item) => n + item.seconds, 0) / 60,
+                  )}{" "}
+                  min
+                </p>
+              </Card.Content>
+            </Card>
+          ))}
+        </div>
+      ) : null}
       {lastRead ? (
         <div className="rounded-2xl border p-4">
           <p className="text-sm text-muted-foreground">Last opened</p>
@@ -127,7 +146,35 @@ function DailyStudy({
           </p>
         </div>
       ) : null}
-      <StudyProgress rows={rows} books={books} now={now} />
+      {weakCards.length ? (
+        <Card size="sm">
+          <Card.Header className="flex flex-wrap items-center justify-between gap-2">
+            <Card.Title>{t("study.recall.needsPractice")}</Card.Title>
+            <Button variant="outline" size="sm" onClick={() => go("review", { mode: "weak" })}>
+              {t("study.recall.practiceWeakCards", { count: weakCards.length })}
+            </Button>
+          </Card.Header>
+          <Card.Content>
+            <ul className="divide-y">
+              {weakCards.slice(0, 3).map(({ card, rating }) => (
+                <li
+                  key={card.id}
+                  className="flex min-w-0 flex-wrap items-center gap-x-3 py-2 text-sm"
+                >
+                  <span dir="auto" className="min-w-0 flex-1 wrap-break-word">
+                    {card.front}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {t(`study.recall.rating.${rating}`)}
+                  </span>
+                  {card.origin ? <StudyOriginLink origin={card.origin} /> : null}
+                </li>
+              ))}
+            </ul>
+          </Card.Content>
+        </Card>
+      ) : null}
+      {rows.length ? <StudyProgress rows={rows} books={books} now={now} /> : null}
       <div className="space-y-2">
         <h3 className="font-semibold">Recent activity</h3>
         {sessions.length ? (
@@ -269,6 +316,7 @@ function StudyProgress({
 export default function StudyWorkspace() {
   const { t } = useTranslation("home");
   const { t: tCommon } = useTranslation();
+  const location = useLocation();
   const [params, setParams] = useSearchParams();
   const [settings, setSettings] = useState(false);
   const saved = useStudyRecords();
@@ -288,9 +336,20 @@ export default function StudyWorkspace() {
   const output = params.get("output");
   const cardId = params.get("card");
   const notebookId = params.get("notebook");
+  const requestedReview = location.state?.studyReviewIds;
+  const weakMode = tab === "review" && params.get("mode") === "weak";
+  const reviewIds = weakMode
+    ? new Set(weakStudyCards(rows).map(({ card }) => card.id))
+    : Array.isArray(requestedReview)
+      ? new Set(requestedReview.filter((id): id is string => typeof id === "string"))
+      : null;
   const filteredCards = cards.filter(
     (row) =>
-      (!book || (row.origin?.kind === "book" && row.origin.bookId === book.id)) &&
+      (!book ||
+        (row.origin?.kind === "book"
+          ? row.origin.bookId === book.id
+          : row.notebookId === book.notebookId)) &&
+      (!notebookId || row.notebookId === notebookId) &&
       (!output || (row.origin?.kind === "studio" && row.origin.outputId === output)) &&
       (!cardId || row.id === cardId),
   );
@@ -302,8 +361,11 @@ export default function StudyWorkspace() {
   const locate = (bookId: string, section: number) =>
     go("library", { ...libraryScope, book: bookId, page: String(section) });
 
-  function go(next: Tab, extra?: Record<string, string>) {
-    setParams({ view: "study", tab: next, ...extra });
+  function go(next: Tab, extra?: Record<string, string>, review?: string[]) {
+    setParams(
+      { view: "study", tab: next, ...extra },
+      { state: review ? { studyReviewIds: review } : null },
+    );
   }
   function read(what: StudyBook) {
     go("library", { ...libraryScope, book: what.id });
@@ -370,8 +432,17 @@ export default function StudyWorkspace() {
             highlights={highlights.filter((highlight) => highlight.bookId === book.id)}
             back={() => go("library", libraryScope)}
             openPage={(section) => locate(book.id, section)}
-            startChat={(scope, section, selection) =>
-              void createThread(book, scope, section, selection)
+            openPassage={(section, range) =>
+              go("library", {
+                ...libraryScope,
+                book: book.id,
+                page: String(section),
+                at: String(range.offset),
+                length: String(range.length),
+              })
+            }
+            startChat={(scope, section, selection, goal) =>
+              void createThread(book, scope, section, selection, goal)
             }
           />
         ) : (
@@ -387,24 +458,55 @@ export default function StudyWorkspace() {
           cards={filteredCards}
           filter={
             book?.title ??
-            (output ? "Studio flashcards" : cardId ? "Selected flashcard" : undefined)
+            (output
+              ? "Studio flashcards"
+              : cardId
+                ? "Selected flashcard"
+                : notebookId
+                  ? t("study.recall.notebookCards")
+                  : undefined)
           }
           clearFilter={() => go("cards")}
-          review={() =>
-            go("review", {
-              ...bookFilter,
-              ...(output ? { output } : {}),
-              ...(cardId ? { card: cardId } : {}),
-            })
+          creation={
+            output || cardId
+              ? false
+              : book
+                ? {
+                    origin: { kind: "book", bookId: book.id, section: book.section },
+                    notebookId: book.notebookId,
+                    tags: [book.title],
+                  }
+                : { notebookId: notebookId ?? undefined, tags: [] }
+          }
+          review={(ids) =>
+            go(
+              "review",
+              {
+                ...bookFilter,
+                ...(notebookId ? { notebook: notebookId } : {}),
+                ...(output ? { output } : {}),
+                ...(cardId ? { card: cardId } : {}),
+              },
+              ids,
+            )
           }
         />
       ) : null}
       {saved && tab === "review" ? (
         <StudyReview
-          key={params.toString()}
-          cards={filteredCards}
+          key={location.key}
+          cards={reviewIds ? filteredCards.filter(({ id }) => reviewIds.has(id)) : filteredCards}
           highlights={filteredHighlights}
           useHighlights={params.get("kind") === "highlights"}
+          books={books}
+          initialPractice={weakMode}
+          collection={
+            weakMode
+              ? t("study.recall.weakSet")
+              : reviewIds
+                ? t("study.recall.cardSelection", { count: reviewIds.size })
+                : book?.title
+          }
         />
       ) : null}
       {saved && tab === "highlights" ? (

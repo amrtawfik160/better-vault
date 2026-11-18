@@ -17,7 +17,7 @@ import { Button } from "@/components/panelui/button";
 import { Menu } from "@/components/panelui/menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useWorkspace } from "@/components/workspace/workspace-context";
-import { addStudioFlashcards } from "@/lib/db/study";
+import { addQuizMissesToStudy, addStudioFlashcards } from "@/lib/db/study";
 import { studyHref } from "@/lib/study/links";
 import { updateOutputData, useOutput } from "@/lib/db/outputs";
 import { formatRelativeTime } from "@/lib/format";
@@ -271,6 +271,23 @@ export function OutputViewer({ id }: { id: string }) {
               outputId={output.id}
               onDataChange={saveData}
               onAnnotate={annotate ? () => void annotate() : undefined}
+              onReviewMissed={
+                output.toolId === "quiz"
+                  ? async (positions) => {
+                      try {
+                        const added = await addQuizMissesToStudy(output, positions);
+                        toast.success(
+                          added
+                            ? t("quiz.viewer.savedMissed", { count: added })
+                            : t("quiz.viewer.missedAlreadySaved"),
+                        );
+                        navigate(studyHref("cards", { output: output.id }));
+                      } catch (error) {
+                        toast.error(error instanceof Error ? error.message : String(error));
+                      }
+                    }
+                  : undefined
+              }
               chrome={chrome}
               title={output.title}
               data={parsed.data}

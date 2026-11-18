@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { StudySessionReport } from "./study-session-report";
 import { StudyOriginLink } from "./study-origin-link";
+import { StudyFlashcardDraftDialog, type FlashcardSource } from "./study-flashcard-generator";
 import { originHref, studyHref } from "@/lib/study/links";
 import { Button } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
@@ -28,7 +30,9 @@ import {
   updateStudyThread,
 } from "@/lib/db/study";
 import { currentVaultId } from "@/lib/db/vaults";
-import { askStudyModel, passagesFor } from "@/lib/study/client";
+import { askStudyModel } from "@/lib/study/client";
+import { passagesFor } from "@/lib/study/passages";
+import { Markdown } from "@/components/chat/markdown";
 import { recordStudyVoice, transcribeStudyVoice } from "@/lib/study/voice";
 import {
   studyCorrections,
@@ -36,6 +40,7 @@ import {
   studyScopes,
   type StudyBook,
   type StudyThread,
+  type StudyThreadChange,
   type StudyOrigin,
 } from "@/lib/study/records";
 
@@ -254,6 +259,7 @@ export function StudyTutor({
   back: () => void;
   setup: () => void;
 }) {
+  const { t } = useTranslation("home");
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -264,6 +270,7 @@ export function StudyTutor({
     null,
   );
   const [voicePractice, setVoicePractice] = useState(false);
+  const [draftSource, setDraftSource] = useState<FlashcardSource | null>(null);
   const [temporaryTurns, setTemporaryTurns] = useState<StudyThread["messages"]>([]);
   const [micMuted, setMicMuted] = useState(false);
   const [voiceAvailable, setVoiceAvailable] = useState<boolean>();
@@ -306,14 +313,15 @@ export function StudyTutor({
       document.getElementById("study-session-report")?.scrollIntoView({ block: "start" });
   }, [focusMessage, openReport, showReport]);
 
-  async function save(change: Partial<StudyThread>) {
-    await updateStudyThread(thread, change);
+  async function save(change: StudyThreadChange) {
+    await updateStudyThread(thread.id, change);
   }
 
   async function send(message: string, submittedAt: number, spoken = false) {
     const text = message.trim();
-    if (!text || controller.current) return;
-    const passages = passagesFor(thread, book, text, vaultNotes);
+    if (!text || controller.current || !model) return;
+    const history = conversation.map(({ entry }) => entry);
+    const passages = passagesFor({ ...thread, messages: history }, book, text, vaultNotes);
     if (thread.scope !== "general" && !passages.length) {
       toast.error(
         thread.scope === "notes"
@@ -331,7 +339,7 @@ export function StudyTutor({
         action: "chat",
         input: text,
         passages,
-        thread: { ...thread, practiceLanguage, messages: conversation.map(({ entry }) => entry) },
+        thread: { ...thread, practiceLanguage, messages: history },
         signal: abort.signal,
       });
       if (abort.signal.aborted) return;
@@ -345,7 +353,7 @@ export function StudyTutor({
       ];
       if (spoken && !thread.keepVoiceTranscripts)
         setTemporaryTurns((value) => [...value, ...turns]);
-      else await save({ practiceLanguage, messages: [...thread.messages, ...turns] });
+      else await updateStudyThread(thread.id, { practiceLanguage }, turns);
       if (spoken) setVoicePractice(true);
       setInput("");
       if (spoken || readAloud) speakReply(answer.text);
@@ -428,14 +436,22 @@ export function StudyTutor({
     const abort = new AbortController();
     controller.current = abort;
     try {
+      const history = conversation.map(({ entry }) => entry);
+      const context = {
+        ...thread,
+        messages: history,
+        practiceLanguage: language.trim() || undefined,
+      };
+      const topic = history
+        .filter(({ role }) => role === "user")
+        .slice(-3)
+        .map(({ text }) => text)
+        .join(" ");
       const result = await askStudyModel({
         action: "report",
         input: "Write a report on the study conversation.",
-        thread: {
-          ...thread,
-          practiceLanguage: language.trim() || undefined,
-          messages: conversation.map(({ entry }) => entry),
-        },
+        passages: passagesFor(context, book, topic, vaultNotes),
+        thread: context,
         signal: abort.signal,
       });
       if (!abort.signal.aborted && result.report) {
@@ -488,6 +504,16 @@ export function StudyTutor({
         }),
       )
       .catch((error: Error) => toast.error(error.message));
+  }
+
+  function draftCards(text: string, origin: StudyOrigin) {
+    setDraftSource({
+      title: thread.title,
+      text,
+      origin,
+      notebookId: thread.notebookId,
+      tags: book ? [book.title] : [],
+    });
   }
 
   function makeCard(front: string, back: string, origin: StudyOrigin, id: string) {
@@ -644,7 +670,7 @@ export function StudyTutor({
       </div>
       {conversation.length ? (
         <div className="space-y-3" aria-label="Conversation">
-          {conversation.map(({ entry, index }, position) => (
+          {conversation.map(({ entry, index }) => (
             <div
               key={index === undefined ? `temporary-${entry.at}-${entry.role}` : index}
               id={index === undefined ? undefined : `study-message-${index}`}
@@ -653,9 +679,13 @@ export function StudyTutor({
               <p className="text-xs font-semibold text-muted-foreground">
                 {entry.role === "user" ? "You" : "Tutor"}
               </p>
-              <p dir="auto" className="wrap-break-word whitespace-pre-wrap">
-                {entry.text}
-              </p>
+              {entry.role === "assistant" ? (
+                <Markdown text={entry.text} />
+              ) : (
+                <p dir="auto" className="wrap-break-word whitespace-pre-wrap">
+                  {entry.text}
+                </p>
+              )}
               <div className="flex flex-wrap gap-1.5">
                 {entry.citations?.map((citation) => (
                   <StudyOriginLink
@@ -683,15 +713,14 @@ export function StudyTutor({
                       variant="ghost"
                       size="sm"
                       onClick={() =>
-                        makeCard(
-                          conversation[position - 1]?.entry.text ?? thread.title,
-                          entry.text,
-                          { kind: "tutor", threadId: thread.id, message: index },
-                          `tutor-card-${thread.id}-${index ?? entry.at}`,
-                        )
+                        draftCards(entry.text, {
+                          kind: "tutor",
+                          threadId: thread.id,
+                          message: index,
+                        })
                       }
                     >
-                      Make flashcard
+                      {t("study.capture.cardsFromAnswer")}
                     </Button>
                   </>
                 ) : null}
@@ -701,6 +730,14 @@ export function StudyTutor({
         </div>
       ) : (
         <div className="flex flex-wrap gap-2">
+          {thread.goal === "teach-back" ? (
+            <Button
+              disabled={workPending || !model}
+              onClick={() => void send(t("study.capture.practicePrompt"), Date.now())}
+            >
+              {t("study.capture.startPractice")}
+            </Button>
+          ) : null}
           {(thread.goal === "teach-back"
             ? ["Ask me to explain the main idea.", "Quiz me on the hardest part."]
             : thread.goal === "language"
@@ -736,7 +773,7 @@ export function StudyTutor({
           maxLength={12000}
         />
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="submit" disabled={!input.trim() || workPending}>
+          <Button type="submit" disabled={!input.trim() || workPending || !model}>
             {busy ? "Working…" : "Send"}
           </Button>
           {busy ? (
@@ -808,6 +845,9 @@ export function StudyTutor({
             Read replies aloud
           </label>
         </div>
+        {settings && !model ? (
+          <p className="text-sm text-muted-foreground">{t("study.capture.chooseModel")}</p>
+        ) : null}
         {voiceAvailable ? (
           <label className="flex items-center gap-1.5 text-sm">
             <input
@@ -863,6 +903,7 @@ export function StudyTutor({
           {showReport && thread.report ? (
             <StudySessionReport
               report={thread.report}
+              onDraftCard={(text) => draftCards(text, { kind: "report", threadId: thread.id })}
               onFeedback={(key, value) => {
                 const report = thread.report;
                 if (report)
@@ -926,6 +967,23 @@ export function StudyTutor({
             />
           ) : null}
         </div>
+      ) : null}
+      {draftSource ? (
+        <StudyFlashcardDraftDialog
+          source={draftSource}
+          onClose={() => setDraftSource(null)}
+          onSave={(count) =>
+            toast.success(t("study.capture.cardsSaved", { count }), {
+              action: {
+                label: t("study.capture.viewCards"),
+                onClick: () =>
+                  navigate(
+                    studyHref("cards", thread.notebookId ? { notebook: thread.notebookId } : {}),
+                  ),
+              },
+            })
+          }
+        />
       ) : null}
     </section>
   );

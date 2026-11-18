@@ -1,5 +1,5 @@
-import { Link, useSearchParams } from "react-router";
-import { useEffect } from "react";
+import { Link, useLocation, useSearchParams } from "react-router";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { buttonVariants } from "@/components/panelui/button";
 import { ChatProvider } from "@/components/chat/chat-provider";
@@ -49,13 +49,17 @@ function WorkspaceLayout() {
     readSource,
   } = useWorkspace();
   const { t } = useTranslation();
+  const { key } = useLocation();
   const [params, setParams] = useSearchParams();
+  const handled = useRef<string | null>(null);
 
   // The studio output stays in the URL. Source and Add source links are one-shot commands.
   useEffect(() => {
     const source = params.get("source");
     const view = params.get("tab");
     const addSource = params.get("add") === "source";
+    if ((!source && !view && !addSource) || handled.current === key) return;
+    handled.current = key;
     if (source) {
       setTab("sources");
       readSource(source, params.get("passage") ?? undefined);
@@ -63,13 +67,11 @@ function WorkspaceLayout() {
       setTab(view);
     }
     if (addSource) setAddSourceOpen(true);
-    if (source || view || addSource) {
-      const rest = new URLSearchParams(params);
-      for (const key of ["source", "passage", "add", "tab"]) rest.delete(key);
-      if (source || view === "chat" || view === "sources") rest.delete("output");
-      setParams(rest, { replace: true });
-    }
-  }, [params, setParams, setTab, readSource, setAddSourceOpen]);
+    const rest = new URLSearchParams(params);
+    for (const param of ["source", "passage", "add", "tab"]) rest.delete(param);
+    if (source || view === "chat" || view === "sources") rest.delete("output");
+    setParams(rest, { replace: true });
+  }, [key, params, setParams, setTab, readSource, setAddSourceOpen]);
 
   useEffect(() => {
     document.title = `${notebook.title} · ${t("appName")}`;

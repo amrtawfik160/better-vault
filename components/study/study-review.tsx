@@ -1,12 +1,13 @@
 import {
-  useCallback,
   useEffect,
   useRef,
   useState,
   type ClipboardEvent,
   type FormEvent,
+  type KeyboardEvent,
 } from "react";
 import { Link, useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { StudyFlashcardGenerator } from "./study-flashcard-generator";
 import { StudyOriginLink } from "./study-origin-link";
 import { originHref, studyHref } from "@/lib/study/links";
@@ -24,7 +25,12 @@ import {
   studyId,
 } from "@/lib/db/study";
 import { scheduleState, studyIntervalLabel } from "@/lib/study/schedule";
-import { studyRatings, type StudyRating, type StudyRecordOf } from "@/lib/study/records";
+import {
+  studyRatings,
+  type StudyBook,
+  type StudyRating,
+  type StudyRecordOf,
+} from "@/lib/study/records";
 
 type Card = StudyRecordOf<"card">;
 type Highlight = StudyRecordOf<"highlight">;
@@ -50,68 +56,75 @@ export function StudyReview({
   cards,
   highlights,
   useHighlights,
+  books,
+  collection,
+  initialPractice,
 }: {
   cards: Card[];
   highlights: Highlight[];
   useHighlights: boolean;
+  books: StudyBook[];
+  collection?: string;
+  initialPractice?: boolean;
 }) {
+  const { t } = useTranslation("home");
   const now = useReviewClock();
   const [revealed, setRevealed] = useState("");
   const [started, setStarted] = useState(Date.now);
   const [rated, setRated] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [practiced, setPracticed] = useState<string[] | null>(() => (initialPractice ? [] : null));
+  const answer = useRef<HTMLDivElement>(null);
+  const reveal = useRef<HTMLButtonElement>(null);
   const grading = useRef(false);
   const all = useHighlights ? highlights : cards;
   const due = all
     .filter(({ schedule }) => schedule.dueAt <= now)
     .toSorted((a, b) => a.schedule.dueAt - b.schedule.dueAt);
-  const item = due[0];
+  const practiceQueue = practiced ? all.filter(({ id }) => !practiced.includes(id)) : [];
+  const item = practiced ? practiceQueue[0] : due[0];
   const remaining = all.toSorted((a, b) => a.schedule.dueAt - b.schedule.dueAt)[0];
+  const isRevealed = Boolean(item && revealed === item.id);
+  const highlightBook =
+    item?.kind === "highlight" ? books.find(({ id }) => id === item.bookId) : undefined;
 
-  const grade = useCallback(
-    async (rating: StudyRating) => {
-      if (!item || grading.current) return;
-      grading.current = true;
-      setBusy(true);
-      try {
-        if (await rateStudyItem(item.id, rating, (Date.now() - started) / 1000)) {
-          setRated((value) => value + 1);
-        }
-        setRevealed("");
-        setStarted(Date.now());
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : String(error));
-      } finally {
-        grading.current = false;
-        setBusy(false);
+  async function grade(rating: StudyRating, gradedAt: number) {
+    if (!item || practiced || grading.current) return;
+    grading.current = true;
+    setBusy(true);
+    try {
+      if (await rateStudyItem(item.id, rating, (gradedAt - started) / 1000)) {
+        setRated((value) => value + 1);
       }
-    },
-    [item, started],
-  );
+      setRevealed("");
+      setStarted(gradedAt);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      grading.current = false;
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
-    if (!item) return;
-    function keydown(event: KeyboardEvent) {
-      if (event.altKey || event.metaKey || event.ctrlKey || event.shiftKey || event.repeat) return;
-      if (
-        event.target instanceof HTMLElement &&
-        event.target.closest("input, textarea, select, [contenteditable=true]")
-      )
-        return;
-      if (event.key === " " && revealed !== item.id) {
-        if (event.target instanceof HTMLElement && event.target.closest("button, a")) return;
-        event.preventDefault();
-        setRevealed(item.id);
-      }
-      const rating = studyRatings[Number(event.key) - 1];
-      if (rating && revealed === item.id) {
-        event.preventDefault();
-        void grade(rating);
-      }
+    if (isRevealed) answer.current?.focus({ preventScroll: true });
+    else if (rated || practiced?.length) reveal.current?.focus({ preventScroll: true });
+  }, [isRevealed, item?.id, rated, practiced?.length]);
+
+  function keydown(event: KeyboardEvent) {
+    if (!item || event.altKey || event.metaKey || event.ctrlKey || event.shiftKey || event.repeat)
+      return;
+    if (event.key === " " && !isRevealed) {
+      if (event.target instanceof HTMLElement && event.target.closest("button, a")) return;
+      event.preventDefault();
+      setRevealed(item.id);
     }
-    window.addEventListener("keydown", keydown);
-    return () => window.removeEventListener("keydown", keydown);
-  }, [grade, item, revealed]);
+    const rating = studyRatings[Number(event.key) - 1];
+    if (rating && isRevealed && !practiced) {
+      event.preventDefault();
+      void grade(rating, performance.timeOrigin + event.timeStamp);
+    }
+  }
 
   return (
     <section className="space-y-5">
@@ -120,13 +133,25 @@ export function StudyReview({
           {useHighlights ? "Review highlights" : "Review flashcards"}
         </h2>
         <p className="text-sm text-muted-foreground">
-          {due.length} due · {rated} reviewed this session
+          {practiced
+            ? t("study.recall.practiceRemaining", { count: practiceQueue.length })
+            : `${due.length} due · ${rated} reviewed this session`}
+          {collection ? ` · ${collection}` : ""}
         </p>
       </div>
       {item ? (
-        <div className="max-w-2xl space-y-4 rounded-2xl border bg-card p-6">
+        <div
+          className="max-w-2xl space-y-4 rounded-2xl border bg-card p-4 sm:p-6"
+          onKeyDown={keydown}
+        >
+          {highlightBook ? (
+            <p className="text-sm text-muted-foreground" dir="auto">
+              {highlightBook.title} ·{" "}
+              {highlightBook.sections[item.kind === "highlight" ? item.section : 0]?.title}
+            </p>
+          ) : null}
           <p dir="auto" className="text-xl font-medium whitespace-pre-wrap">
-            {item.kind === "card" ? item.front : "Recall why you saved this passage."}
+            {item.kind === "card" ? item.front : item.cue || "Recall why you saved this passage."}
           </p>
           {item.kind === "card" && item.image ? (
             <img
@@ -135,10 +160,12 @@ export function StudyReview({
               alt="Flashcard attachment"
             />
           ) : null}
-          {revealed !== item.id ? (
-            <Button onClick={() => setRevealed(item.id)}>Show answer</Button>
+          {!isRevealed ? (
+            <Button ref={reveal} onClick={() => setRevealed(item.id)}>
+              Show answer
+            </Button>
           ) : (
-            <>
+            <div ref={answer} tabIndex={-1} className="space-y-3 outline-none">
               <p dir="auto" className="border-t pt-4 whitespace-pre-wrap">
                 {item.kind === "card" ? item.back : item.quote}
               </p>
@@ -166,40 +193,66 @@ export function StudyReview({
               ) : item.origin ? (
                 <StudyOriginLink origin={item.origin} />
               ) : null}
-              <div className="flex flex-wrap gap-2">
-                {studyRatings.map((rating, index) => (
-                  <Button
-                    key={rating}
-                    variant={rating === "good" ? "default" : "outline"}
-                    className="capitalize"
-                    disabled={busy}
-                    onClick={() => void grade(rating)}
-                    aria-keyshortcuts={String(index + 1)}
-                    aria-label={rating}
-                  >
-                    {rating}
-                    <span className="ms-1 text-xs normal-case opacity-75">
-                      {studyIntervalLabel(item.schedule, rating)}
-                    </span>
-                  </Button>
-                ))}
-              </div>
-            </>
+              {practiced ? (
+                <Button
+                  onClick={() => {
+                    setPracticed([...practiced, item.id]);
+                    setRevealed("");
+                  }}
+                >
+                  {t("study.recall.nextPractice")}
+                </Button>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {studyRatings.map((rating, index) => (
+                    <Button
+                      key={rating}
+                      variant={rating === "good" ? "default" : "outline"}
+                      className="capitalize"
+                      disabled={busy}
+                      onClick={() => void grade(rating, Date.now())}
+                      aria-keyshortcuts={String(index + 1)}
+                      aria-label={rating}
+                    >
+                      {rating}
+                      <span className="ms-1 text-xs normal-case opacity-75">
+                        {studyIntervalLabel(item.schedule, rating)}
+                      </span>
+                    </Button>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
       ) : (
-        <p className="rounded-2xl border border-dashed p-8 text-sm text-muted-foreground">
-          {rated > 0 ? `Reviewed ${rated} this session. ` : ""}
-          {remaining
-            ? `You’re caught up. Next review ${date.format(remaining.schedule.dueAt)}.`
-            : "Add something to study first."}{" "}
-          <Link
-            to={studyHref(useHighlights ? "highlights" : "cards")}
-            className="underline underline-offset-4"
-          >
-            {useHighlights ? "Open highlights" : "Open flashcards"}
-          </Link>
-        </p>
+        <div className="space-y-3 rounded-2xl border bg-muted/25 p-5 text-sm text-muted-foreground">
+          <p>
+            {practiced ? (
+              t("study.recall.practiceComplete", { count: practiced.length })
+            ) : (
+              <>
+                {rated > 0 ? `Reviewed ${rated} this session. ` : ""}
+                {remaining
+                  ? `You’re caught up. Next review ${date.format(remaining.schedule.dueAt)}.`
+                  : "Add something to study first."}
+              </>
+            )}
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            {all.length ? (
+              <Button variant="outline" onClick={() => setPracticed([])}>
+                {t("study.recall.practiceNow")}
+              </Button>
+            ) : null}
+            <Link
+              to={studyHref(useHighlights ? "highlights" : "cards")}
+              className="underline underline-offset-4"
+            >
+              {useHighlights ? "Open highlights" : "Open flashcards"}
+            </Link>
+          </div>
+        </div>
       )}
     </section>
   );
@@ -259,12 +312,15 @@ export function CardLibrary({
   filter,
   clearFilter,
   review,
+  creation,
 }: {
   cards: Card[];
   filter?: string;
   clearFilter: () => void;
-  review: () => void;
+  review: (ids?: string[]) => void;
+  creation: Pick<Card, "notebookId" | "origin" | "tags"> | false;
 }) {
+  const { t } = useTranslation("home");
   const now = useReviewClock();
   const [generating, setGenerating] = useState(false);
   const [query, setQuery] = useState("");
@@ -299,6 +355,7 @@ export function CardLibrary({
     });
   const allShownSelected =
     cardsShown.length > 0 && cardsShown.every((card) => selected.includes(card.id));
+  const reviewSet = selectedCards.length ? selectedCards : cardsShown;
 
   function changeImage(side: "image" | "backImage", value?: string) {
     const editingId = editing?.id;
@@ -362,29 +419,39 @@ export function CardLibrary({
               </Button>
             </>
           ) : null}
-          <Button variant="outline" onClick={review} disabled={!cards.length}>
-            Review these cards
+          <Button
+            variant="outline"
+            onClick={() =>
+              review(reviewSet.length === cards.length ? undefined : reviewSet.map(({ id }) => id))
+            }
+            disabled={!reviewSet.length}
+          >
+            {selectedCards.length
+              ? t("study.recall.reviewSelected", { count: selectedCards.length })
+              : "Review these cards"}
           </Button>
           {!filter && !generating ? (
             <Button variant="outline" onClick={() => setGenerating(true)}>
               Generate from text
             </Button>
           ) : null}
-          <Button
-            onClick={() =>
-              setEditing({
-                id: studyId(),
-                kind: "card",
-                front: "",
-                back: "",
-                tags: [],
-                updatedAt: Date.now(),
-                schedule: freshSchedule(),
-              })
-            }
-          >
-            New flashcard
-          </Button>
+          {creation === false ? null : (
+            <Button
+              onClick={() =>
+                setEditing({
+                  id: studyId(),
+                  kind: "card",
+                  front: "",
+                  back: "",
+                  ...creation,
+                  updatedAt: Date.now(),
+                  schedule: freshSchedule(),
+                })
+              }
+            >
+              New flashcard
+            </Button>
+          )}
         </div>
       </div>
       {generating && !filter ? (
@@ -644,6 +711,7 @@ export function HighlightsLibrary({
   locate: (item: Highlight) => void;
   review: () => void;
 }) {
+  const { t } = useTranslation("home");
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<Highlight | null>(null);
@@ -652,7 +720,9 @@ export function HighlightsLibrary({
     <section className="space-y-5">
       <div className="flex flex-wrap justify-between gap-2">
         <h2 className="text-xl font-semibold">Highlights</h2>
-        <Button onClick={review}>Review highlights</Button>
+        <Button onClick={review} disabled={!highlights.length}>
+          Review highlights
+        </Button>
       </div>
       {filter ? <FilterCaption label={filter} clear={clearFilter} /> : null}
       <Input
@@ -664,7 +734,9 @@ export function HighlightsLibrary({
       />
       <ul className="space-y-3">
         {highlights
-          .filter((item) => (item.quote + item.note).toLowerCase().includes(query.toLowerCase()))
+          .filter((item) =>
+            [item.quote, item.note, item.cue].join(" ").toLowerCase().includes(query.toLowerCase()),
+          )
           .map((item) => (
             <li key={item.id} className="space-y-2 rounded-2xl border p-4">
               <blockquote dir="auto" className="font-medium">
@@ -680,6 +752,14 @@ export function HighlightsLibrary({
                       .catch((error: Error) => toast.error(error.message));
                   }}
                 >
+                  <Input
+                    dir="auto"
+                    aria-label={t("study.recall.cue")}
+                    placeholder={t("study.recall.cue")}
+                    value={editing.cue ?? ""}
+                    maxLength={240}
+                    onChange={(event) => setEditing({ ...editing, cue: event.target.value })}
+                  />
                   <textarea
                     dir="auto"
                     className={textArea}
@@ -705,6 +785,11 @@ export function HighlightsLibrary({
                 </form>
               ) : (
                 <>
+                  {item.cue ? (
+                    <p dir="auto" className="text-sm font-medium">
+                      {item.cue}
+                    </p>
+                  ) : null}
                   {item.note ? (
                     <p dir="auto" className="text-sm text-muted-foreground">
                       {item.note}
@@ -903,7 +988,13 @@ export function VocabularyLibrary({ words, focusedWord }: { words: Word[]; focus
                       origin: { kind: "word", wordId: word.id },
                       notebookId: word.notebookId,
                       front: word.term,
-                      back: word.translation || word.context,
+                      back: [
+                        ...new Set(
+                          [word.translation, word.note, word.context]
+                            .map((part) => part.trim())
+                            .filter(Boolean),
+                        ),
+                      ].join("\n\n"),
                       tags: [word.language || "Vocabulary"],
                     },
                     `word-card-${word.id}`,
@@ -918,7 +1009,7 @@ export function VocabularyLibrary({ words, focusedWord }: { words: Word[]; focus
                     )
                     .catch((error: Error) => toast.error(error.message));
                 }}
-                disabled={!word.translation && !word.context}
+                disabled={!word.translation.trim() && !word.note.trim() && !word.context.trim()}
               >
                 Make flashcard
               </Button>

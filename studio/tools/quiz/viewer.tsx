@@ -15,24 +15,47 @@ import type { QuizData } from "./definition";
 const LETTERS = "ABCDEFGH";
 
 /** One question at a time: pick an answer, see why, and get a score at the end. */
-export function QuizViewer({ data }: ToolViewerProps<QuizData>) {
+export function QuizViewer({ data, onReviewMissed }: ToolViewerProps<QuizData>) {
   const { t } = useTranslation("studio");
   const total = data.questions.length;
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<(number | null)[]>(() => data.questions.map(() => null));
   const [hint, setHint] = useState(false);
+  const [saving, setSaving] = useState(false);
   const finished = index >= total;
 
   if (finished) {
-    const score = answers.filter((answer, at) => answer === data.questions[at].answer).length;
+    const missed = answers.flatMap((answer, at) =>
+      answer === data.questions[at].answer ? [] : [at],
+    );
+    const score = total - missed.length;
     return (
       <div className="mx-auto flex w-full max-w-md flex-col items-center gap-4 py-16 text-center">
         <p className="text-4xl font-semibold tabular-nums">
           {score}/{total}
         </p>
         <p className="text-muted-foreground">{t("quiz.viewer.score", { score, total })}</p>
+        {onReviewMissed && missed.length ? (
+          <Button
+            shape="pill"
+            loading={saving}
+            onClick={async () => {
+              if (saving) return;
+              setSaving(true);
+              try {
+                await onReviewMissed(missed);
+              } finally {
+                setSaving(false);
+              }
+            }}
+          >
+            {t("quiz.viewer.reviewMissed", { count: missed.length })}
+          </Button>
+        ) : null}
         <Button
           shape="pill"
+          variant={onReviewMissed && missed.length ? "outline" : "default"}
+          disabled={saving}
           onClick={() => {
             setAnswers(data.questions.map(() => null));
             setIndex(0);

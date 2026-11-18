@@ -1,5 +1,6 @@
 import "fake-indexeddb/auto";
 import {
+  addQuizMissesToStudy,
   addStudyBook,
   addStudioFlashcards,
   deleteStudyBook,
@@ -8,6 +9,7 @@ import {
   putStudyRecords,
   rateStudyItem,
   saveStudyText,
+  updateStudyThread,
 } from "./study";
 import { DatabaseSync } from "node:sqlite";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -502,6 +504,93 @@ describe.each(backends)("%s store", (name, create) => {
   });
 
   describe("study", () => {
+    it("adds just the missed quiz questions and preserves their schedules on a retry", async () => {
+      const notebookId = await createNotebook("Quiz notes");
+      const output = {
+        id: "quiz",
+        notebookId,
+        title: "Check understanding",
+        toolId: "quiz",
+        status: "ready",
+        createdAt: 0,
+        updatedAt: 0,
+        options: {},
+        sourceIds: [],
+        data: {
+          questions: [
+            {
+              question: "First?",
+              options: ["A", "B"],
+              answer: 0,
+              explanation: "Because A.",
+              hint: "",
+            },
+            {
+              question: "Second?",
+              options: ["A", "B"],
+              answer: 1,
+              explanation: "Because B.",
+              hint: "",
+            },
+          ],
+        },
+      } satisfies import("./types").StudioOutput;
+      expect(await addQuizMissesToStudy(output, [1, 1, 9])).toBe(1);
+      expect(await store().getStudy("quiz-quiz-0")).toBeUndefined();
+      expect(await rateStudyItem("quiz-quiz-1", "easy", 1)).toBe(true);
+      const card = await store().getStudy("quiz-quiz-1");
+      expect(card).toMatchObject({
+        front: "Second?",
+        back: "B\n\nBecause B.",
+        origin: { kind: "studio", notebookId, outputId: "quiz" },
+      });
+      expect(await addQuizMissesToStudy(output, [1])).toBe(0);
+      expect(await store().getStudy("quiz-quiz-1")).toEqual(card);
+    });
+    it("keeps uploaded originals with notebook sources through a backup", async () => {
+      const notebookId = await createNotebook("Engineering");
+      const bytes = Uint8Array.of(37, 80, 68, 70);
+      const source = await addSource({
+        notebookId,
+        title: "Lecture",
+        kind: "pdf",
+        text: "Critical points",
+        original: { data: bytes, mime: "application/pdf" },
+      });
+      if (!source.originalFileId) throw new Error("Original was not saved");
+      const fileId = source.originalFileId;
+      expect((await store().getBlob(fileId))?.sourceId).toBe(source.id);
+      const backup = await exportBackup();
+      await deleteAllData();
+      await importBackup(backup);
+      expect((await store().getSource(source.id))?.originalFileId).toBe(fileId);
+      expect(Array.from((await store().getBlob(fileId))?.data ?? [])).toEqual([...bytes]);
+      await store().deleteSource(source.id);
+      expect(await store().getBlob(fileId)).toBeUndefined();
+    });
+    it("preserves renames and concurrent Tutor replies, and never revives a removed thread", async () => {
+      await putStudyRecords({
+        id: "thread",
+        kind: "thread",
+        title: "Before rename",
+        scope: "general",
+        goal: "general",
+        updatedAt: 0,
+        messages: [],
+      });
+      await Promise.all([
+        updateStudyThread("thread", { title: "Current title" }),
+        updateStudyThread("thread", {}, [{ role: "user", text: "Question one" }]),
+        updateStudyThread("thread", {}, [{ role: "assistant", text: "Answer one" }]),
+      ]);
+      expect(await store().getStudy("thread")).toMatchObject({
+        title: "Current title",
+        messages: [{ text: "Question one" }, { text: "Answer one" }],
+      });
+      await store().deleteStudy("thread");
+      await expect(updateStudyThread("thread", { title: "Late edit" })).rejects.toThrow();
+      expect(await store().getStudy("thread")).toBeUndefined();
+    });
     it("reads a notebook source in Study without copying or deleting the notebook", async () => {
       const notebookId = await createNotebook("Notebook");
       const source = await addSource({

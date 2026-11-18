@@ -1,4 +1,9 @@
-import type { StudyBook, StudyRecord, StudyReviewWrite } from "@/lib/study/records";
+import type {
+  StudyBook,
+  StudyRecord,
+  StudyReviewWrite,
+  StudyThreadWrite,
+} from "@/lib/study/records";
 import type {
   Chunk,
   Conversation,
@@ -80,7 +85,7 @@ export interface Backend {
   deleteFolder(id: string): Promise<void>;
 
   /** Adds a source with its passages and moves its notebook to the top. */
-  addSource(source: Source, chunks: Chunk[], now: number): Promise<void>;
+  addSource(source: Source, chunks: Chunk[], now: number, original?: StoredBlob): Promise<void>;
   getSource(id: string): Promise<Source | undefined>;
   /** The sources that exist among `ids`, in the order given. */
   getSources(ids: string[]): Promise<Source[]>;
@@ -131,6 +136,7 @@ export interface Backend {
   getStudy(id: string): Promise<StudyRecord | undefined>;
   putStudy(rows: StudyRecord[]): Promise<void>;
   insertStudy(rows: StudyRecord[]): Promise<number>;
+  patchStudyThread(write: StudyThreadWrite): Promise<boolean>;
   applyStudyReview(write: StudyReviewWrite): Promise<boolean>;
   replaceStudyText(book: StudyBook, source: Source, chunks: Chunk[]): Promise<void>;
   deleteStudy(id: string): Promise<void>;
@@ -220,7 +226,7 @@ export const writes = {
   addFolder: ["folders"],
   patchFolder: ["folders"],
   deleteFolder: ["folders", "notebooks"],
-  addSource: ["sources", "chunks", "notebooks"],
+  addSource: ["sources", "chunks", "notebooks", "blobs"],
   patchSource: ["sources"],
   patchNotebookSources: ["sources"],
   deleteSource: ["sources", "chunks", "blobs"],
@@ -235,6 +241,7 @@ export const writes = {
   putBlob: ["blobs"],
   putStudy: ["study"],
   insertStudy: ["study"],
+  patchStudyThread: ["study"],
   applyStudyReview: ["study"],
   replaceStudyText: ["study", "sources", "chunks", "notebooks"],
   deleteStudy: ["study"],
@@ -337,6 +344,7 @@ export const backendMethods = [
   "getStudy",
   "putStudy",
   "insertStudy",
+  "patchStudyThread",
   "applyStudyReview",
   "replaceStudyText",
   "deleteStudy",

@@ -204,6 +204,7 @@ export interface Source {
   url?: string;
   /** The name of an uploaded file. */
   fileName?: string;
+  originalFileId?: string;
   /** The source as plain text. */
   text: string;
   /**

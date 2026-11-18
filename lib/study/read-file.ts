@@ -31,6 +31,21 @@ async function readEpub(bytes: Uint8Array) {
   return { title: book.title, sections };
 }
 
+export async function studyPdfSections(bytes: Uint8Array): Promise<StudySection[]> {
+  const { extractText, getDocumentProxy } = await import("unpdf");
+  const pdf = await getDocumentProxy(bytes.slice());
+  try {
+    const { text } = await extractText(pdf, { mergePages: false });
+    const sections = text.map((page, index) => ({ title: `Page ${index + 1}`, text: page.trim() }));
+    if (!sections.length) throw new Error("This document has no readable pages.");
+    if (sections.reduce((total, section) => total + section.text.length, 0) > maxTextLength)
+      throw new Error("This document has too much text.");
+    return sections;
+  } finally {
+    await pdf.loadingTask.destroy();
+  }
+}
+
 export async function readStudyFile(file: File): Promise<ParsedDocument> {
   if (file.size > maxFileSize) throw new Error("Choose a file under 50 MB.");
   const bytes = new Uint8Array(await file.arrayBuffer());
@@ -38,20 +53,13 @@ export async function readStudyFile(file: File): Promise<ParsedDocument> {
   const extension = file.name.split(".").pop()?.toLowerCase();
   let result: ParsedDocument;
   if (extension === "pdf") {
-    const { extractText, getDocumentProxy } = await import("unpdf");
-    const pdf = await getDocumentProxy(bytes.slice());
-    try {
-      const { text } = await extractText(pdf, { mergePages: false });
-      result = {
-        title: fallback,
-        format: "pdf",
-        bytes,
-        mime: "application/pdf",
-        sections: text.map((page, index) => ({ title: `Page ${index + 1}`, text: page.trim() })),
-      };
-    } finally {
-      await pdf.loadingTask.destroy();
-    }
+    result = {
+      title: fallback,
+      format: "pdf",
+      bytes,
+      mime: "application/pdf",
+      sections: await studyPdfSections(bytes),
+    };
   } else if (extension === "epub") {
     const { title, sections } = await readEpub(bytes);
     result = { title: title || fallback, format: "epub", bytes, mime: epubMime, sections };

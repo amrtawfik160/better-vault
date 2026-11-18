@@ -368,10 +368,11 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
         deleteWhere("folders", "id", id);
       }),
 
-    addSource: (source, chunks, now) =>
+    addSource: (source, chunks, now, original) =>
       transaction(db, () => {
         add("sources", source);
         for (const chunk of chunks) add("chunks", chunk);
+        if (original) putBlob(original);
         touch(source.notebookId, now);
       }),
     getSource: (id) => get<Source>("sources", id),
@@ -523,6 +524,18 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
           count++;
         }
         return count;
+      }),
+    patchStudyThread: ({ id, change, append, updatedAt }) =>
+      transaction(db, () => {
+        const thread = get<StudyRecord>("study", id);
+        if (thread?.kind !== "thread") return false;
+        put("study", {
+          ...thread,
+          ...change,
+          messages: [...thread.messages, ...append],
+          updatedAt: Math.max(thread.updatedAt, updatedAt),
+        });
+        return true;
       }),
     applyStudyReview: ({ id, previousDueAt, schedule, activity }) =>
       transaction(db, () => {

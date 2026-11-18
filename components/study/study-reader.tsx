@@ -1,12 +1,17 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { Markdown } from "@/components/chat/markdown";
 import { Button } from "@/components/panelui/button";
 import { StudyEpubChapter, type StudyEpubTheme } from "./study-epub-chapter";
 import { StudyPdfPage } from "./study-pdf-page";
+import { StudyFlashcardDraftDialog, type FlashcardSource } from "./study-flashcard-generator";
 import { renderedSelection } from "./study-rendered-text";
 import { Input } from "@/components/panelui/input";
+import { Menu } from "@/components/panelui/menu";
 import { loadBlob } from "@/lib/db/blobs";
+import { useSource } from "@/lib/db/sources";
 import {
   freshSchedule,
   putStudyRecords,
@@ -22,7 +27,6 @@ import { askStudyModel } from "@/lib/study/client";
 import { locateStudyQuote } from "@/lib/study/locators";
 import { originHref, studyHref, studyNotesHref } from "@/lib/study/links";
 import type { StudyBook, StudyOrigin, StudyRecordOf } from "@/lib/study/records";
-import type { StudyAction } from "@/lib/study/ai";
 
 const colors = {
   yellow: "bg-yellow-200 text-yellow-950 dark:bg-yellow-900 dark:text-yellow-100",
@@ -98,6 +102,7 @@ export function StudyReader({
   focusedRange,
   highlights,
   openPage,
+  openPassage,
   startChat,
   back,
 }: {
@@ -107,28 +112,45 @@ export function StudyReader({
   focusedRange?: { offset: number; length: number };
   highlights: StudyRecordOf<"highlight">[];
   openPage: (section: number) => void;
+  openPassage: (section: number, range: { offset: number; length: number }) => void;
   startChat: (
     scope: "passage" | "chapter" | "book",
     section: number,
     selection?: Selection,
+    goal?: "teach-back",
   ) => void;
   back: () => void;
 }) {
   const index = Math.min(Math.max(0, requestedPage ?? book.section), book.sections.length - 1);
   const section = book.sections[index];
   const navigate = useNavigate();
+  const { t } = useTranslation("home");
+  const source = useSource(book.sourceId);
+  const fileId = source === null ? undefined : book.fileId;
+  const selectedHighlight = highlights.find((item) => item.id === focusedHighlight);
+  const anchor =
+    selectedHighlight?.section === index
+      ? locateStudyQuote(section.text, selectedHighlight.quote, selectedHighlight.offset)
+      : -1;
   const focus =
-    focusedRange &&
-    focusedRange.length > 0 &&
-    focusedRange.offset + focusedRange.length <= section.text.length
-      ? focusedRange
-      : undefined;
+    anchor >= 0 && selectedHighlight
+      ? { offset: anchor, length: selectedHighlight.quote.length }
+      : focusedRange &&
+          focusedRange.length > 0 &&
+          focusedRange.offset + focusedRange.length <= section.text.length
+        ? focusedRange
+        : undefined;
   const focusStart = focus?.offset;
   const focusLength = focus?.length;
   const textBody = useRef<HTMLElement>(null);
+  const readerTop = useRef<HTMLElement>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [cardFront, setCardFront] = useState<string | null>(null);
+  const [cardBack, setCardBack] = useState("");
+  const [draftSource, setDraftSource] = useState<FlashcardSource | null>(null);
+  const [cardSaving, setCardSaving] = useState(false);
   const [language, setLanguage] = useState("");
+  const [translating, setTranslating] = useState(false);
   const [color, setColor] = useState<keyof typeof colors>("yellow");
   const [search, setSearch] = useState("");
   const [edit, setEdit] = useState<string | null>(null);
@@ -189,8 +211,8 @@ export function StudyReader({
   useEffect(() => {
     let live = true;
     let url: string | undefined;
-    if (book.fileId)
-      void loadBlob(book.fileId).then((blob) => {
+    if (fileId)
+      void loadBlob(fileId).then((blob) => {
         if (!live || !blob) return;
         url = URL.createObjectURL(blob);
         setFileUrl(url);
@@ -199,20 +221,28 @@ export function StudyReader({
       live = false;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [book.fileId]);
+  }, [fileId]);
 
   useEffect(() => {
-    const target = focusedHighlight ?? (focusStart === undefined ? undefined : "focused-passage");
+    const target = focusStart === undefined ? focusedHighlight : "focused-passage";
     if (target) document.getElementById(target)?.scrollIntoView({ block: "center" });
   }, [focusedHighlight, index, highlights.length, focusStart, focusLength]);
 
-  function go(page: number) {
+  function clearSelection() {
     setSelection(null);
     setCardFront(null);
+    setDraftSource(null);
+    setTranslating(false);
+    pendingAssist.current?.abort();
+  }
+
+  function go(page: number) {
+    clearSelection();
     setEdit(null);
     setResult(null);
     setSearch("");
     openPage(page);
+    readerTop.current?.scrollIntoView({ block: "start" });
   }
 
   function capture() {
@@ -261,43 +291,24 @@ export function StudyReader({
       : { kind: "book", bookId: book.id, section: index };
   }
 
-  async function assist(action: StudyAction) {
+  async function assist(action: AssistResult["action"]) {
     const selected = selection;
-    if (action !== "cards" && !selected) return;
+    if (!selected) return;
     const controller = new AbortController();
     pendingAssist.current?.abort();
     pendingAssist.current = controller;
     setBusy(true);
     setResult(null);
-    const quote = selected?.text ?? section.text.slice(0, 12_000);
+    const quote = selected.text;
     try {
       const response = await askStudyModel({
         action,
         input: action === "translate" ? `Language: ${language}\nText: ${quote}` : quote,
+        passages: [{ title: section.title, text: quote }],
         signal: controller.signal,
       });
       if (controller.signal.aborted) return;
-      if (action === "cards") {
-        await Promise.all(
-          (response.cards ?? []).map(({ front, back }) =>
-            saveStudyCard({
-              front,
-              back,
-              tags: [book.title],
-              notebookId: book.notebookId,
-              origin: sourceOf(selected),
-            }),
-          ),
-        );
-        toast.success(`${response.cards?.length ?? 0} cards added`, {
-          action: {
-            label: "View flashcards",
-            onClick: () => navigate(studyHref("cards", { book: book.id })),
-          },
-        });
-      } else if (selected && (action === "translate" || action === "explain")) {
-        setResult({ action, text: response.text, selection: selected, language });
-      }
+      setResult({ action, text: response.text, selection: selected, language });
     } catch (error) {
       if (!controller.signal.aborted)
         toast.error(error instanceof Error ? error.message : String(error));
@@ -309,10 +320,10 @@ export function StudyReader({
     }
   }
 
-  function makeNote(selected: Selection) {
+  function makeNote(selected: Selection, body = selected.text) {
     void saveStudyNote({
       title: `${book.title} · ${section.title}`,
-      body: selected.text,
+      body,
       origin: sourceOf(selected),
       notebookId: book.notebookId,
     })
@@ -327,8 +338,97 @@ export function StudyReader({
       .catch((error: Error) => toast.error(error.message));
   }
 
+  function draftCards(text: string, selected?: Selection) {
+    setDraftSource({
+      title: `${book.title} · ${section.title}`,
+      text,
+      origin: sourceOf(selected),
+      notebookId: book.notebookId,
+      tags: [book.title],
+    });
+  }
+
+  function bookmarkSelection(selected: Selection) {
+    if (
+      bookmarkPlaces.some(
+        (place) =>
+          place.section === index &&
+          place.offset === selected.offset &&
+          place.quote === selected.text,
+      )
+    ) {
+      toast.info("This passage is already bookmarked.");
+      return;
+    }
+    void updateStudyBook(book.id, {
+      bookmarkPlaces: [
+        ...bookmarkPlaces,
+        {
+          id: studyId(),
+          section: index,
+          offset: selected.offset,
+          quote: selected.text,
+        },
+      ],
+    })
+      .then(() => toast.success("Passage bookmarked"))
+      .catch((error: Error) => toast.error(error.message));
+  }
+
+  function saveVocabulary(selected: Selection) {
+    const translated =
+      result?.action === "translate" && result.selection === selected ? result : null;
+    const id = studyId();
+    void putStudyRecords({
+      id,
+      kind: "word",
+      origin: sourceOf(selected),
+      term: selected.text,
+      translation: translated?.text ?? "",
+      context: section.text.slice(
+        Math.max(0, selected.offset - 100),
+        selected.offset + selected.text.length + 100,
+      ),
+      language: translated?.language ?? language,
+      note: "",
+      notebookId: book.notebookId,
+      bookId: book.id,
+      updatedAt: Date.now(),
+    })
+      .then(() =>
+        toast.success("Saved to vocabulary", {
+          action: {
+            label: "View word",
+            onClick: () => navigate(originHref({ kind: "word", wordId: id })),
+          },
+        }),
+      )
+      .catch((error: Error) => toast.error(error.message));
+  }
+
+  const query = search.trim().toLowerCase();
+  const searchResults = query
+    ? book.sections
+        .flatMap((chapter, page) => {
+          const offset = chapter.text.toLowerCase().indexOf(query);
+          return offset < 0
+            ? []
+            : [
+                {
+                  page,
+                  offset,
+                  title: chapter.title,
+                  teaser: chapter.text
+                    .slice(Math.max(0, offset - 32), offset + query.length + 64)
+                    .trim(),
+                },
+              ];
+        })
+        .slice(0, 15)
+    : [];
+
   return (
-    <section className="space-y-5">
+    <section className="space-y-5" ref={readerTop}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <Button size="sm" variant="ghost" onClick={back}>
@@ -363,7 +463,7 @@ export function StudyReader({
           >
             Highlights
           </Link>
-          {fileUrl ? (
+          {fileId && fileUrl ? (
             <a
               href={fileUrl}
               download={`${book.title}.${book.format === "text" ? "txt" : book.format}`}
@@ -372,18 +472,21 @@ export function StudyReader({
               Download original
             </a>
           ) : null}
-          {book.format === "pdf" && book.fileId ? (
+          {book.format === "pdf" && fileId ? (
             <Button variant="outline" onClick={() => setViewPdf(!viewPdf)}>
               {viewPdf ? "Hide original page" : "Show original page"}
             </Button>
           ) : null}
-          {book.format === "epub" && book.fileId ? (
+          {book.format === "epub" && fileId ? (
             <Button variant="outline" onClick={() => setViewEpub(!viewEpub)}>
               {viewEpub ? "Hide book layout" : "Show book layout"}
             </Button>
           ) : null}
         </div>
       </div>
+      {source === null ? (
+        <p className="text-sm text-muted-foreground">{t("study.capture.sourceRemoved")}</p>
+      ) : null}
       <div className="grid gap-3 rounded-2xl border p-4">
         <div className="flex flex-wrap items-center gap-2">
           <Button size="sm" variant="outline" disabled={index === 0} onClick={() => go(index - 1)}>
@@ -485,21 +588,32 @@ export function StudyReader({
           placeholder="Search this document"
           aria-label="Search this document"
         />
-        {search.trim() ? (
-          <ul className="max-h-40 space-y-1 overflow-auto text-sm">
-            {book.sections
-              .map((chapter, i) => ({ chapter, i }))
-              .filter(({ chapter }) =>
-                chapter.text.toLowerCase().includes(search.trim().toLowerCase()),
-              )
-              .map(({ chapter, i }) => (
-                <li key={i}>
-                  <Button size="sm" variant="ghost" onClick={() => go(i)}>
-                    {chapter.title}
-                  </Button>
+        {query ? (
+          searchResults.length ? (
+            <ul className="max-h-44 space-y-1 overflow-auto text-sm">
+              {searchResults.map(({ page, offset, title, teaser }) => (
+                <li key={page}>
+                  <button
+                    type="button"
+                    className="w-full cursor-pointer rounded-lg p-2 text-start hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+                    onClick={() => {
+                      clearSelection();
+                      setEdit(null);
+                      setSearch("");
+                      openPassage(page, { offset, length: query.length });
+                    }}
+                  >
+                    <span className="block font-medium">{title}</span>
+                    <span dir="auto" className="line-clamp-2 text-muted-foreground">
+                      {teaser}
+                    </span>
+                  </button>
                 </li>
               ))}
-          </ul>
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground">{t("study.capture.noMatches")}</p>
+          )
         ) : null}
       </div>
       <div className="flex flex-wrap items-center gap-2">
@@ -512,13 +626,13 @@ export function StudyReader({
         <Button
           size="sm"
           variant="outline"
-          disabled={busy || !section.text}
-          onClick={() => void assist("cards")}
+          disabled={!section.text.trim()}
+          onClick={() => draftCards(section.text)}
         >
-          Generate flashcards
+          {t("study.capture.cardsFromSection")}
         </Button>
       </div>
-      {book.format === "text" ? (
+      {book.format === "text" && !book.attachedToNotebook ? (
         edit === null ? (
           <Button variant="outline" size="sm" onClick={() => setEdit(section.text)}>
             Edit text
@@ -552,7 +666,7 @@ export function StudyReader({
         )
       ) : null}
       <div className="space-y-4 rounded-2xl border bg-card p-5 sm:p-8">
-        {viewPdf && book.fileId ? (
+        {viewPdf && fileId ? (
           <>
             <label className="flex items-center gap-2 text-sm">
               PDF zoom
@@ -568,7 +682,7 @@ export function StudyReader({
             </label>
             <StudyPdfPage
               key={index}
-              fileId={book.fileId}
+              fileId={fileId}
               page={index}
               sectionText={section.text}
               marks={pageHighlights}
@@ -577,7 +691,7 @@ export function StudyReader({
             />
           </>
         ) : null}
-        {viewEpub && book.fileId ? (
+        {viewEpub && fileId ? (
           <>
             <label className="flex items-center gap-2 text-sm">
               Reading theme
@@ -594,7 +708,7 @@ export function StudyReader({
             </label>
             <StudyEpubChapter
               key={index}
-              fileId={book.fileId}
+              fileId={fileId}
               section={section}
               index={index}
               sections={book.sections}
@@ -614,6 +728,7 @@ export function StudyReader({
           className="mx-auto max-w-prose leading-relaxed wrap-break-word whitespace-pre-wrap outline-none focus-visible:ring-2 focus-visible:ring-ring"
           style={{ fontSize: font }}
           onMouseUp={capture}
+          onTouchEnd={capture}
           onKeyUp={capture}
           onPointerMove={() => {
             latestInteraction.current = Date.now();
@@ -625,24 +740,19 @@ export function StudyReader({
         </article>
       </div>
       {selection ? (
-        <div className="sticky bottom-3 z-10 space-y-2 rounded-2xl border bg-popover p-3 shadow">
-          <p dir="auto" className="line-clamp-2 text-sm text-muted-foreground">
-            {selection.text}
-          </p>
+        <div
+          aria-label={t("study.capture.selectionActions")}
+          className="sticky bottom-3 z-10 space-y-2 rounded-2xl border bg-popover p-3 shadow"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <p dir="auto" className="line-clamp-2 text-sm text-muted-foreground">
+              {selection.text}
+            </p>
+            <Button size="sm" variant="ghost" onClick={clearSelection}>
+              {t("study.capture.dismiss")}
+            </Button>
+          </div>
           <div className="flex flex-wrap items-center gap-2">
-            <label className="text-sm">
-              Color{" "}
-              <select
-                aria-label="Highlight color"
-                className="rounded-lg border bg-background px-2 py-1"
-                value={color}
-                onChange={(event) => setColor(event.target.value as keyof typeof colors)}
-              >
-                {Object.keys(colors).map((name) => (
-                  <option key={name}>{name}</option>
-                ))}
-              </select>
-            </label>
             <Button
               size="sm"
               onClick={() => {
@@ -659,42 +769,11 @@ export function StudyReader({
                   updatedAt: Date.now(),
                   schedule: freshSchedule(),
                 })
-                  .then(() => setSelection(null))
+                  .then(clearSelection)
                   .catch((error: Error) => toast.error(error.message));
               }}
             >
               Highlight
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                const exists = bookmarkPlaces.some(
-                  (place) =>
-                    place.section === index &&
-                    place.offset === selection.offset &&
-                    place.quote === selection.text,
-                );
-                if (exists) {
-                  toast.info("This passage is already bookmarked.");
-                  return;
-                }
-                void updateStudyBook(book.id, {
-                  bookmarkPlaces: [
-                    ...bookmarkPlaces,
-                    {
-                      id: studyId(),
-                      section: index,
-                      offset: selection.offset,
-                      quote: selection.text,
-                    },
-                  ],
-                })
-                  .then(() => toast.success("Passage bookmarked"))
-                  .catch((error: Error) => toast.error(error.message));
-              }}
-            >
-              Bookmark selection
             </Button>
             <Button
               size="sm"
@@ -707,77 +786,95 @@ export function StudyReader({
             <Button
               size="sm"
               variant="outline"
-              onClick={() => startChat("passage", index, selection)}
+              onClick={() => startChat("passage", index, selection, "teach-back")}
             >
-              Ask about selection
+              {t("study.capture.practice")}
             </Button>
-            <Button size="sm" variant="outline" onClick={() => makeNote(selection)}>
-              Save to Notes
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setCardFront("")}>
-              Make flashcard
-            </Button>
-            <Input
-              className="w-32"
-              aria-label="Translate to"
-              placeholder="Language"
-              value={language}
-              onChange={(event) => setLanguage(event.target.value)}
-            />
             <Button
               size="sm"
               variant="outline"
-              disabled={busy || !language.trim()}
-              onClick={() => void assist("translate")}
-            >
-              Translate
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
               onClick={() => {
-                const translation =
-                  result?.action === "translate" && result.selection === selection ? result : null;
-                const id = studyId();
-                void putStudyRecords({
-                  id,
-                  kind: "word",
-                  origin: sourceOf(selection),
-                  term: selection.text,
-                  translation: translation?.text ?? "",
-                  context: section.text.slice(
-                    Math.max(0, selection.offset - 100),
-                    selection.offset + selection.text.length + 100,
-                  ),
-                  language: translation?.language ?? language,
-                  note: "",
-                  notebookId: book.notebookId,
-                  bookId: book.id,
-                  updatedAt: Date.now(),
-                })
-                  .then(() =>
-                    toast.success("Saved to vocabulary", {
-                      action: {
-                        label: "View word",
-                        onClick: () => navigate(originHref({ kind: "word", wordId: id })),
-                      },
-                    }),
-                  )
-                  .catch((error: Error) => toast.error(error.message));
+                setCardFront("");
+                setCardBack(selection.text);
               }}
             >
-              Save vocabulary
+              Make flashcard
             </Button>
+            <Menu>
+              <Menu.Trigger render={<Button size="sm" variant="ghost" />}>
+                {t("study.capture.more")}
+              </Menu.Trigger>
+              <Menu.Content align="end">
+                <Menu.Item onClick={() => startChat("passage", index, selection)}>
+                  Ask about selection
+                </Menu.Item>
+                <Menu.Item onClick={() => draftCards(selection.text, selection)}>
+                  {t("study.capture.cardsFromSelection")}
+                </Menu.Item>
+                <Menu.Item onClick={() => makeNote(selection)}>Save to Notes</Menu.Item>
+                <Menu.Item onClick={() => bookmarkSelection(selection)}>
+                  Bookmark selection
+                </Menu.Item>
+                <Menu.Item onClick={() => setTranslating(true)}>Translate</Menu.Item>
+                <Menu.Item onClick={() => saveVocabulary(selection)}>Save vocabulary</Menu.Item>
+                <Menu.Separator />
+                <Menu.Group>
+                  <Menu.GroupLabel>Highlight color</Menu.GroupLabel>
+                  <Menu.RadioGroup
+                    value={color}
+                    onValueChange={(value) => {
+                      if (
+                        value === "yellow" ||
+                        value === "green" ||
+                        value === "blue" ||
+                        value === "pink"
+                      )
+                        setColor(value);
+                    }}
+                  >
+                    {Object.keys(colors).map((name) => (
+                      <Menu.RadioItem key={name} value={name} className="capitalize">
+                        {name}
+                      </Menu.RadioItem>
+                    ))}
+                  </Menu.RadioGroup>
+                </Menu.Group>
+              </Menu.Content>
+            </Menu>
           </div>
+          {translating ? (
+            <form
+              className="flex flex-wrap items-center gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (language.trim() && !busy) void assist("translate");
+              }}
+            >
+              <Input
+                className="max-w-40"
+                aria-label="Translate to"
+                placeholder="Language"
+                value={language}
+                onChange={(event) => setLanguage(event.target.value)}
+              />
+              <Button type="submit" size="sm" variant="outline" disabled={busy || !language.trim()}>
+                Translate
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setTranslating(false)}>
+                {t("study.capture.dismiss")}
+              </Button>
+            </form>
+          ) : null}
           {cardFront !== null ? (
             <form
               className="flex flex-wrap gap-2"
               onSubmit={(event) => {
                 event.preventDefault();
-                if (!cardFront.trim()) return;
+                if (cardSaving || !cardFront.trim() || !cardBack.trim()) return;
+                setCardSaving(true);
                 void saveStudyCard({
                   front: cardFront.trim(),
-                  back: selection.text,
+                  back: cardBack.trim(),
                   tags: [book.title],
                   notebookId: book.notebookId,
                   origin: sourceOf(selection),
@@ -791,7 +888,8 @@ export function StudyReader({
                       },
                     });
                   })
-                  .catch((error: Error) => toast.error(error.message));
+                  .catch((error: Error) => toast.error(error.message))
+                  .finally(() => setCardSaving(false));
               }}
             >
               <Input
@@ -801,7 +899,17 @@ export function StudyReader({
                 placeholder="Question to review"
                 className="max-w-sm"
               />
-              <Button type="submit" size="sm" disabled={!cardFront.trim()}>
+              <Input
+                value={cardBack}
+                onChange={(event) => setCardBack(event.target.value)}
+                aria-label={t("study.capture.flashcardAnswer")}
+                className="min-w-0 sm:flex-1"
+              />
+              <Button
+                type="submit"
+                size="sm"
+                disabled={cardSaving || !cardFront.trim() || !cardBack.trim()}
+              >
                 Save flashcard
               </Button>
               <Button type="button" variant="ghost" size="sm" onClick={() => setCardFront(null)}>
@@ -809,12 +917,43 @@ export function StudyReader({
               </Button>
             </form>
           ) : null}
-          {result && result.selection === selection ? (
-            <p dir="auto" className="text-sm whitespace-pre-wrap">
-              {result.text}
+          {busy ? (
+            <p className="text-sm text-muted-foreground" role="status">
+              {t("study.capture.working")}
             </p>
           ) : null}
+          {result && result.selection === selection ? (
+            <div className="max-h-[40dvh] space-y-2 overflow-auto border-t pt-2">
+              <Markdown text={result.text} />
+              <div className="flex flex-wrap gap-1">
+                <Button variant="ghost" size="sm" onClick={() => makeNote(selection, result.text)}>
+                  {t("study.capture.saveAnswer")}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => draftCards(result.text, selection)}
+                >
+                  {t("study.capture.cardsFromAnswer")}
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </div>
+      ) : null}
+      {draftSource ? (
+        <StudyFlashcardDraftDialog
+          source={draftSource}
+          onClose={() => setDraftSource(null)}
+          onSave={(count) =>
+            toast.success(t("study.capture.cardsSaved", { count }), {
+              action: {
+                label: t("study.capture.viewCards"),
+                onClick: () => navigate(studyHref("cards", { book: book.id })),
+              },
+            })
+          }
+        />
       ) : null}
     </section>
   );

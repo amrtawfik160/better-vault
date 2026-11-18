@@ -1,12 +1,15 @@
 import { generateId } from "ai";
 import { freshSchedule, nextStudySchedule } from "@/lib/study/schedule";
 import { originHref } from "@/lib/study/links";
+import { studyPdfSections } from "@/lib/study/read-file";
 import { flashcardsData } from "@/studio/tools/flashcards/definition";
+import { quizData } from "@/studio/tools/quiz/definition";
 import { chunkText, normaliseText } from "@/lib/grounding/chunk";
 import type {
   StudyBook,
   StudyOrigin,
   StudyThread,
+  StudyThreadChange,
   StudyRecordOf,
   StudyRating,
   StudyRecord,
@@ -14,7 +17,6 @@ import type {
 } from "@/lib/study/records";
 import { createNote } from "./notes";
 import type { Note, Source, StudioOutput } from "./types";
-import { saveBlob } from "./blobs";
 import { useStoreQuery } from "./live";
 import { createNotebook, deleteNotebook, renameNotebook } from "./notebooks";
 import { addSource, renameSource } from "./sources";
@@ -32,8 +34,13 @@ export function putStudyRecords(...rows: StudyRecord[]) {
   return store().putStudy(rows);
 }
 
-export function updateStudyThread(thread: StudyThread, change: Partial<StudyThread>) {
-  return putStudyRecords({ ...thread, ...change, updatedAt: Date.now() });
+export async function updateStudyThread(
+  id: string,
+  change: StudyThreadChange,
+  append: StudyThread["messages"] = [],
+) {
+  if (!(await store().patchStudyThread({ id, change, append, updatedAt: Date.now() })))
+    throw new Error("This Tutor conversation is no longer available.");
 }
 
 export async function studyConversationDefaults(goal: StudyThread["goal"]) {
@@ -70,17 +77,14 @@ export async function addStudyBook(input: {
       title,
       text,
       kind: input.format === "pdf" ? "pdf" : "text",
+      original: input.bytes && input.mime ? { data: input.bytes, mime: input.mime } : undefined,
     });
-    const fileId =
-      input.bytes && input.mime
-        ? await saveBlob({ notebookId, sourceId: source.id, data: input.bytes, mime: input.mime })
-        : undefined;
     const book: StudyBook = {
       id: studyId(),
       kind: "book",
       notebookId,
       sourceId: source.id,
-      fileId,
+      fileId: source.originalFileId,
       title,
       format: input.format,
       sections: input.sections,
@@ -104,20 +108,32 @@ export async function studyBookForSource(sourceId: string) {
   if (existing) return existing;
   const source = await backend.getSource(sourceId);
   if (!source) throw new Error("This source was removed.");
-  const book = bookFromSource(source);
+  const original =
+    source.kind === "pdf" && source.originalFileId
+      ? await backend.getBlob(source.originalFileId)
+      : undefined;
+  const pages =
+    original?.mime === "application/pdf"
+      ? await studyPdfSections(original.data).catch(() => undefined)
+      : undefined;
+  const book = bookFromSource(
+    source,
+    pages && original ? { sections: pages, fileId: original.id } : undefined,
+  );
   await backend.insertStudy([book]);
   return book;
 }
 
-function bookFromSource(source: Source): StudyBook {
+function bookFromSource(source: Source, pdf?: Pick<StudyBook, "sections" | "fileId">): StudyBook {
   return {
     id: `source-${source.id}`,
     kind: "book",
     notebookId: source.notebookId,
     sourceId: source.id,
     title: source.title,
-    format: "text",
-    sections: [{ title: source.title, text: source.text }],
+    format: pdf ? "pdf" : "text",
+    fileId: pdf?.fileId,
+    sections: pdf?.sections ?? [{ title: source.title, text: source.text }],
     section: 0,
     bookmarks: [],
     attachedToNotebook: true,
@@ -174,6 +190,31 @@ export async function addStudioFlashcards(output: StudioOutput) {
       ),
     ),
   );
+}
+
+export async function addQuizMissesToStudy(output: StudioOutput, missed: readonly number[]) {
+  if (output.status !== "ready" || output.toolId !== "quiz")
+    throw new Error("Open a completed Studio quiz first.");
+  const { questions } = quizData.parse(output.data);
+  const cards = [...new Set(missed)].flatMap((position) => {
+    const question = questions[position];
+    const answer = question?.options[question.answer]?.trim();
+    if (!question?.question.trim() || !answer) return [];
+    return [
+      newStudyCard(
+        {
+          notebookId: output.notebookId,
+          origin: { kind: "studio", notebookId: output.notebookId, outputId: output.id },
+          front: question.question.trim(),
+          back: [answer, question.explanation.trim()].filter(Boolean).join("\n\n"),
+          tags: [output.title],
+        },
+        `quiz-${output.id}-${position}`,
+      ),
+    ];
+  });
+  if (!cards.length) throw new Error("This quiz has no missed questions to add.");
+  return store().insertStudy(cards);
 }
 
 export async function startNoteTutor(note: Pick<Note, "id" | "vaultId" | "notebookId" | "title">) {
@@ -294,7 +335,8 @@ export async function recordStudyActivity(
 export async function saveStudyText(bookId: string, text: string) {
   const backend = store();
   const book = await backend.getStudy(bookId);
-  if (book?.kind !== "book" || book.format !== "text") throw new Error("Choose a text document.");
+  if (book?.kind !== "book" || book.format !== "text" || book.attachedToNotebook)
+    throw new Error("Choose a text document created in Study.");
   const source = await backend.getSource(book.sourceId);
   if (!source) throw new Error("The notebook source was deleted.");
   const body = normaliseText(text);

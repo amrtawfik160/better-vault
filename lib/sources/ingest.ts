@@ -68,7 +68,12 @@ export async function ingestFile(notebookId: string, file: File): Promise<Source
         error instanceof Error ? error.message : String(error),
       );
     }
-    const source = await save({ ...base, kind: "pdf", text: parsed.text });
+    const source = await save({
+      ...base,
+      kind: "pdf",
+      text: parsed.text,
+      original: { mime: "application/pdf", data: new Uint8Array(await file.arrayBuffer()) },
+    });
     // The pictures follow in the background; the source can be used at once.
     void import("./pdf-images")
       .then(({ pdfImages }) => pdfImages(file, source.text))

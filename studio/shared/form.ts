@@ -45,6 +45,8 @@ export interface ToolViewerProps<Data> {
   onDataChange?: (data: Data) => Promise<void>;
   /** Opens the output's picture on a new whiteboard, to draw on it. */
   onAnnotate?: () => void;
+  /** Adds the missed questions from a finished quiz to Study. */
+  onReviewMissed?: (positions: readonly number[]) => Promise<void>;
   /** The element the viewer scrolls in, for parts that follow the reading. */
   scrollRef?: import("react").RefObject<HTMLElement | null>;
   /** The title and actions, for immersive viewers. */

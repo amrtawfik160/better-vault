@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/panelui/button";
 import { studyBookForSource } from "@/lib/db/study";
 import { studyHref } from "@/lib/study/links";
+import { findStudyExcerpt } from "@/lib/study/locators";
 import { Icon } from "@/components/icon";
 import { Markdown } from "@/components/chat/markdown";
 import { Dialog } from "@/components/panelui/dialog";
@@ -72,7 +73,18 @@ function ReaderBody({ sourceId, passage }: { sourceId: string; passage?: string 
           onClick={() => {
             setOpening(true);
             void studyBookForSource(source.id)
-              .then((book) => navigate(studyHref("library", { book: book.id })))
+              .then((book) => {
+                const chunk = chunks?.find(({ id }) => id === passage);
+                const anchor = chunk ? findStudyExcerpt(book.sections, chunk.text) : undefined;
+                navigate(
+                  studyHref("library", {
+                    book: book.id,
+                    ...(anchor
+                      ? { page: anchor.section, at: anchor.offset, length: anchor.length }
+                      : {}),
+                  }),
+                );
+              })
               .catch((error: Error) => {
                 toast.error(error.message);
                 setOpening(false);

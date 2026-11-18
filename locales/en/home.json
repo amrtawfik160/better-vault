@@ -144,6 +144,58 @@
   },
   "study": {
     "sections": "Study sections",
+    "today": {
+      "streak_one": "{{count}} day study streak",
+      "streak_other": "{{count}} day study streak",
+      "cardsDue_one": "Review {{count}} due flashcard",
+      "cardsDue_other": "Review {{count}} due flashcards",
+      "highlightsDue_one": "Review {{count}} due highlight",
+      "highlightsDue_other": "Review {{count}} due highlights"
+    },
+    "recall": {
+      "practiceRemaining_one": "Practice only · {{count}} left",
+      "practiceRemaining_other": "Practice only · {{count}} left",
+      "practiceComplete_one": "Practiced {{count}} item.",
+      "practiceComplete_other": "Practiced {{count}} items.",
+      "nextPractice": "Next practice item",
+      "practiceNow": "Practice now",
+      "needsPractice": "Needs more practice",
+      "weakSet": "Cards you found difficult",
+      "practiceWeakCards_one": "Practice {{count}} difficult card",
+      "practiceWeakCards_other": "Practice {{count}} difficult cards",
+      "rating": {
+        "again": "Again",
+        "hard": "Hard"
+      },
+      "reviewSelected_one": "Review {{count}} selected card",
+      "reviewSelected_other": "Review {{count}} selected cards",
+      "cardSelection_one": "{{count}} chosen card",
+      "cardSelection_other": "{{count}} chosen cards",
+      "notebookCards": "Notebook flashcards",
+      "cue": "Recall question"
+    },
+    "capture": {
+      "draftCards": "Draft flashcards",
+      "cardsFromSection": "Draft cards from this section",
+      "cardsFromSelection": "Draft cards from selection",
+      "cardsFromAnswer": "Draft cards from this answer",
+      "saveAnswer": "Save answer to Notes",
+      "flashcardAnswer": "Flashcard answer",
+      "working": "Working on this passage…",
+      "practice": "Practice this passage",
+      "selectionActions": "Selected passage actions",
+      "more": "More passage actions",
+      "practicePrompt": "Ask me to explain the core idea in my own words. Ask one question at a time and wait for my attempt.",
+      "startPractice": "Start practice",
+      "chooseModel": "Choose a model in AI providers to use Tutor.",
+      "draftFromFeedback": "Draft cards from this feedback",
+      "noMatches": "No matching passages",
+      "sourceRemoved": "The notebook source was removed. You can still study the saved text.",
+      "dismiss": "Dismiss",
+      "cardsSaved_one": "{{count}} flashcard saved",
+      "cardsSaved_other": "{{count}} flashcards saved",
+      "viewCards": "View flashcards"
+    },
     "tabs": {
       "today": "Today",
       "library": "Library",

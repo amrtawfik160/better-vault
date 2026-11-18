@@ -126,10 +126,11 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
         await db.folders.delete(id);
       }),
 
-    addSource: (source, chunks, now) =>
-      db.transaction("rw", [db.sources, db.chunks, db.notebooks], async () => {
+    addSource: (source, chunks, now, original) =>
+      db.transaction("rw", [db.sources, db.chunks, db.notebooks, db.blobs], async () => {
         await db.sources.add(source);
         await db.chunks.bulkAdd(chunks);
+        if (original) await db.blobs.add(original);
         await db.notebooks.update(source.notebookId, { updatedAt: now });
       }),
     getSource: (id) => db.sources.get(id),
@@ -242,6 +243,19 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
         const pending = unique.filter((_, index) => !existing[index]);
         await db.study.bulkAdd(pending);
         return pending.length;
+      }),
+    patchStudyThread: ({ id, change, append, updatedAt }) =>
+      db.transaction("rw", db.study, async () => {
+        const thread = await db.study.get(id);
+        if (thread?.kind !== "thread") return false;
+        const next = {
+          ...thread,
+          ...change,
+          messages: [...thread.messages, ...append],
+          updatedAt: Math.max(thread.updatedAt, updatedAt),
+        };
+        await db.study.put(next);
+        return true;
       }),
     applyStudyReview: ({ id, previousDueAt, schedule, activity }) =>
       db.transaction("rw", db.study, async () => {

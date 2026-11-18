@@ -32,14 +32,15 @@ const reply = z.object({
 });
 
 const instructions = {
-  chat: "Answer the student. If supplied, ground factual claims about the text in the numbered passages and return the passage numbers in citations. State when the excerpt does not answer the question.",
-  explain: "Explain the selected material clearly, defining any unfamiliar terms.",
+  chat: "Answer the student in readable Markdown. Start with the core idea and unpack difficult steps. Use a short example when it shows how the idea works. If supplied, ground factual claims about the text in the numbered passages and return the passage numbers in citations. State when the excerpts do not answer the question.",
+  explain:
+    "Explain the selected material in Markdown. Give the core idea first, define unfamiliar terms in context, and walk through the reasoning step by step. If useful, include a short worked example and distinguish it from the source.",
   translate:
     "Translate the selected material into the requested language, retaining the meaning in context.",
   cards:
-    "Make distinct flashcards for retrieval practice. Each front should test one idea and each back should explain the answer. Only use the study material. Return the cards in cards.",
+    "Make distinct flashcards for retrieval practice. Each front should name enough context to stand alone and test one idea; use mechanism, comparison or application questions when the material supports them. Each back should give a brief answer and the reason. Only use the study material. Return the cards in cards.",
   report:
-    "Summarize the learner’s study session in report. Give specific subject-matter observations in technicalFeedback and useful next steps in nextSteps. Base feedback only on the supplied conversation. Keep the corrections array empty.",
+    "Summarize the learner’s study session in report. Give specific subject-matter observations in technicalFeedback and useful next steps in nextSteps. Use the conversation as evidence of the learner’s understanding and check technical feedback against numbered passages when available. Keep the corrections array empty.",
 } as const;
 
 export async function POST(request: Request) {
@@ -72,7 +73,7 @@ export async function POST(request: Request) {
           : "Use only the learner’s own words for languageFeedback. Include the original phrase, an improved phrase and a brief reason. Suggest vocabulary with a definition, example, and translation when the language was specified. Do not judge pronunciation from text."
         : "",
       action === "chat" && goal === "teach-back"
-        ? "Ask the student to explain the topic in their own words and guide them with follow-up questions."
+        ? "Ask one question at a time before giving the answer. After the student tries, point out what was accurate, identify one specific gap, and ask them to try again or apply the idea to an example."
         : "",
       action === "chat" && correct
         ? "Offer brief, specific corrections for language mistakes."
