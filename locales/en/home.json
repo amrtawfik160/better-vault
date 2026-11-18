@@ -246,6 +246,7 @@
       "tutorPrompt": "Quiz me on this flashcard. Ask me to explain the idea before showing the answer.",
       "notebookCards": "Notebook flashcards",
       "noteCards": "Note flashcards",
+      "backToNote": "Back to note",
       "cue": "Recall question"
     },
     "followUps": {

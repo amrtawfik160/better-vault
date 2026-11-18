@@ -10,6 +10,7 @@ import {
   GridViewIcon,
   Menu01Icon,
   MoreHorizontalIcon,
+  Note01Icon,
   Search01Icon,
 } from "@hugeicons/core-free-icons";
 import {
@@ -445,6 +446,9 @@ export function NotebookHome() {
             <Icon icon={Search01Icon} size={18} />
           </button>
           <span className="flex gap-1 md:hidden">
+            <ToolButton label={tNotes("title")} onClick={() => showSection("notes")}>
+              <Icon icon={Note01Icon} size={18} />
+            </ToolButton>
             <ToolButton
               label={t(studying ? "vaults.all" : "vaults.study")}
               onClick={() => showSection(studying ? "all" : "study")}

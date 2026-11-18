@@ -536,8 +536,9 @@ export default function StudyWorkspace({
   const cardId = params.get("card");
   const noteId = params.get("note");
   const noteFilter = noteId ? { note: noteId } : undefined;
+  const collectionNote = vaultNotes.find(({ id }) => id === noteId);
   const noteCollection = noteId
-    ? (vaultNotes.find(({ id }) => id === noteId)?.title ?? t("study.recall.noteCards"))
+    ? (collectionNote?.title ?? t("study.recall.noteCards"))
     : undefined;
   const notebookId = params.get("notebook");
   const requestedReview = selection?.studyReviewIds;
@@ -825,6 +826,7 @@ export default function StudyWorkspace({
       {ready && !unavailableBook && tab === "cards" ? (
         <CardLibrary
           cards={filteredCards}
+          noteId={collectionNote?.id}
           vaultId={studyVaultId}
           practice={(ids) => void openTutorSelection("card", ids)}
           openingPractice={openingPractice}

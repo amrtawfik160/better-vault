@@ -587,7 +587,9 @@ function NextParts({ render, payload }: { render: (payload: any) => ReactNode; p
   return <>{render(payload)}</>;
 }
 
-export interface SheetContentProps extends Omit<ComponentProps<'div'>, 'children'> {
+// Notes keeps its keyboard search and editor focus when this sheet opens or closes.
+export interface SheetContentProps extends Omit<ComponentProps<'div'>, 'children'>,
+  Pick<ComponentProps<typeof Drawer.Popup>, 'initialFocus' | 'finalFocus'> {
   children?: ReactNode;
   /**
    * Stand clear of the screen edges with every corner rounded. On by default;
@@ -632,6 +634,8 @@ function SheetContent({
   closeLabel = 'Close',
   blur = false,
   inline = false,
+  initialFocus,
+  finalFocus,
   className,
   ...props
 }: SheetContentProps) {
@@ -687,7 +691,12 @@ function SheetContent({
         />
       )}
       <Drawer.Viewport className={slots.viewport()}>
-        <Drawer.Popup className={slots.popup({ className: [vertical && slots.stacked(), className] })} {...props}>
+        <Drawer.Popup
+          className={slots.popup({ className: [vertical && slots.stacked(), className] })}
+          initialFocus={initialFocus}
+          finalFocus={finalFocus}
+          {...props}
+        >
           {/* The popup is portalled out from under the provider, so the
               context is given again for the parts inside it. */}
           <SheetContext.Provider value={context}>{inside}</SheetContext.Provider>

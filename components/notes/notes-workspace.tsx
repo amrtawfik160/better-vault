@@ -6,6 +6,7 @@ import {
   Edit02Icon,
   HierarchyCircle01Icon,
   KeyboardIcon,
+  Menu01Icon,
   Note01Icon,
   SidebarRightIcon,
 } from "@hugeicons/core-free-icons";
@@ -22,6 +23,7 @@ import { startNoteTutor } from "@/lib/db/study";
 import { studyHref } from "@/lib/study/links";
 import { studyReturnState } from "@/lib/study/return-links";
 import { Button } from "@/components/panelui/button";
+import { Sheet } from "@/components/panelui/sheet";
 import { useCurrentVault, vaultOf } from "@/lib/db/vaults";
 import { formatRelativeTime } from "@/lib/format";
 import type { GraphNode } from "@/lib/notes/graph";
@@ -46,6 +48,13 @@ const GRAPH_TAB = "graph";
 const TABS_KEY = "better-vault:notes-tabs";
 const MODE_KEY = "better-vault:notes-mode";
 const DETAILS_KEY = "better-vault:notes-details";
+const listBreakpoint = "(min-width: 48rem)";
+const detailsBreakpoint = "(min-width: 64rem)";
+
+function noteLayout() {
+  if (typeof window === "undefined" || window.matchMedia(detailsBreakpoint).matches) return "wide";
+  return window.matchMedia(listBreakpoint).matches ? "split" : "narrow";
+}
 
 const read = <T,>(key: string, fallback: T): T => {
   try {
@@ -71,6 +80,7 @@ const write = (key: string, value: unknown) => {
  */
 export default function NotesWorkspace() {
   const { t, i18n } = useTranslation("notes");
+  const { t: common } = useTranslation();
   const navigate = useNavigate();
   const { state, key: routeKey } = useLocation();
   const world = useNotesWorld();
@@ -86,6 +96,8 @@ export default function NotesWorkspace() {
   const [mode, setMode] = useState<"edit" | "read">(() => read(MODE_KEY, "edit"));
   const [dismissedMatch, setDismissedMatch] = useState<string | null>(null);
   const [details, setDetails] = useState<boolean>(() => read(DETAILS_KEY, true));
+  const [layout, setLayout] = useState(noteLayout);
+  const [mobilePane, setMobilePane] = useState<"library" | "details" | null>(null);
   const [query, setQuery] = useState("");
   const [switcher, setSwitcher] = useState(false);
   const [shortcuts, setShortcuts] = useState(false);
@@ -95,12 +107,15 @@ export default function NotesWorkspace() {
   const editor = useRef<NoteEditorHandle>(null);
   const readingBody = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const focusLibrarySearch = useRef(false);
+  const returnPaneFocus = useRef(true);
   const pendingReveal = useRef<string | null>(null);
   const revealedRoute = useRef<string | null>(null);
 
   const notes = world?.notes;
   const byId = useMemo(() => new Map((notes ?? []).map((note) => [note.id, note])), [notes]);
   const note = activeId ? (byId.get(activeId) ?? null) : null;
+  const libraryOnly = layout === "narrow" && !note && !graphOpen;
   const noteId = note?.id ?? null;
   // A note opened through search or a citation bypasses the tab switcher.
   if (lastActiveNote !== noteId) {
@@ -142,6 +157,26 @@ export default function NotesWorkspace() {
   useEffect(() => write(TABS_KEY, tabs), [tabs]);
   useEffect(() => write(MODE_KEY, mode), [mode]);
   useEffect(() => write(DETAILS_KEY, details), [details]);
+  useEffect(() => {
+    const queries = [window.matchMedia(listBreakpoint), window.matchMedia(detailsBreakpoint)];
+    const resize = () => {
+      setLayout(noteLayout());
+      setMobilePane(null);
+    };
+    queries.forEach((query) => query.addEventListener("change", resize));
+    return () => queries.forEach((query) => query.removeEventListener("change", resize));
+  }, []);
+
+  const choosePane = useCallback((pane: "library" | "details", search = false) => {
+    returnPaneFocus.current = true;
+    focusLibrarySearch.current = search;
+    setMobilePane(pane);
+  }, []);
+
+  function leavePane() {
+    returnPaneFocus.current = false;
+    setMobilePane(null);
+  }
 
   const show = useCallback(
     (next: { note?: string | null; graph?: boolean }, record = true) => {
@@ -212,7 +247,7 @@ export default function NotesWorkspace() {
   const revealHeading = useCallback(
     (heading: string) => {
       if (!note) return;
-      const found = extractHeadings(note.body).find((each) => sameName(each.text, heading));
+      const found = extractHeadings(noteEditorText(note.body)).find((each) => sameName(each.text, heading));
       if (!found) return;
       setMode("edit");
       requestAnimationFrame(() => editor.current?.reveal(found.from));
@@ -306,7 +341,8 @@ export default function NotesWorkspace() {
         openCommandPalette();
       } else if (mod && event.shiftKey && key === "f") {
         event.preventDefault();
-        searchRef.current?.focus();
+        if (layout === "narrow" && !libraryOnly && mobilePane !== "library") choosePane("library", true);
+        else searchRef.current?.focus();
       } else if (mod && !event.shiftKey && key === "e") {
         event.preventDefault();
         toggleMode();
@@ -330,7 +366,7 @@ export default function NotesWorkspace() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [newNote, openGraph, show, go, closeTab, graphOpen, activeId, toggleMode]);
+  }, [newNote, openGraph, show, go, closeTab, graphOpen, activeId, toggleMode, layout, libraryOnly, mobilePane, choosePane]);
 
   const completion = useCallback((): CompletionWorld => {
     if (!world) return { notes: [], notebooks: [], sources: [], tags: [] };
@@ -359,6 +395,7 @@ export default function NotesWorkspace() {
   );
 
   if (!world) return null;
+  const noteVaults = world.vaults;
 
   const vaultLabel = (each: Note) => {
     if (each.vaultId === vaultId) return null;
@@ -369,65 +406,143 @@ export default function NotesWorkspace() {
   // Tabs of deleted notes are left out.
   const visibleTabs = tabs.filter((id) => id === GRAPH_TAB || byId.has(id));
 
+  function renderLibrary(inSheet = false) {
+    return (
+      <NoteList
+        title={t("title")}
+        inSheet={inSheet}
+        banner={
+          filterNotebook ? (
+            <div className="flex items-center gap-2 rounded-xl bg-muted px-2.5 py-1.5 text-xs">
+              <span className="min-w-0 flex-1 truncate">
+                {t("fromNotebook", { title: filterNotebook.title })}
+              </span>
+              <button
+                type="button"
+                aria-label={t("thisVault")}
+                onClick={() =>
+                  setParams(
+                    { view: "notes", ...(activeId ? { note: activeId } : {}) },
+                    { state: studyReturnState(state) },
+                  )
+                }
+                className="flex size-5 cursor-pointer items-center justify-center rounded-full outline-none hover:bg-background focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Icon icon={Cancel01Icon} size={12} />
+              </button>
+            </div>
+          ) : null
+        }
+        notes={listNotes}
+        vaults={noteVaults}
+        activeId={graphOpen ? null : activeId}
+        query={query}
+        onQuery={setQuery}
+        onOpenGraph={libraryOnly ? openGraph : undefined}
+        onOpen={(id, newTab) => {
+          if (inSheet) leavePane();
+          open(id, newTab);
+        }}
+        onCreate={() => {
+          if (inSheet) leavePane();
+          void newNote();
+        }}
+        onImport={(files) =>
+          void (async () => {
+            let opened: string | null = null;
+            for (const file of files) {
+              const created = await createNote({
+                vaultId: filterNotebook?.vaultId ?? vaultId,
+                title: file.name.replace(/\.(md|markdown|txt)$/i, ""),
+                body: await file.text(),
+                notebookId: notebookFilter,
+              });
+              opened ??= created.id;
+            }
+            toast.success(t("actions.imported", { count: files.length }));
+            if (opened) {
+              if (inSheet) leavePane();
+              open(opened);
+            }
+          })()
+        }
+        onDeleted={(id) => {
+          if (inSheet && id === activeId) leavePane();
+          closeTab(id);
+        }}
+        searchRef={searchRef}
+      />
+    );
+  }
+
+  function renderDetails(inSheet = false) {
+    if (!note || !world) return null;
+    return (
+      <NoteDetails
+        note={note}
+        world={world}
+        onOpen={(id) => {
+          if (inSheet) leavePane();
+          open(id);
+        }}
+        onLinkMention={(other) => {
+          const pattern = new RegExp(
+            `(^|[^\\p{L}\\p{N}\\[])(${note.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})(?![\\p{L}\\p{N}\\]])`,
+            "iu",
+          );
+          void saveNoteBody(
+            other.id,
+            other.body.replace(
+              pattern,
+              (_, lead: string, name: string) =>
+                `${lead}[[${note.title}${name === note.title ? "" : `|${name}`}]]`,
+            ),
+          );
+        }}
+        onHeading={(offset) => {
+          if (inSheet) leavePane();
+          setMode("edit");
+          requestAnimationFrame(() => editor.current?.reveal(offset));
+        }}
+      />
+    );
+  }
+
   return (
     <div className="flex h-full min-h-0 gap-2">
-      {/* Two panels: the list of notes, and the open note (or the graph). */}
-      <div className="hidden w-72 shrink-0 flex-col overflow-hidden rounded-3xl bg-card ring-1 ring-border md:flex">
-        <NoteList
-          title={t("title")}
-          banner={
-            filterNotebook ? (
-              <div className="flex items-center gap-2 rounded-xl bg-muted px-2.5 py-1.5 text-xs">
-                <span className="min-w-0 flex-1 truncate">
-                  {t("fromNotebook", { title: filterNotebook.title })}
-                </span>
-                <button
-                  type="button"
-                  aria-label={t("thisVault")}
-                  onClick={() =>
-                    setParams(
-                      { view: "notes", ...(activeId ? { note: activeId } : {}) },
-                      { state: studyReturnState(state) },
-                    )
-                  }
-                  className="flex size-5 cursor-pointer items-center justify-center rounded-full outline-none hover:bg-background focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <Icon icon={Cancel01Icon} size={12} />
-                </button>
-              </div>
-            ) : null
-          }
-          notes={listNotes}
-          vaults={world.vaults}
-          activeId={graphOpen ? null : activeId}
-          query={query}
-          onQuery={setQuery}
-          onOpen={open}
-          onCreate={() => void newNote()}
-          onImport={(files) =>
-            void (async () => {
-              let opened: string | null = null;
-              for (const file of files) {
-                const created = await createNote({
-                  vaultId: filterNotebook?.vaultId ?? vaultId,
-                  title: file.name.replace(/\.(md|markdown|txt)$/i, ""),
-                  body: await file.text(),
-                  notebookId: notebookFilter,
-                });
-                opened ??= created.id;
-              }
-              toast.success(t("actions.imported", { count: files.length }));
-              if (opened) open(opened);
-            })()
-          }
-          onDeleted={(id) => closeTab(id)}
-          searchRef={searchRef}
-        />
-      </div>
-
+      {libraryOnly || layout !== "narrow" ? (
+        <div className={cn("flex min-w-0 shrink-0 flex-col overflow-hidden rounded-3xl bg-card ring-1 ring-border", libraryOnly ? "w-full" : "w-72")}>
+          {renderLibrary()}
+        </div>
+      ) : null}
       {/* Tabs, then the open note or the graph. */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-3xl bg-card ring-1 ring-border">
+      <div className={cn("flex min-w-0 flex-1 flex-col overflow-hidden rounded-3xl bg-card ring-1 ring-border", libraryOnly && "hidden")}>
         <div className="flex h-14 shrink-0 items-center gap-1 border-b px-3">
+          {layout === "narrow" ? (
+            <Sheet
+              open={!libraryOnly && mobilePane === "library"}
+              onOpenChange={(open) => {
+                if (open) choosePane("library");
+                else setMobilePane(null);
+              }}
+            >
+              <Sheet.Trigger render={<Button type="button" size="icon" variant="ghost" aria-label={t("actions.browse")} />}>
+                <Icon icon={Menu01Icon} size={18} />
+              </Sheet.Trigger>
+              <Sheet.Content
+                className="h-[min(44rem,80dvh)]"
+                showClose={false}
+                initialFocus={() => {
+                  const search = focusLibrarySearch.current;
+                  focusLibrarySearch.current = false;
+                  return search ? searchRef.current ?? true : true;
+                }}
+                finalFocus={() => returnPaneFocus.current}
+              >
+                {renderLibrary(true)}
+              </Sheet.Content>
+            </Sheet>
+          ) : null}
           <button
             type="button"
             onClick={() => go("back")}
@@ -526,7 +641,28 @@ export default function NotesWorkspace() {
           >
             <Icon icon={KeyboardIcon} size={16} />
           </button>
-          {note && !graphOpen ? (
+          {note && !graphOpen && layout !== "wide" ? (
+            <Sheet
+              open={mobilePane === "details"}
+              onOpenChange={(open) => {
+                if (open) choosePane("details");
+                else setMobilePane(null);
+              }}
+            >
+              <Sheet.Trigger render={<Button type="button" size="icon" variant="ghost" aria-label={t("panes.show")} />}>
+                <Icon icon={SidebarRightIcon} size={18} className="rtl:-scale-x-100" />
+              </Sheet.Trigger>
+              <Sheet.Content
+                className="h-[min(38rem,72dvh)]"
+                closeLabel={common("actions.close")}
+                finalFocus={() => returnPaneFocus.current}
+              >
+                <Sheet.Header title={t("panes.label")} />
+                {renderDetails(true)}
+              </Sheet.Content>
+            </Sheet>
+          ) : null}
+          {note && !graphOpen && layout === "wide" ? (
             <button
               type="button"
               onClick={() => setDetails((current) => !current)}
@@ -567,6 +703,7 @@ export default function NotesWorkspace() {
                   );
               } else if (kind === "tag") {
                 setQuery(node.label);
+                if (layout === "narrow") choosePane("library");
               }
             }}
           />
@@ -624,38 +761,17 @@ export default function NotesWorkspace() {
                       world={world}
                       vaultId={note.vaultId}
                       onOpenLink={openLink}
-                      onTag={(tag) => setQuery(`#${tag}`)}
+                      onTag={(tag) => {
+                        setQuery(`#${tag}`);
+                        if (layout === "narrow") choosePane("library");
+                      }}
                     />
                   </div>
                 </ScrollArea>
               )}
             </div>
-            {details ? (
-              <div className="hidden w-72 shrink-0 border-s lg:flex lg:flex-col">
-                <NoteDetails
-                  note={note}
-                  world={world}
-                  onOpen={(id) => open(id)}
-                  onLinkMention={(other) => {
-                    const pattern = new RegExp(
-                      `(^|[^\\p{L}\\p{N}\\[])(${note.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})(?![\\p{L}\\p{N}\\]])`,
-                      "iu",
-                    );
-                    void saveNoteBody(
-                      other.id,
-                      other.body.replace(
-                        pattern,
-                        (_, lead: string, name: string) =>
-                          `${lead}[[${note.title}${name === note.title ? "" : `|${name}`}]]`,
-                      ),
-                    );
-                  }}
-                  onHeading={(offset) => {
-                    setMode("edit");
-                    requestAnimationFrame(() => editor.current?.reveal(offset));
-                  }}
-                />
-              </div>
+            {details && layout === "wide" ? (
+              <div className="flex w-72 shrink-0 flex-col border-s">{renderDetails()}</div>
             ) : null}
           </div>
         ) : (

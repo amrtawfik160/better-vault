@@ -4,6 +4,8 @@ import {
   ArrowRight01Icon,
   FileImportIcon,
   Folder01Icon,
+  HierarchyCircle01Icon,
+  MoreHorizontalIcon,
   Note01Icon,
   PinIcon,
   Search01Icon,
@@ -16,6 +18,7 @@ import { ContextMenu, ContextMenuTrigger } from "@/components/common/context-men
 import { Icon } from "@/components/icon";
 import { Input } from "@/components/panelui/input";
 import { Menu } from "@/components/panelui/menu";
+import { Sheet } from "@/components/panelui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Note, Vault } from "@/lib/db/types";
 import { cn } from "@/lib/utils";
@@ -24,6 +27,7 @@ import { useNoteActions } from "./note-actions";
 interface NoteListProps {
   /** The panel's title. */
   title: string;
+  inSheet?: boolean;
   /** Shown under the search, such as which notebook's notes these are. */
   banner?: React.ReactNode;
   notes: Note[];
@@ -34,6 +38,7 @@ interface NoteListProps {
   onOpen: (id: string, newTab?: boolean) => void;
   onCreate: () => void;
   onImport: (files: File[]) => void;
+  onOpenGraph?: () => void;
   onDeleted: (id: string) => void;
   /** The search field, focused by ⇧⌘F. */
   searchRef?: React.Ref<HTMLInputElement>;
@@ -53,6 +58,7 @@ export function matchNotes(notes: Note[], query: string): Note[] {
 /** The notes panel: search, pinned notes, folders and the tags in use. */
 export function NoteList({
   title,
+  inSheet,
   banner,
   notes,
   vaults,
@@ -62,10 +68,12 @@ export function NoteList({
   onOpen,
   onCreate,
   onImport,
+  onOpenGraph,
   onDeleted,
   searchRef,
 }: NoteListProps) {
   const { t } = useTranslation("notes");
+  const { t: common } = useTranslation();
   const importInput = useRef<HTMLInputElement>(null);
   const [closed, setClosed] = useState<Set<string>>(new Set());
   const shown = useMemo(() => matchNotes(notes, query), [notes, query]);
@@ -102,14 +110,29 @@ export function NoteList({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* The panel's head: its title, then import and a new note. */}
-      <div className="flex h-14 shrink-0 items-center gap-1 border-b ps-4 pe-3">
-        <h2 className="min-w-0 flex-1 truncate text-base font-semibold">{title}</h2>
+      <div className={cn("flex h-14 shrink-0 items-center gap-1 border-b ps-4 pe-3", inSheet && "mt-3")}>
+        {inSheet ? (
+          <Sheet.Title className="min-w-0 flex-1 truncate text-base font-semibold">{title}</Sheet.Title>
+        ) : (
+          <h2 className="min-w-0 flex-1 truncate text-base font-semibold">{title}</h2>
+        )}
+        {onOpenGraph ? (
+          <button
+            type="button"
+            onClick={onOpenGraph}
+            aria-label={t("actions.graph")}
+            title={t("actions.graph")}
+            className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Icon icon={HierarchyCircle01Icon} size={17} />
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => importInput.current?.click()}
           aria-label={t("actions.import")}
           title={t("actions.import")}
-          className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring md:size-8"
         >
           <Icon icon={FileImportIcon} size={17} />
         </button>
@@ -118,10 +141,11 @@ export function NoteList({
           onClick={onCreate}
           aria-label={t("new")}
           title={t("new")}
-          className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-foreground text-background outline-none hover:bg-foreground/85 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+          className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-foreground text-background outline-none hover:bg-foreground/85 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card md:size-8"
         >
           <Icon icon={Add01Icon} size={17} />
         </button>
+        {inSheet ? <Sheet.Close aria-label={common("actions.close")} className="size-10" /> : null}
       </div>
       <div className="border-b p-3">
         <Input.Group size="sm">
@@ -189,7 +213,7 @@ export function NoteList({
                       return next;
                     })
                   }
-                  className="flex h-7 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-start text-xs font-medium text-muted-foreground outline-none hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring"
+                  className="flex h-10 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-start text-xs font-medium text-muted-foreground outline-none hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring md:h-7"
                 >
                   <Icon
                     icon={closed.has(folder) ? ArrowRight01Icon : ArrowDown01Icon}
@@ -221,7 +245,7 @@ export function NoteList({
                     type="button"
                     onClick={() => onQuery(query === `#${tag}` ? "" : `#${tag}`)}
                     className={cn(
-                      "cursor-pointer rounded-full px-2 py-0.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      "min-h-9 cursor-pointer rounded-full px-2 py-0.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring md:min-h-0",
                       query === `#${tag}`
                         ? "bg-primary text-primary-foreground"
                         : "bg-primary/10 text-primary hover:bg-primary/20",
@@ -252,12 +276,13 @@ function NoteRow({
   onOpen: (id: string, newTab?: boolean) => void;
   onDeleted: () => void;
 }) {
+  const { t } = useTranslation("notes");
   const { actions, dialogs } = useNoteActions(note, vaults, {
     onOpenTab: () => onOpen(note.id, true),
     onDeleted,
   });
   return (
-    <>
+    <div className="flex min-w-0 items-center gap-1">
       <ContextMenu>
         <ContextMenuTrigger
           render={
@@ -266,7 +291,7 @@ function NoteRow({
               aria-current={active ? "page" : undefined}
               onClick={(event) => onOpen(note.id, event.metaKey || event.ctrlKey)}
               className={cn(
-                "flex h-8 w-full min-w-0 cursor-pointer items-center gap-2 rounded-lg px-2 text-start text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "flex h-11 w-full min-w-0 cursor-pointer items-center gap-2 rounded-lg px-2 text-start text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-8",
                 active ? "bg-foreground/10 font-medium" : "hover:bg-accent/60",
               )}
             />
@@ -279,7 +304,18 @@ function NoteRow({
           <MenuActions actions={actions} />
         </Menu.Content>
       </ContextMenu>
+      <Menu>
+        <Menu.Trigger
+          aria-label={t("actions.moreForNote", { title: note.title })}
+          className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring md:hidden"
+        >
+          <Icon icon={MoreHorizontalIcon} size={18} />
+        </Menu.Trigger>
+        <Menu.Content align="end">
+          <MenuActions actions={actions} />
+        </Menu.Content>
+      </Menu>
       {dialogs}
-    </>
+    </div>
   );
 }

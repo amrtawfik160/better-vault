@@ -29,6 +29,7 @@ export function NoteStudyCards({
   const [captured, setCaptured] = useState<NoteStudySnapshot>();
   const [draft, setDraft] = useState<{ source: FlashcardSource; manual: boolean }>();
   const hasBody = Boolean(captured && readFrontmatter(captured.body).content.trim());
+  const viewCards = () => navigate(studyHref("cards", { note: note.id, vault: vaultId }));
 
   function prepare(action: "note" | "selection" | "manual") {
     if (!captured) return;
@@ -71,6 +72,8 @@ export function NoteStudyCards({
               <Menu.Item onClick={() => prepare("manual")}>{t("flashcards.make")}</Menu.Item>
             </>
           ) : null}
+          <Menu.Separator />
+          <Menu.Item onClick={viewCards}>{study("study.capture.viewCards")}</Menu.Item>
         </Menu.Content>
       </Menu>
       {draft ? (
@@ -83,7 +86,7 @@ export function NoteStudyCards({
             toast.success(study("study.capture.cardsSaved", { count }), {
               action: {
                 label: study("study.capture.viewCards"),
-                onClick: () => navigate(studyHref("cards", { note: note.id, vault: vaultId })),
+                onClick: viewCards,
               },
             })
           }

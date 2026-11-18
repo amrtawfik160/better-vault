@@ -67,6 +67,8 @@
     "graph": "Graph view",
     "shortcuts": "Keyboard shortcuts",
     "quickSwitcher": "Quick switcher",
+    "browse": "Browse notes",
+    "moreForNote": "Actions for {{title}}",
     "back": "Back",
     "forward": "Forward",
     "newFolder": "New folder"

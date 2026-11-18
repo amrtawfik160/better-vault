@@ -6,6 +6,7 @@ import {
   type ClipboardEvent,
   type FormEvent,
   type KeyboardEvent,
+  type ReactNode,
 } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
@@ -532,6 +533,7 @@ export function CardLibrary({
   cards,
   vaultId,
   filter,
+  noteId,
   clearFilter,
   review,
   practice,
@@ -541,6 +543,7 @@ export function CardLibrary({
   cards: Card[];
   vaultId: string;
   filter?: string;
+  noteId?: string;
   clearFilter: () => void;
   review: (ids?: string[]) => void;
   practice: (ids: string[]) => void;
@@ -712,7 +715,13 @@ export function CardLibrary({
       {generating && !filter ? (
         <StudyFlashcardGenerator key={vaultId} close={() => setGenerating(false)} vaultId={vaultId} />
       ) : null}
-      {filter ? <FilterCaption label={filter} clear={clearFilter} /> : null}
+      {filter ? (
+        <FilterCaption label={filter} clear={clearFilter}>
+          {noteId ? (
+            <StudyOriginLink origin={{ kind: "note", noteId }} label={t("study.recall.backToNote")} />
+          ) : null}
+        </FilterCaption>
+      ) : null}
       {editing ? (
         <form
           onSubmit={(event) => void save(event)}
@@ -966,13 +975,14 @@ export function CardLibrary({
   );
 }
 
-function FilterCaption({ label, clear }: { label: string; clear: () => void }) {
+function FilterCaption({ label, clear, children }: { label: string; clear: () => void; children?: ReactNode }) {
   return (
     <div className="flex flex-wrap items-center gap-2 text-sm">
       <span dir="auto">{label}</span>
       <Button variant="ghost" size="sm" onClick={clear}>
         Show all
       </Button>
+      {children}
     </div>
   );
 }
