@@ -40,6 +40,12 @@ export function putStudyRecords(...rows: StudyRecord[]) {
   return store().putStudy(rows.map(withCurrentStudyVault));
 }
 
+export async function readStudyThread(id: string): Promise<StudyThread> {
+  const thread = await store().getStudy(id);
+  if (thread?.kind !== "thread") throw new Error("This Tutor conversation is no longer available.");
+  return thread;
+}
+
 export async function updateStudyThread(
   id: string,
   change: StudyThreadChange,

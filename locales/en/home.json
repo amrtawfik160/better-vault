@@ -181,6 +181,31 @@
       "search": "Search this document",
       "documentUnavailable": "This study document is no longer available."
     },
+    "voice": {
+      "start": "Start voice conversation",
+      "end": "End voice conversation",
+      "endAndReport": "End voice conversation and generate report",
+      "sendTurn": "Send this turn",
+      "interrupt": "Interrupt reply",
+      "mute": "Mute microphone",
+      "unmute": "Unmute microphone",
+      "muted": "Microphone muted",
+      "privacy": "Audio is transcribed on this device. Your selected model receives the transcript. The microphone pauses while Tutor answers.",
+      "idle": "Voice conversation ended after a period of silence.",
+      "permission": "Microphone access was blocked. Allow access for deepLe, then start the voice conversation again.",
+      "microphoneUnavailable": "The microphone is unavailable. Check that it’s connected, then start the voice conversation again.",
+      "localUnavailable": "Local voice needs whisper-cli and a Whisper model. You can still type a message.",
+      "speechUnavailable": "An installed voice for this language is unavailable. You can read the reply and keep speaking.",
+      "replyUnavailable": "Tutor could not answer this turn. Your transcript is in the message field.",
+      "phases": {
+        "opening": "Opening microphone…",
+        "listening": "Listening. Speak when you’re ready.",
+        "recording": "Recording your turn. Pause to send it.",
+        "transcribing": "Transcribing on this device…",
+        "thinking": "Tutor is preparing a reply…",
+        "speaking": "Tutor is speaking. You can interrupt to continue."
+      }
+    },
     "capture": {
       "draftCards": "Draft flashcards",
       "cardsFromSection": "Draft cards from this section",

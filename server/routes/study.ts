@@ -22,6 +22,7 @@ const bodySchema = z.object({
   correctionMode: z.enum(studyCorrections).optional(),
   practiceLanguage: z.string().max(35).optional(),
   cardCount: z.number().int().min(1).max(20).default(8),
+  spoken: z.boolean().optional(),
 });
 
 const reply = z.object({
@@ -58,6 +59,7 @@ export async function POST(request: Request) {
     correctionMode,
     practiceLanguage,
     cardCount,
+    spoken,
   } = decoded.data;
   const denied = rejectCliProxyRequest(request, model.provider);
   if (denied) return denied;
@@ -77,6 +79,9 @@ export async function POST(request: Request) {
         : "",
       action === "chat" && correct
         ? "Offer brief, specific corrections for language mistakes."
+        : "",
+      action === "chat" && spoken
+        ? "The learner will hear this reply aloud. Use short spoken sentences, plain text, and at most one follow-up question. Keep technical details needed to check the learner’s reasoning."
         : "",
       "Use empty arrays and empty strings for fields the action does not use.",
     ]
