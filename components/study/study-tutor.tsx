@@ -456,6 +456,8 @@ export function StudyTutor({
   );
   const [voicePractice, setVoicePractice] = useState(false);
   const [livePhase, setLivePhase] = useState<StudyVoicePhase | null>(null);
+  const [finishingVoice, setFinishingVoice] = useState(false);
+  const finishingReport = useRef(false);
   const [draftSource, setDraftSource] = useState<FlashcardSource | null>(null);
   const [temporaryTurns, setTemporaryTurns] = useState<StudyThread["messages"]>([]);
   const recentTurns = useRef<StudyThread["messages"]>([]);
@@ -463,7 +465,10 @@ export function StudyTutor({
   const [voiceAvailable, setVoiceAvailable] = useState<boolean>();
   const [readAloud, setReadAloud] = useState(false);
   const [language, setLanguage] = useState(thread.practiceLanguage ?? "");
-  const workPending = busy || changingCard || voiceState !== null || livePhase !== null;
+  const workPending =
+    busy || changingCard || voiceState !== null || livePhase !== null || finishingVoice;
+  const pendingVoiceTurn =
+    livePhase === "recording" || livePhase === "transcribing" || livePhase === "thinking";
   const cardPractice = thread.scope === "cards";
   const curated = thread.scope === "materials" || thread.scope === "notes" || cardPractice;
   const readableBooks = useMemo(
@@ -757,9 +762,10 @@ export function StudyTutor({
     const session = startStudyVoiceSession({
       language: language.trim(),
       signal,
-      ready: () => checkVoice(signal),
+      ready: checkVoice,
       phase: setLivePhase,
       speechUnavailable: () => toast.info(t("study.voice.speechUnavailable")),
+      noSpeech: () => toast.info(t("study.voice.noSpeech")),
       respond: async (transcript, seconds) => {
         const activity = recordStudyActivity("speaking", seconds, thread.notebookId, {
           kind: "tutor",
@@ -804,6 +810,10 @@ export function StudyTutor({
     controller.current = abort;
     try {
       const context = await currentConversation();
+      if (!context.messages.length) {
+        toast.info(t("study.voice.noTurnForReport"));
+        return;
+      }
       const sources = await readStudyTutorSources(context, vaultId, "report");
       abort.signal.throwIfAborted();
       let history = context.messages;
@@ -866,12 +876,21 @@ export function StudyTutor({
   }
 
   async function finishVoiceReport() {
+    if (finishingReport.current) return;
     const session = live.current;
-    if (session) {
-      session.abort.abort();
-      await session.result.catch(() => undefined);
+    if (!session) {
+      await report(Date.now());
+      return;
     }
-    await report(Date.now());
+    finishingReport.current = true;
+    setFinishingVoice(true);
+    try {
+      const finished = await session.finishForReport().then(() => true, () => false);
+      if (finished && !session.abort.signal.aborted) await report(Date.now());
+    } finally {
+      finishingReport.current = false;
+      setFinishingVoice(false);
+    }
   }
 
   function saveNote(text: string, origin: StudyOrigin) {
@@ -1318,7 +1337,7 @@ export function StudyTutor({
                 type="button"
                 variant="outline"
                 onClick={() => void dictate(false, Date.now())}
-                disabled={busy}
+                disabled={workPending}
               >
                 Dictate
               </Button>
@@ -1326,7 +1345,7 @@ export function StudyTutor({
                 type="button"
                 variant="outline"
                 onClick={() => void dictate(true, Date.now())}
-                disabled={busy || !model || !contextReady}
+                disabled={workPending || !model || !contextReady}
               >
                 {voicePractice ? "Record next turn" : "Speak to tutor"}
               </Button>
@@ -1334,7 +1353,7 @@ export function StudyTutor({
                 type="button"
                 variant="outline"
                 onClick={() => void beginVoiceConversation()}
-                disabled={busy || !model || !contextReady}
+                disabled={workPending || !model || !contextReady}
               >
                 {t("study.voice.start")}
               </Button>
@@ -1346,7 +1365,7 @@ export function StudyTutor({
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={micMuted}
+                  disabled={micMuted || finishingVoice}
                   onClick={() => live.current?.finishTurn()}
                 >
                   {t("study.voice.sendTurn")}
@@ -1361,6 +1380,7 @@ export function StudyTutor({
                 type="button"
                 variant="outline"
                 aria-pressed={micMuted}
+                disabled={finishingVoice}
                 onClick={() => {
                   live.current?.mute(!micMuted);
                   setMicMuted(!micMuted);
@@ -1458,9 +1478,11 @@ export function StudyTutor({
           <div className="space-y-1 text-sm text-muted-foreground">
             <p role="status">
               {t(
-                micMuted && (livePhase === "listening" || livePhase === "recording")
-                  ? "study.voice.muted"
-                  : `study.voice.phases.${livePhase}`,
+                finishingVoice
+                  ? "study.voice.finishingTurn"
+                  : micMuted && (livePhase === "listening" || livePhase === "recording")
+                    ? "study.voice.muted"
+                    : `study.voice.phases.${livePhase}`,
               )}
             </p>
             <p>{t("study.voice.privacy")}</p>
@@ -1481,7 +1503,7 @@ export function StudyTutor({
           </p>
         ) : null}
       </form>
-      {conversation.length || reports.length || showReport ? (
+      {conversation.length || reports.length || showReport || pendingVoiceTurn ? (
         <div className="space-y-3">
           <div className="flex flex-wrap gap-2">
             {reports.length ? (
@@ -1497,7 +1519,12 @@ export function StudyTutor({
             ) : null}
             <Button
               variant="outline"
-              disabled={(!livePhase && workPending) || !model || !conversation.length}
+              disabled={
+                finishingVoice ||
+                (!livePhase && workPending) ||
+                !model ||
+                (!conversation.length && !pendingVoiceTurn)
+              }
               onClick={() => void finishVoiceReport()}
             >
               {livePhase

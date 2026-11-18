@@ -1,6 +1,8 @@
 import { encodeVoiceWav, maxVoiceSeconds, voiceSampleRate } from "./voice-format";
 import { studyVoiceActivity } from "./voice-activity";
 
+export class NoStudySpeech extends Error {}
+
 export async function openStudyMicrophone(signal: AbortSignal) {
   if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
     throw new Error("This browser cannot record audio. You can still type a message.");
@@ -120,7 +122,7 @@ export async function recordStudyVoice(signal: AbortSignal) {
 }
 
 async function voiceWav(audio: Blob, trimStart: number) {
-  if (!audio.size) throw new Error("The microphone did not capture any audio.");
+  if (!audio.size) throw new NoStudySpeech("The microphone did not capture any audio.");
   const decoder = new OfflineAudioContext(1, 1, voiceSampleRate);
   const decoded = await decoder.decodeAudioData(await audio.arrayBuffer()).catch(() => {
     throw new Error("Could not read the recording. Check your microphone and try again.");
@@ -137,7 +139,7 @@ async function voiceWav(audio: Blob, trimStart: number) {
   player.start(0, offset);
   const samples = (await mix.startRendering()).getChannelData(0);
   if (!samples.some((sample) => Math.abs(sample) >= 0.005)) {
-    throw new Error("No speech was detected. Check the microphone and try again.");
+    throw new NoStudySpeech("No speech was detected. Check the microphone and try again.");
   }
   return encodeVoiceWav(samples);
 }
@@ -164,6 +166,6 @@ export async function transcribeStudyVoice(
   if (!response.ok || typeof result.text !== "string") {
     throw new Error(result.error ?? "Could not transcribe the recording.");
   }
-  if (!result.text.trim()) throw new Error("No speech was detected. Try another recording.");
+  if (!result.text.trim()) throw new NoStudySpeech("No speech was detected. Try another recording.");
   return result.text.trim();
 }

@@ -1,4 +1,4 @@
-import { openStudyMicrophone, recordStudyTurn, transcribeStudyVoice } from "./voice";
+import { NoStudySpeech, openStudyMicrophone, recordStudyTurn, transcribeStudyVoice } from "./voice";
 
 export type StudyVoicePhase =
   "opening" | "listening" | "recording" | "transcribing" | "thinking" | "speaking";
@@ -58,15 +58,21 @@ export function startStudyVoiceSession({
   phase,
   respond,
   speechUnavailable,
+  noSpeech,
 }: {
   language: string;
   signal: AbortSignal;
-  ready: () => Promise<void>;
+  ready: (signal: AbortSignal) => Promise<void>;
   phase: (phase: StudyVoicePhase) => void;
   respond: (transcript: string, seconds: number) => Promise<string>;
   speechUnavailable: () => void;
+  noSpeech: () => void;
 }) {
+  const closeQuietly = new AbortController();
+  const active = AbortSignal.any([signal, closeQuietly.signal]);
   let microphone: Awaited<ReturnType<typeof openStudyMicrophone>> | undefined;
+  let current: StudyVoicePhase = "opening";
+  let ending = false;
   let listening = false;
   let muted = false;
   let finishTurn: (() => void) | undefined;
@@ -75,20 +81,30 @@ export function startStudyVoiceSession({
 
   const updateTrack = () =>
     microphone?.stream.getAudioTracks().forEach((track) => {
-      track.enabled = listening && !muted;
+      track.enabled = listening && !muted && !ending;
     });
 
+  function changePhase(next: StudyVoicePhase) {
+    current = next;
+    phase(next);
+  }
+
+  function releaseMicrophone() {
+    microphone?.release();
+    microphone = undefined;
+  }
+
   async function run() {
-    signal.throwIfAborted();
+    active.throwIfAborted();
     const context = new AudioContext(monitorOptions);
     const closeAudio = () => {
       if (context.state !== "closed") void context.close().catch(() => undefined);
     };
-    signal.addEventListener("abort", closeAudio, { once: true });
+    active.addEventListener("abort", closeAudio, { once: true });
     try {
       await context.resume();
-      await ready();
-      microphone = await openStudyMicrophone(signal);
+      await ready(active);
+      microphone = await openStudyMicrophone(active);
       const { stream } = microphone;
       const track = stream.getAudioTracks()[0];
       if (!track || track.readyState === "ended") throw new DOMException("", "NotReadableError");
@@ -96,36 +112,46 @@ export function startStudyVoiceSession({
       meter.fftSize = 2048;
       context.createMediaStreamSource(stream).connect(meter);
 
-      while (!signal.aborted) {
+      while (!active.aborted && !ending) {
         listening = true;
         updateTrack();
-        phase("listening");
-        const recording = recordStudyTurn(stream, signal, {
+        changePhase("listening");
+        const recording = recordStudyTurn(stream, active, {
           analyser: meter,
           muted: () => muted,
-          onSpeech: () => phase("recording"),
+          onSpeech: () => changePhase("recording"),
         });
         finishTurn = recording.stop;
         const turn = await recording.result;
         finishTurn = undefined;
         listening = false;
         updateTrack();
-        signal.throwIfAborted();
+        active.throwIfAborted();
         if (track.readyState !== "live") throw new DOMException("", "NotReadableError");
         if (!turn) return "idle";
+        if (ending) releaseMicrophone();
 
-        phase("transcribing");
-        const transcript = await transcribeStudyVoice(turn.audio, language, signal, turn.trimStart);
-        signal.throwIfAborted();
-        phase("thinking");
+        changePhase("transcribing");
+        let transcript: string;
+        try {
+          transcript = await transcribeStudyVoice(turn.audio, language, active, turn.trimStart);
+        } catch (error) {
+          active.throwIfAborted();
+          if (!(error instanceof NoStudySpeech)) throw error;
+          if (!ending) noSpeech();
+          continue;
+        }
+        active.throwIfAborted();
+        changePhase("thinking");
         const reply = await respond(transcript, turn.seconds);
-        signal.throwIfAborted();
-        phase("speaking");
+        active.throwIfAborted();
+        if (ending) break;
+        changePhase("speaking");
         playback = new AbortController();
         const spoken = await speakStudyReply(
           reply,
           language,
-          AbortSignal.any([signal, playback.signal]),
+          AbortSignal.any([active, playback.signal]),
         );
         playback = undefined;
         if (!spoken && !warned) {
@@ -133,20 +159,32 @@ export function startStudyVoiceSession({
           speechUnavailable();
         }
       }
+    } catch (error) {
+      if (!closeQuietly.signal.aborted || signal.aborted) throw error;
     } finally {
-      signal.removeEventListener("abort", closeAudio);
-      microphone?.release();
+      active.removeEventListener("abort", closeAudio);
+      releaseMicrophone();
       closeAudio();
     }
   }
 
+  const result = run();
   return {
-    result: run(),
+    result,
     mute: (next: boolean) => {
       muted = next;
       updateTrack();
     },
     finishTurn: () => finishTurn?.(),
     interrupt: () => playback?.abort(),
+    finishForReport: () => {
+      ending = true;
+      if (current === "opening" || current === "listening") closeQuietly.abort();
+      else if (current === "recording") finishTurn?.();
+      else releaseMicrophone();
+      playback?.abort();
+      updateTrack();
+      return result;
+    },
   };
 }
