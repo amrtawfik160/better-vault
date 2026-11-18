@@ -2,7 +2,7 @@ import { generateId } from "ai";
 import { chunkText, normaliseText } from "@/lib/grounding/chunk";
 import { saveBlob } from "./blobs";
 import { useStoreQuery } from "./live";
-import { sourceHasText } from "./source-text";
+import { sourceHasText, sourceTextParts } from "./source-text";
 import { store } from "./store";
 import type { Chunk, Source, SourceImage, SourceKind, StoredBlob } from "./types";
 
@@ -52,10 +52,10 @@ export async function addSource(input: NewSource): Promise<Source> {
 }
 
 export function chunksForSource(
-  source: Pick<Source, "id" | "notebookId" | "text" | "studyRevision">,
+  source: Pick<Source, "id" | "notebookId" | "text" | "studyRevision" | "pdfOcr">,
 ): Chunk[] {
   const prefix = source.studyRevision ? `${source.id}:${source.studyRevision}` : source.id;
-  return chunkText(source.text).map((piece, index) => ({
+  return sourceTextParts(source).flatMap((part) => chunkText(part)).map((piece, index) => ({
     id: `${prefix}:${index}`,
     notebookId: source.notebookId,
     sourceId: source.id,

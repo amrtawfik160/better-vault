@@ -401,6 +401,26 @@
       "continueWithTutor": "Continue with Tutor",
       "documentUnavailable": "This study document is no longer available."
     },
+    "scan": {
+      "title": "Recognize page text",
+      "description": "Review the text before adding it to this page and its notebook source.",
+      "edit": "Edit recognized text",
+      "language": "Page language",
+      "additionalLanguage": "Additional language",
+      "singleLanguage": "None",
+      "recognize": "Recognize text",
+      "recognizing": "Recognizing text…",
+      "checking": "Checking text recognition…",
+      "install": "Install Tesseract with the page’s language data on this device to recognize text.",
+      "localOnly": "Text recognition runs in the desktop app or on localhost.",
+      "statusFailed": "Could not check text recognition. Reopen this dialog to try again.",
+      "review": "Review recognized text",
+      "save": "Save recognized text",
+      "saved": "Recognized text added to Study and the notebook source.",
+      "recognized": "Recognized text",
+      "noText": "No text was recognized. Try another language if the page contains printed text.",
+      "failed": "Could not recognize or save this page."
+    },
     "goals": {
       "label": "Goal",
       "document": "Document",

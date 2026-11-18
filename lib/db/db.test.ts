@@ -18,6 +18,7 @@ import {
   saveStudyNote,
   saveStudyWord,
   saveStudyReadingPlace,
+  saveStudyOcrText,
   saveStudyText,
   startSourceTutor,
   startBookTutor,
@@ -268,6 +269,36 @@ describe.each(backends)("%s store", (name, create) => {
       await deleteSource(book.sourceId);
       expect((await readStudyTutorSources(restored, DEFAULT_VAULT)).documentImage).toBeUndefined();
       expect(await readFlashcardDraftPassages([visualOrigin], DEFAULT_VAULT)).toEqual([]);
+    });
+
+    it("indexes reviewed OCR with the original PDF and preserves existing source text and selection", async () => {
+      const original = Uint8Array.of(37, 80, 68, 70);
+      const book = await addStudyBook({ title: "Mixed scan", format: "pdf", bytes: original,
+        mime: "application/pdf", sections: [{ title: "Page 1", text: "" }, { title: "Page 2", text: "Native text." }] });
+      const source = await store().getSource(book.sourceId);
+      if (!source || !book.fileId) throw new Error("The PDF was not saved");
+      await setSourceSelected(book.sourceId, false);
+      const first = "Distinct OCR evidence for the review.";
+      const scan = { bookId: book.id, fileId: book.fileId, section: 0, languages: ["eng"], previousText: "", text: first };
+      await saveStudyOcrText(scan);
+      await expect(saveStudyOcrText({ ...scan, text: "Stale replacement" })).rejects.toBeInstanceOf(StudyTextConflict);
+      await expect(saveStudyOcrText({ ...scan, section: 1, previousText: "Native text." })).rejects.toBeInstanceOf(StudyTextConflict);
+      const updated = `Corrected transcription.\n\n${first}`;
+      await saveStudyOcrText({ ...scan, previousText: first, text: updated });
+      const backup = JSON.parse(JSON.stringify(await exportBackup()));
+      await deleteAllData();
+      await importBackup(backup);
+      const saved = await store().getStudy(book.id);
+      expect(saved).toMatchObject({ fileId: book.fileId, sections: [{ text: updated, ocrLanguages: ["eng"] }, { text: "Native text." }] });
+      expect(await store().getSource(book.sourceId)).toMatchObject({
+        text: `${source.text}\n\n${updated}`, selected: false, studyRevision: 2,
+        pdfOcr: { baseLength: source.text.length, pages: { "0": { text: updated, languages: ["eng"] } } },
+      });
+      expect((await getChunks([book.sourceId])).map(({ text }) => text)).toEqual([source.text, updated]);
+      expect((await store().getBlob(book.fileId))?.data).toEqual(original);
+      if (saved?.kind !== "book") throw new Error("The book was not restored");
+      expect(resolveStudyRange(saved, 0, { offset: 0, length: first.length, revision: 1 }))
+        .toEqual({ offset: updated.indexOf(first), length: first.length });
     });
   });
 

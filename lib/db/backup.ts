@@ -1,4 +1,4 @@
-import { studyRecordSchema, type StudyRecord } from "@/lib/study/records";
+import { pdfOcrSourceSchema, studyRecordSchema, type StudyRecord } from "@/lib/study/records";
 import { clearAllReviewCheckpoints } from "@/lib/study/review-session";
 import { clearAllTutorDraftRecovery } from "@/lib/study/tutor-draft-recovery";
 import { clearDocumentRecoveries } from "@/lib/study/document-drafts";
@@ -97,6 +97,7 @@ const backupSchema = z.object({
         notebookId: z.string(),
         text: z.string(),
         studyRevision: z.number().int().nonnegative().optional(),
+        pdfOcr: pdfOcrSourceSchema.optional(),
       })
       .loose(),
   ),

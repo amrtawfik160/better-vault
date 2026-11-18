@@ -15,6 +15,7 @@ import { Icon } from "@/components/icon";
 import { Button } from "@/components/panelui/button";
 import { StudyEpubChapter } from "./study-epub-chapter";
 import { StudyPdfPage } from "./study-pdf-page";
+import { StudyPageOcr } from "./study-page-ocr";
 import { StudyVisualCard, type VisualFlashcard } from "./study-visual-card";
 import { StudyImageDiscussion } from "./study-image-discussion";
 import { StudyFlashcardDraftDialog, type FlashcardSource } from "./study-flashcard-generator";
@@ -224,6 +225,7 @@ export function StudyReader({
   const [translating, setTranslating] = useState(false);
   const [color, setColor] = useState<StudyHighlightColor>("yellow");
   const [editingSection, setEditingSection] = useState<number>();
+  const [recognizingPage, setRecognizingPage] = useState<number>();
   const appearance = { ...defaultStudyReadingAppearance, ...book.readingAppearance };
   const { textSize: font, pdfZoom: zoom, epubTheme } = appearance;
   const appearanceCheckpoint = useRef<StudyReadingPlace | undefined>(undefined);
@@ -236,7 +238,7 @@ export function StudyReader({
   const showLayout = needsOriginal || (
     (surfaceChoice?.visit === location.key ? surfaceChoice.surface : undefined) ??
       (focusedVisual ? "layout" : undefined) ??
-      book.preferredReadingSurface ?? savedSurface
+      book.preferredReadingSurface ?? savedSurface ?? (section.ocrLanguages ? "layout" : undefined)
   ) === "layout";
   const [readingSurface, setReadingSurface] = useState<{ section: number; root: HTMLElement | null }>();
   const viewPdf = showLayout && book.format === "pdf";
@@ -433,6 +435,7 @@ export function StudyReader({
     clearSelection();
     setVisualAction(undefined);
     setEditingSection(undefined);
+    setRecognizingPage(undefined);
     setResult(null);
     openPage(page);
   }
@@ -821,6 +824,7 @@ export function StudyReader({
               clearSelection();
               setVisualAction(undefined);
               setEditingSection(undefined);
+              setRecognizingPage(undefined);
               setResult(null);
               openPassage(section, { offset, length });
             }}
@@ -845,6 +849,11 @@ export function StudyReader({
           >
             {book.bookmarks.includes(index) ? "Remove bookmark" : "Bookmark"}
           </Button>
+          {book.format === "pdf" && fileId && (!hasPageText || section.ocrLanguages) ? (
+            <Button size="sm" variant="outline" onClick={() => setRecognizingPage(index)}>
+              {t(section.ocrLanguages ? "study.scan.edit" : "study.scan.title")}
+            </Button>
+          ) : null}
         </div>
         {book.bookmarks.length || bookmarkPlaces.length ? (
           <div className="flex flex-wrap gap-2 text-sm">
@@ -994,6 +1003,9 @@ export function StudyReader({
             onDiscuss={(capture) => void startImageChat(index, capture)}
             onDiscussArea={(capture) => openVisualAction(capture, "discuss")}
           />
+        ) : null}
+        {section.ocrLanguages ? (
+          <p className="mx-auto max-w-prose text-sm font-medium text-muted-foreground">{t("study.scan.recognized")}</p>
         ) : null}
         <article
           ref={textBody}
@@ -1235,6 +1247,22 @@ export function StudyReader({
             </div>
           ) : null}
         </div>
+      ) : null}
+      {recognizingPage === index && fileId ? (
+        <StudyPageOcr
+          key={`${book.id}:${index}`}
+          bookId={book.id}
+          fileId={fileId}
+          page={index}
+          section={section}
+          onClose={() => setRecognizingPage(undefined)}
+          onSave={() => {
+            if (needsOriginal) setSurfaceChoice({ visit: location.key, surface: "layout" });
+            clearSelection();
+            setRecognizingPage(undefined);
+            toast.success(t("study.scan.saved"));
+          }}
+        />
       ) : null}
       {visualAction?.action === "card" ? (
         <StudyVisualCard

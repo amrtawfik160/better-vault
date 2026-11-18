@@ -2,6 +2,7 @@
 
 import type { ModelRef } from "@/lib/ai/catalog";
 import type { ChatMessage } from "@/lib/chat/types";
+import type { PdfOcrSource } from "@/lib/study/records";
 import type { FlashcardPractice } from "@/studio/tools/flashcards/practice";
 import type { QuizAttempt } from "@/studio/tools/quiz/attempt";
 
@@ -211,6 +212,7 @@ export interface Source {
   /** The source as plain text. */
   text: string;
   studyRevision?: number;
+  pdfOcr?: PdfOcrSource;
   /**
    * Pictures taken from a PDF, in reading order, kept as files (`blobs`).
    * Each sits after the character `at` of `text`: the end of its page.

@@ -3,7 +3,7 @@ import { canWriteStudyDocumentDraft, studyDocumentDraftId } from "@/lib/study/do
 import { DEFAULT_VAULT } from "@/lib/study/vault";
 import { patchedStudyReviewItem } from "@/lib/study/recall";
 import { patchedStudyThread } from "@/lib/study/reports";
-import { patchedStudyBook, renamedStudyBook, revisedStudyBook } from "@/lib/study/text-edits";
+import { patchedStudyBook, renamedStudyBook, revisedStudyBook, withPdfOcr } from "@/lib/study/text-edits";
 import { detachedVocabularyCard, vocabularyCardId, vocabularyChanges } from "@/lib/study/vocabulary";
 import { updatedStudioPractice } from "@/studio/shared/practice";
 import type { Backend, StoreContent, TableName } from "../backend";
@@ -646,10 +646,13 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
       transaction(db, () => {
         const book = revisedStudyBook(get<StudyRecord>("study", write.id), write);
         const source = get<Source>("sources", write.sourceId);
-        if (!book || !source || !get<Notebook>("notebooks", book.notebookId)) return false;
+        if (!book || !source || source.notebookId !== book.notebookId || !get<Notebook>("notebooks", book.notebookId)) return false;
+        const recognized = write.ocr ? withPdfOcr(source, book, write) : undefined;
+        if (write.ocr && recognized?.text !== sourceText) return false;
         put("study", book);
+        if (recognized) put("sources", recognized);
         if (write.text !== write.previousText) {
-          put("sources", {
+          if (!recognized) put("sources", {
             ...source,
             text: sourceText,
             charCount: sourceText.length,

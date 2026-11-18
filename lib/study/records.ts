@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { notePassageSchema } from "@/lib/notes/search-match";
+import { ocrLanguages, ocrText } from "./ocr-format";
 
 const base = z.object({
   id: z.string(),
@@ -12,6 +13,7 @@ const section = z.object({
   text: z.string(),
   epubPath: z.string().optional(),
   markdown: z.string().optional(),
+  ocrLanguages: ocrLanguages.optional(),
 });
 const schedule = z.object({
   dueAt: z.number(),
@@ -47,6 +49,12 @@ const textEdit = z.object({
   section: index,
   ranges: z.array(z.object({ before: index, after: index, length: z.number().int().positive() })),
 });
+export const pdfOcrSourceSchema = z.object({
+  baseLength: index,
+  pages: z.record(z.string().regex(/^\d+$/), z.object({ text: ocrText, languages: ocrLanguages })),
+  edits: z.array(textEdit),
+});
+export type PdfOcrSource = z.infer<typeof pdfOcrSourceSchema>;
 const imageEdge = index.max(100);
 export const studyImageCropSchema = z.object({
   left: imageEdge,
@@ -339,6 +347,7 @@ export type StudyBookTextWrite = {
   text: string;
   markdown?: string;
   edit: StudyTextEdit;
+  ocr?: { fileId: string; languages: string[] };
   updatedAt: number;
 };
 export type StudyThread = StudyRecordOf<"thread">;

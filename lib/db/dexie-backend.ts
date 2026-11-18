@@ -3,7 +3,7 @@ import { canWriteStudyDocumentDraft, studyDocumentDraftId } from "@/lib/study/do
 import { DEFAULT_VAULT } from "@/lib/study/vault";
 import { patchedStudyReviewItem } from "@/lib/study/recall";
 import { patchedStudyThread } from "@/lib/study/reports";
-import { patchedStudyBook, renamedStudyBook, revisedStudyBook } from "@/lib/study/text-edits";
+import { patchedStudyBook, renamedStudyBook, revisedStudyBook, withPdfOcr } from "@/lib/study/text-edits";
 import { detachedVocabularyCard, vocabularyCardId, vocabularyChanges } from "@/lib/study/vocabulary";
 import { updatedStudioPractice } from "@/studio/shared/practice";
 import type { Backend } from "./backend";
@@ -366,10 +366,13 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
       db.transaction("rw", [db.study, db.sources, db.chunks, db.notebooks], async () => {
         const book = revisedStudyBook(await db.study.get(write.id), write);
         const source = await db.sources.get(write.sourceId);
-        if (!book || !source || !(await db.notebooks.get(book.notebookId))) return false;
+        if (!book || !source || source.notebookId !== book.notebookId || !(await db.notebooks.get(book.notebookId))) return false;
+        const recognized = write.ocr ? withPdfOcr(source, book, write) : undefined;
+        if (write.ocr && recognized?.text !== sourceText) return false;
         await db.study.put(book);
+        if (recognized) await db.sources.put(recognized);
         if (write.text !== write.previousText) {
-          await db.sources.put({
+          if (!recognized) await db.sources.put({
             ...source,
             text: sourceText,
             charCount: sourceText.length,
