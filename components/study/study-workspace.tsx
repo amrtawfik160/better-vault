@@ -677,7 +677,9 @@ export default function StudyWorkspace({
         book={document}
         openReport={params.get("report") === "1"}
         requestedReportId={params.get("reportId") ?? undefined}
+        focusSuggestion={params.get("suggestion") ?? undefined}
         reportCards={cards}
+        vaultWords={words}
         focusMessage={queryIndex(params.get("message"))}
         back={inReader ? undefined : () => go("tutor")}
         openBesideReader={

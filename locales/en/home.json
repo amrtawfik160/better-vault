@@ -235,6 +235,9 @@
       "deleteConversationBody": "The conversation, its session reports, and their follow-ups will be removed.",
       "unavailable": "This session report is unavailable.",
       "reportCards": "Report flashcards",
+      "saveCard": "Save flashcard",
+      "openCard": "Open flashcard",
+      "saveWord": "Save vocabulary",
       "viewCards_one": "View {{count}} report flashcard",
       "viewCards_other": "View {{count}} report flashcards",
       "reviewCards": "Review report flashcards"

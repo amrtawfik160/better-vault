@@ -3,10 +3,13 @@ import {
   studyTutorContextSchema,
   type StudyFollowUp,
   type StudyOrigin,
+  type StudyRecordOf,
   type StudyReport,
   type StudyThread,
   type StudyThreadWrite,
+  type StudyWord,
 } from "./records";
+import { vocabularyKey } from "./vocabulary";
 
 export const studyReportKey = (report: StudyReport) => report.id ?? "legacy";
 
@@ -48,6 +51,59 @@ export function matchesStudyReport(
     origin.threadId === threadId &&
     (origin.reportId ?? "legacy") === reportId
   );
+}
+
+export function reportSuggestionId(
+  kind: "card" | "word",
+  threadId: string,
+  report: StudyReport,
+  key: string,
+) {
+  return `report-${kind}-${threadId}-${report.id ?? report.generatedAt ?? 0}-${key}`;
+}
+
+export function savedReportSuggestions({
+  threadId,
+  report,
+  cards,
+  words,
+}: {
+  threadId: string;
+  report: StudyReport;
+  cards: readonly StudyRecordOf<"card">[];
+  words: readonly StudyWord[];
+}) {
+  const reportId = studyReportKey(report);
+  const saved = new Map<string, StudyOrigin>();
+  const reportCards = cards.filter(({ origin }) => matchesStudyReport(origin, threadId, reportId));
+  for (const [index] of (report.languageFeedback ?? []).entries()) {
+    const key = `language-${index}`;
+    const id = reportSuggestionId("card", threadId, report, key);
+    const card = reportCards.find(
+      ({ id: cardId, origin }) =>
+        cardId === id || (origin?.kind === "report" && origin.suggestion === key),
+    );
+    if (card) saved.set(key, { kind: "card", cardId: card.id });
+  }
+
+  for (const [index, suggestion] of (report.vocabulary ?? []).entries()) {
+    const key = `word-${index}`;
+    const id = reportSuggestionId("word", threadId, report, key);
+    const term = vocabularyKey(suggestion);
+    const word = words.find((word) =>
+      [word, ...(word.examples ?? [])].some(
+        ({ origin, context }) =>
+          origin?.kind === "report" &&
+          matchesStudyReport(origin, threadId, reportId) &&
+          (origin.suggestion
+            ? origin.suggestion === key
+            : word.id === id ||
+              (vocabularyKey(word) === term && context.trim() === suggestion.example.trim())),
+      ),
+    );
+    if (word) saved.set(key, { kind: "word", wordId: word.id });
+  }
+  return saved;
 }
 
 export function patchedStudyThread(

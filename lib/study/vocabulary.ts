@@ -31,7 +31,7 @@ export function linkedVocabularyCard(
     : undefined;
 }
 
-function vocabularyKey(word: StudyWord) {
+export function vocabularyKey(word: Pick<StudyWord, "term" | "language">) {
   return JSON.stringify([normalized(word.term), normalized(word.language)]);
 }
 

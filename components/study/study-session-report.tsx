@@ -1,9 +1,10 @@
-import { useId, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/panelui/button";
 import { DirectionalText } from "@/components/common/directional-text";
 import { textDirection } from "@/lib/text/direction";
-import type { StudyReport } from "@/lib/study/records";
+import type { StudyOrigin, StudyReport } from "@/lib/study/records";
+import { StudyOriginLink } from "./study-origin-link";
 
 function ReportSection({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -18,6 +19,7 @@ type Vocabulary = NonNullable<StudyReport["vocabulary"]>[number];
 
 export function StudySessionReport({
   report,
+  savedSuggestions,
   onSaveCard,
   onDraftCard,
   onSaveWord,
@@ -28,9 +30,10 @@ export function StudySessionReport({
   actions,
 }: {
   report: StudyReport;
-  onSaveCard: (front: string, back: string, key: string) => void;
+  savedSuggestions: ReadonlyMap<string, StudyOrigin>;
+  onSaveCard: (front: string, back: string, key: string) => Promise<unknown>;
   onDraftCard: (feedback: string) => void;
-  onSaveWord: (word: Vocabulary, key: string) => void;
+  onSaveWord: (word: Vocabulary, key: string) => Promise<unknown>;
   onSaveNote: () => void;
   onFeedback: (key: string, value: boolean) => void;
   onPlanStep: (index: number, action: "plan" | "remove" | "reopen") => void;
@@ -39,12 +42,43 @@ export function StudySessionReport({
 }) {
   const { t } = useTranslation("home");
   const nextStepId = useId();
+  const [saving, setSaving] = useState(new Set<string>());
   const technical = [
     ...(report.technicalFeedback ?? []).map(({ text }) => text),
     ...report.corrections,
   ];
   const language = report.languageFeedback ?? [];
   const words = report.vocabulary ?? [];
+
+  function suggestionAction(key: string, save: () => Promise<unknown>, label: string) {
+    const origin = savedSuggestions.get(key);
+    if (origin) {
+      return (
+        <StudyOriginLink
+          origin={origin}
+          label={t(origin.kind === "word" ? "study.vocabulary.open" : "study.followUps.openCard")}
+        />
+      );
+    }
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        loading={saving.has(key)}
+        onClick={async ({ currentTarget }) => {
+          currentTarget.closest("li")?.focus({ preventScroll: true });
+          setSaving((current) => new Set(current).add(key));
+          try {
+            await save();
+          } finally {
+            setSaving((current) => new Set([...current].filter((item) => item !== key)));
+          }
+        }}
+      >
+        {label}
+      </Button>
+    );
+  }
 
   function feedback(key: string) {
     return (
@@ -98,7 +132,12 @@ export function StudySessionReport({
         <ReportSection title="Language feedback">
           <ul className="space-y-2">
             {language.map((item, index) => (
-              <li key={index} className="space-y-2 rounded-xl border p-3 text-sm">
+              <li
+                key={index}
+                id={`study-report-language-${index}`}
+                tabIndex={-1}
+                className="scroll-mt-32 space-y-2 rounded-xl border p-3 text-sm focus-visible:ring-2 focus-visible:ring-ring"
+              >
                 <p>
                   <span className="text-muted-foreground">Original </span>
                   <DirectionalText as="span" text={item.original} />
@@ -111,19 +150,16 @@ export function StudySessionReport({
                 </p>
                 <DirectionalText multiline text={item.reason} className="text-muted-foreground" />
                 <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
+                  {suggestionAction(
+                    `language-${index}`,
+                    () =>
                       onSaveCard(
                         item.original,
                         `${item.suggestion}\n\n${item.reason}`,
                         `language-${index}`,
-                      )
-                    }
-                  >
-                    Save flashcard
-                  </Button>
+                      ),
+                    t("study.followUps.saveCard"),
+                  )}
                   {feedback(`language-${index}`)}
                 </div>
               </li>
@@ -139,7 +175,12 @@ export function StudySessionReport({
         <ReportSection title="Suggested vocabulary">
           <ul className="space-y-2">
             {words.map((word, index) => (
-              <li key={index} className="space-y-2 rounded-xl border p-3 text-sm">
+              <li
+                key={index}
+                id={`study-report-word-${index}`}
+                tabIndex={-1}
+                className="scroll-mt-32 space-y-2 rounded-xl border p-3 text-sm focus-visible:ring-2 focus-visible:ring-ring"
+              >
                 <strong dir={textDirection(word.term)}>{word.term}</strong>
                 <DirectionalText multiline text={word.definition} />
                 {word.translation ? <DirectionalText text={word.translation} /> : null}
@@ -151,13 +192,11 @@ export function StudySessionReport({
                   />
                 ) : null}
                 <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => onSaveWord(word, `word-${index}`)}
-                  >
-                    Save vocabulary
-                  </Button>
+                  {suggestionAction(
+                    `word-${index}`,
+                    () => onSaveWord(word, `word-${index}`),
+                    t("study.followUps.saveWord"),
+                  )}
                   {feedback(`word-${index}`)}
                 </div>
               </li>

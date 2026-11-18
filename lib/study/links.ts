@@ -70,6 +70,7 @@ export function originHref(origin: StudyOrigin) {
         thread: origin.threadId,
         report: "1",
         reportId: origin.reportId,
+        suggestion: origin.suggestion,
       });
     case "studio":
       return withQuery(routes.notebook(origin.notebookId), { output: origin.outputId });

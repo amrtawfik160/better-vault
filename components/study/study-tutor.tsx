@@ -50,6 +50,8 @@ import { activeStudyCard, selectedStudyCards } from "@/lib/study/recall";
 import {
   captureReportPracticeContext,
   matchesStudyReport,
+  reportSuggestionId,
+  savedReportSuggestions,
   studyFollowUpId,
   studyReportKey,
   studyReports,
@@ -71,6 +73,7 @@ import {
   type StudyThread,
   type StudyThreadChange,
   type StudyRecordOf,
+  type StudyWord,
   type StudyReportChange,
   type StudyOrigin,
 } from "@/lib/study/records";
@@ -409,7 +412,9 @@ export function StudyTutor({
   book,
   openReport,
   requestedReportId,
+  focusSuggestion,
   reportCards,
+  vaultWords,
   focusMessage,
   back,
   openBesideReader,
@@ -425,7 +430,9 @@ export function StudyTutor({
   book?: StudyBook;
   openReport?: boolean;
   requestedReportId?: string;
+  focusSuggestion?: string;
   reportCards: StudyRecordOf<"card">[];
+  vaultWords: StudyWord[];
   focusMessage?: number;
   back?: () => void;
   openBesideReader?: () => void;
@@ -558,9 +565,17 @@ export function StudyTutor({
       message?.scrollIntoView({ block: "center" });
       message?.focus({ preventScroll: true });
     }
-    if (showReport)
-      document.getElementById("study-session-report")?.scrollIntoView({ block: "start" });
-  }, [focusMessage, reportId, showReport]);
+    if (showReport) {
+      const suggestion =
+        focusSuggestion && reportId === requestedReportId
+          ? document.getElementById(`study-report-${focusSuggestion}`)
+          : null;
+      if (suggestion) {
+        suggestion.scrollIntoView({ block: "center" });
+        suggestion.focus({ preventScroll: true });
+      } else document.getElementById("study-session-report")?.scrollIntoView({ block: "start" });
+    }
+  }, [focusMessage, focusSuggestion, reportId, requestedReportId, showReport]);
 
   async function save(change: StudyThreadChange) {
     await updateStudyThread(thread.id, change);
@@ -899,8 +914,8 @@ export function StudyTutor({
   }
 
   function makeCard(front: string, back: string, origin: StudyOrigin, id: string) {
-    void saveStudyCard(
-      { front, back, tags: [thread.title], notebookId: thread.notebookId, origin },
+    return saveStudyCard(
+      { front, back, tags: [thread.title], notebookId: thread.notebookId, vaultId, origin },
       id,
     )
       .then((card) =>
@@ -1527,7 +1542,14 @@ export function StudyTutor({
           ) : null}
           {showReport && visibleReport && reportId ? (
             <StudySessionReport
+              key={reportId}
               report={visibleReport}
+              savedSuggestions={savedReportSuggestions({
+                threadId: thread.id,
+                report: visibleReport,
+                cards: reportCards,
+                words: vaultWords,
+              })}
               actions={
                 reportCardCount ? (
                   <div className="flex flex-wrap gap-2">
@@ -1571,12 +1593,12 @@ export function StudyTutor({
                 makeCard(
                   front,
                   back,
-                  { kind: "report", threadId: thread.id, reportId },
-                  `report-card-${thread.id}-${visibleReport.id ?? visibleReport.generatedAt ?? 0}-${key}`,
+                  { kind: "report", threadId: thread.id, reportId, suggestion: key },
+                  reportSuggestionId("card", thread.id, visibleReport, key),
                 )
               }
               onSaveWord={(word, key) => {
-                void saveStudyWord(
+                return saveStudyWord(
                   {
                     term: word.term,
                     language: word.language,
@@ -1585,9 +1607,9 @@ export function StudyTutor({
                     note: word.definition,
                     notebookId: thread.notebookId,
                     vaultId,
-                    origin: { kind: "report", threadId: thread.id, reportId },
+                    origin: { kind: "report", threadId: thread.id, reportId, suggestion: key },
                   },
-                  `report-word-${thread.id}-${visibleReport.id ?? visibleReport.generatedAt ?? 0}-${key}`,
+                  reportSuggestionId("word", thread.id, visibleReport, key),
                 )
                   .then((saved) =>
                     toast.success("Saved to vocabulary", {
