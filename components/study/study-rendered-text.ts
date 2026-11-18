@@ -3,7 +3,7 @@ import { locateStudyQuote } from "@/lib/study/locators";
 import { studyFormulaAttribute } from "@/lib/study/markdown-math";
 import { studyHighlightColor, type StudyRecordOf } from "@/lib/study/records";
 
-type Mark = Pick<StudyRecordOf<"highlight">, "quote" | "offset" | "color">;
+export type StudyTextMark = Pick<StudyRecordOf<"highlight">, "quote" | "offset" | "color">;
 const compact = (text: string) => text.replace(/\s/gu, "");
 const formulaSelector = `[${studyFormulaAttribute}]`;
 
@@ -97,7 +97,7 @@ function renderedTextIndex(root: HTMLElement) {
 function locateRenderedRange(
   { text, pieces }: ReturnType<typeof renderedTextIndex>,
   canonical: string,
-  mark: Pick<Mark, "quote" | "offset">,
+  mark: Pick<StudyTextMark, "quote" | "offset">,
 ) {
   const quote = compact(mark.quote);
   if (!quote) return;
@@ -114,7 +114,11 @@ function locateRenderedRange(
   return range;
 }
 
-export function renderedStudyRange(root: HTMLElement, canonical: string, mark: Pick<Mark, "quote" | "offset">) {
+export function renderedStudyRange(
+  root: HTMLElement,
+  canonical: string,
+  mark: Pick<StudyTextMark, "quote" | "offset">,
+) {
   return locateRenderedRange(renderedTextIndex(root), canonical, mark);
 }
 
@@ -122,7 +126,7 @@ export function useRenderedStudyMarks(
   root: RefObject<HTMLElement | null>,
   ready: boolean,
   canonical: string,
-  marks: Mark[],
+  marks: readonly StudyTextMark[],
 ) {
   useEffect(() => {
     const region = root.current;

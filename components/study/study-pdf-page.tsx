@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { loadBlob } from "@/lib/db/blobs";
-import type { StudyRecordOf } from "@/lib/study/records";
-import { useRenderedStudyMarks } from "./study-rendered-text";
+import { useRenderedStudyMarks, type StudyTextMark } from "./study-rendered-text";
 import "./study-pdf-page.css";
 
 export function StudyPdfPage({
@@ -16,7 +15,7 @@ export function StudyPdfPage({
   fileId: string;
   page: number;
   sectionText: string;
-  marks: StudyRecordOf<"highlight">[];
+  marks: readonly StudyTextMark[];
   zoom: number;
   onSelect: (root: HTMLElement) => void;
   onReadingSurface: (surface: { section: number; root: HTMLElement | null }) => void;

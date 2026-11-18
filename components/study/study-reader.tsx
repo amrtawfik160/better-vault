@@ -198,14 +198,17 @@ export function StudyReader({
   const [font, setFont] = useState(18);
   const [zoom, setZoom] = useState(100);
   const [epubTheme, setEpubTheme] = useState<StudyEpubTheme>("system");
-  const [showLayout, setShowLayout] = useState(
-    !visitingPassage && book.readingPlace?.section === index && book.readingPlace.surface === "layout",
-  );
+  const [surfaceChoice, setSurfaceChoice] = useState<StudyBook["preferredReadingSurface"]>();
+  const [savingSurface, setSavingSurface] = useState(false);
+  const showLayout =
+    (surfaceChoice ?? book.preferredReadingSurface ?? book.readingPlace?.surface) === "layout";
   const [readingSurface, setReadingSurface] = useState<{ section: number; root: HTMLElement | null }>();
   const viewPdf = showLayout && book.format === "pdf";
   const viewEpub = showLayout && book.format === "epub";
-  const layout = showLayout && fileId && readingSurface?.section === index
-    ? readingSurface.root : undefined;
+  const showingOriginal = Boolean((viewPdf || viewEpub) && fileId);
+  const layout =
+    showingOriginal && readingSurface?.section === index ? readingSurface.root : undefined;
+  const loadingLayout = showingOriginal && layout === undefined;
   const [result, setResult] = useState<AssistResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [originalFile, setOriginalFile] = useState<{ url: string; mime: string }>();
@@ -221,25 +224,42 @@ export function StudyReader({
     viewport,
     article: textBody,
     layout,
-    loadingLayout: waitingMath || Boolean(showLayout && fileId && layout === undefined),
+    loadingLayout: waitingMath || loadingLayout,
     renderedArticle: markdown !== undefined,
     enabled: !visitingPassage && editingSection !== index,
     activity: latestInteraction,
     layoutCheckpoint,
   });
-  const pageHighlights = highlights.flatMap((item) => {
-    if (item.section !== index) return [];
-    const offset = locateStudyMark(book, item);
-    return offset < 0 ? [] : [{ ...item, offset }];
-  });
-  const renderedMarks = focus
-    ? [
-        ...pageHighlights.filter(({ offset, quote }) => (
-          offset >= focus.offset + focus.length || offset + quote.length <= focus.offset
-        )),
-        { offset: focus.offset, quote: section.text.slice(focus.offset, focus.offset + focus.length), color: "blue" as const },
-      ]
-    : pageHighlights;
+  const pageHighlights = useMemo(
+    () =>
+      highlights.flatMap((item) => {
+        if (item.section !== index) return [];
+        const offset = locateStudyMark(book, item);
+        return offset < 0 ? [] : [{ ...item, offset }];
+      }),
+    [book, highlights, index],
+  );
+  const focusMark = useMemo(
+    () =>
+      focusStart === undefined || focusLength === undefined
+        ? undefined
+        : { offset: focusStart, quote: section.text.slice(focusStart, focusStart + focusLength) },
+    [focusStart, focusLength, section.text],
+  );
+  const renderedMarks = useMemo(
+    () =>
+      focusMark
+        ? [
+            ...pageHighlights.filter(
+              ({ offset, quote }) =>
+                offset >= focusMark.offset + focusMark.quote.length ||
+                offset + quote.length <= focusMark.offset,
+            ),
+            { ...focusMark, color: "blue" as const },
+          ]
+        : pageHighlights,
+    [focusMark, pageHighlights],
+  );
   useRenderedStudyMarks(textBody, !waitingMath && markdown !== undefined, section.text, renderedMarks);
   const bookmarkPlaces = book.bookmarkPlaces ?? [];
 
@@ -304,21 +324,33 @@ export function StudyReader({
   }, [fileId]);
 
   useEffect(() => {
-    if (waitingMath || restoredLayout.current === location.key) return;
-    const root = textBody.current;
-    if (root && markdown !== undefined && focusStart !== undefined && focusLength !== undefined) {
-      const quote = section.text.slice(focusStart, focusStart + focusLength);
-      const range = renderedStudyRange(root, section.text, { offset: focusStart, quote });
-      if (range && viewport) {
-        const position = range.getBoundingClientRect().top - viewport.getBoundingClientRect().top;
+    if (waitingMath || loadingLayout || restoredLayout.current === location.key) return;
+    if (focusMark) {
+      const renderedRoot = layout ?? (markdown !== undefined ? textBody.current : null);
+      const range = renderedRoot && renderedStudyRange(renderedRoot, section.text, focusMark);
+      const line =
+        range && Array.from(range.getClientRects()).find(({ width, height }) => width > 0 && height > 0);
+      if (line && viewport) {
+        const position = line.top - viewport.getBoundingClientRect().top;
         viewport.scrollBy({ top: position - viewport.clientHeight / 2, behavior: "instant" });
+        return;
       }
-      return;
+      textBody.current?.querySelector("#focused-passage")?.scrollIntoView({ block: "center" });
+    } else if (missingPassage) {
+      passageNotice.current?.scrollIntoView({ block: "nearest" });
     }
-    if (focusStart !== undefined)
-      document.getElementById("focused-passage")?.scrollIntoView({ block: "center" });
-    else if (missingPassage) passageNotice.current?.scrollIntoView({ block: "nearest" });
-  }, [index, focusStart, focusLength, location.key, markdown, missingPassage, restoredLayout, section.text, viewport, waitingMath]);
+  }, [
+    focusMark,
+    layout,
+    loadingLayout,
+    location.key,
+    markdown,
+    missingPassage,
+    restoredLayout,
+    section.text,
+    viewport,
+    waitingMath,
+  ]);
 
   function clearSelection() {
     setSelection(null);
@@ -336,9 +368,19 @@ export function StudyReader({
     openPage(page);
   }
 
-  function toggleLayout(visible: boolean) {
-    if (visible && !showLayout) setReadingSurface(undefined);
-    setShowLayout(visible);
+  async function toggleLayout(visible: boolean) {
+    if (savingSurface || visible === showLayout) return;
+    const preferredReadingSurface = visible ? "layout" : "text";
+    setSavingSurface(true);
+    try {
+      await updateStudyBook(book.id, { preferredReadingSurface });
+      if (!visible) setReadingSurface(undefined);
+      setSurfaceChoice(preferredReadingSurface);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSavingSurface(false);
+    }
   }
 
   function capture() {
@@ -557,10 +599,7 @@ export function StudyReader({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {visitingPassage ? (
-            <Button variant="outline" onClick={() => {
-              toggleLayout(book.readingPlace?.surface === "layout");
-              resume();
-            }}>
+            <Button variant="outline" onClick={resume}>
               {t("study.reader.resume")}
             </Button>
           ) : null}
@@ -602,12 +641,12 @@ export function StudyReader({
             </a>
           ) : null}
           {book.format === "pdf" && fileId ? (
-            <Button variant="outline" onClick={() => toggleLayout(!viewPdf)}>
+            <Button variant="outline" disabled={savingSurface} onClick={() => void toggleLayout(!viewPdf)}>
               {viewPdf ? "Hide original page" : "Show original page"}
             </Button>
           ) : null}
           {book.format === "epub" && fileId ? (
-            <Button variant="outline" onClick={() => toggleLayout(!viewEpub)}>
+            <Button variant="outline" disabled={savingSurface} onClick={() => void toggleLayout(!viewEpub)}>
               {viewEpub ? "Hide book layout" : "Show book layout"}
             </Button>
           ) : null}
@@ -834,7 +873,7 @@ export function StudyReader({
               fileId={fileId}
               page={index}
               sectionText={section.text}
-              marks={pageHighlights}
+              marks={renderedMarks}
               zoom={zoom}
               onSelect={captureRendered}
               onReadingSurface={setReadingSurface}
@@ -862,7 +901,7 @@ export function StudyReader({
               section={section}
               index={index}
               sections={book.sections}
-              marks={pageHighlights}
+              marks={renderedMarks}
               font={font}
               theme={epubTheme}
               go={go}

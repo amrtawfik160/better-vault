@@ -1,10 +1,10 @@
 import { createElement, useEffect, useRef, useState, type ReactNode } from "react";
 import { loadBlob } from "@/lib/db/blobs";
 import { epubPath, openStudyEpub } from "@/lib/study/epub";
-import type { StudyRecordOf, StudySection } from "@/lib/study/records";
+import type { StudySection } from "@/lib/study/records";
 import { textDirection, type TextDirection } from "@/lib/text/direction";
 import { directionalInline } from "@/components/common/directional-text";
-import { useRenderedStudyMarks } from "./study-rendered-text";
+import { useRenderedStudyMarks, type StudyTextMark } from "./study-rendered-text";
 
 const epubThemeClass = {
   system: "",
@@ -227,7 +227,7 @@ export function StudyEpubChapter({
   section: StudySection;
   index: number;
   sections: StudySection[];
-  marks: StudyRecordOf<"highlight">[];
+  marks: readonly StudyTextMark[];
   font: number;
   theme: StudyEpubTheme;
   onSelect: (root: HTMLElement) => void;

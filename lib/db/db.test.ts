@@ -1647,7 +1647,7 @@ describe.each(backends)("%s store", (name, create) => {
       const quote = "Quorum intersection";
       const book = await addStudyBook({
         title: "Reader position",
-        format: "text",
+        format: "pdf",
         sections: [{ title: "Introduction", text: "First page" }, { title: "Quorums", text: quote }],
       });
       const openedAt = Date.now();
@@ -1656,6 +1656,11 @@ describe.each(backends)("%s store", (name, create) => {
       await saveStudyReadingPlace(book.id, previous, openedAt);
       await store().patchStudyBook({ id: book.id, change: { section: 1 }, updatedAt: openedAt + 20 });
       await saveStudyReadingPlace(book.id, current, openedAt + 30);
+      await store().patchStudyBook({
+        id: book.id,
+        change: { preferredReadingSurface: "layout" },
+        updatedAt: openedAt + 35,
+      });
       await saveStudyReadingPlace(book.id, previous, openedAt + 10);
       await store().patchStudyBook({ id: book.id, change: { section: 0 }, updatedAt: openedAt + 15 });
       await store().patchStudyBook({ id: book.id, change: { bookmarks: [0] }, updatedAt: openedAt + 40 });
@@ -1663,7 +1668,11 @@ describe.each(backends)("%s store", (name, create) => {
       await deleteAllData();
       await importBackup(backup);
       expect(await store().getStudy(book.id)).toMatchObject({
-        section: 1, readingPlace: current, lastReadAt: openedAt + 30, bookmarks: [0],
+        section: 1,
+        readingPlace: current,
+        lastReadAt: openedAt + 30,
+        preferredReadingSurface: "layout",
+        bookmarks: [0],
       });
     });
 

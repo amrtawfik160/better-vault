@@ -22,9 +22,10 @@ const schedule = z.object({
   lapses: z.number().int().nonnegative().optional(),
 });
 const index = z.number().int().nonnegative();
+const readingSurface = z.enum(["text", "layout"]);
 const readingPlace = z.object({
   section: index,
-  surface: z.enum(["text", "layout"]),
+  surface: readingSurface,
   progress: z.number().min(0).max(1),
   endRevision: index.optional(),
   anchor: z.object({ offset: index, quote: z.string().min(1).max(96), revision: index }).optional(),
@@ -191,6 +192,7 @@ export const studyRecordSchema = z.discriminatedUnion("kind", [
       .optional(),
     attachedToNotebook: z.literal(true).optional(),
     lastReadAt: z.number().optional(),
+    preferredReadingSurface: readingSurface.optional(),
     readingPlace: readingPlace.optional(),
   }),
   base.extend({
@@ -283,7 +285,12 @@ export type StudyReadingPlace = z.infer<typeof readingPlace>;
 export type StudyTextEdit = z.infer<typeof textEdit>;
 export type StudyBookWrite = {
   id: string;
-  change: Partial<Pick<StudyBook, "title" | "section" | "bookmarks" | "bookmarkPlaces" | "readingPlace">>;
+  change: Partial<
+    Pick<
+      StudyBook,
+      "title" | "section" | "bookmarks" | "bookmarkPlaces" | "readingPlace" | "preferredReadingSurface"
+    >
+  >;
   updatedAt: number;
 };
 export type StudyBookTextWrite = {
