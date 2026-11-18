@@ -534,11 +534,20 @@ export function saveStudyReadingPlace(id: string, readingPlace: StudyReadingPlac
   return store().patchStudyBook({ id, change: { readingPlace }, updatedAt: capturedAt });
 }
 
-export async function rateStudyItem(id: string, rating: StudyRating, seconds: number) {
+export async function rateStudyItem(
+  id: string,
+  rating: StudyRating,
+  seconds: number,
+  review?: { sessionId: string; dueAt: number },
+) {
   const backend = store();
   const record = await backend.getStudy(id);
   const now = Date.now();
-  if ((record?.kind !== "card" && record?.kind !== "highlight") || record.schedule.dueAt > now)
+  if (
+    (record?.kind !== "card" && record?.kind !== "highlight") ||
+    record.schedule.dueAt > now ||
+    (review && record.schedule.dueAt !== review.dueAt)
+  )
     return false;
   return backend.applyStudyReview({
     id,
@@ -550,6 +559,7 @@ export async function rateStudyItem(id: string, rating: StudyRating, seconds: nu
       activity: "review",
       rating,
       itemId: id,
+      reviewSessionId: review?.sessionId,
       origin:
         record.kind === "highlight"
           ? { kind: "book", bookId: record.bookId, section: record.section, highlightId: record.id }

@@ -167,6 +167,7 @@ export const studyRecordSchema = z.discriminatedUnion("kind", [
     count: z.number().int().nonnegative(),
     rating: z.enum(studyRatings).optional(),
     itemId: z.string().optional(),
+    reviewSessionId: z.string().optional(),
     origin: studyOriginSchema.optional(),
   }),
   base.extend({

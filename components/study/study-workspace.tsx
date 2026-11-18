@@ -1,13 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useSearchParams } from "react-router";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { StudyOriginLink } from "./study-origin-link";
 import { StudyFollowUps } from "./study-follow-ups";
 import { queryIndex, studyHref } from "@/lib/study/links";
 import { studyHighlightPreview, weakStudyCards } from "@/lib/study/recall";
-import { matchesStudyReport, studyReportKey } from "@/lib/study/reports";
-import { reviewReturnState, reviewSelection } from "@/lib/study/review-session";
+import { studyReportKey } from "@/lib/study/reports";
+import {
+  directReviewSession,
+  reviewCollection,
+  reviewQueue,
+  reviewReturnState,
+  reviewSelection,
+  savedReview,
+  studyCardsInScope,
+} from "@/lib/study/review-session";
 import { studyVaultIndex } from "@/lib/study/vault";
 import { studyTextRevision } from "@/lib/study/text-edits";
 import { Button } from "@/components/panelui/button";
@@ -15,7 +23,13 @@ import { Card } from "@/components/panelui/card";
 import { Tabs } from "@/components/panelui/tabs";
 import { SettingsSheet } from "@/components/settings/settings-sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { startBookTutor, startCardTutor, startHighlightTutor, useStudyRecords } from "@/lib/db/study";
+import {
+  startBookTutor,
+  startCardTutor,
+  startHighlightTutor,
+  studyId,
+  useStudyRecords,
+} from "@/lib/db/study";
 import { useNotes } from "@/lib/db/notes";
 import { useSourceTitles } from "@/lib/db/sources";
 import { currentVaultId, DEFAULT_VAULT, setCurrentVault } from "@/lib/db/vaults";
@@ -37,6 +51,7 @@ type Tab = (typeof tabs)[number];
 function DailyStudy({
   rows,
   books,
+  vaultId,
   go,
   read,
   teachBack,
@@ -45,6 +60,7 @@ function DailyStudy({
 }: {
   rows: StudyRecord[];
   books: StudyBook[];
+  vaultId: string;
   go: (tab: Tab, params?: Record<string, string>) => void;
   read: (book: StudyBook) => void;
   teachBack: (book: StudyBook) => void;
@@ -52,6 +68,7 @@ function DailyStudy({
   openingPractice: boolean;
 }) {
   const { t } = useTranslation("home");
+  const navigate = useNavigate();
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
@@ -73,6 +90,20 @@ function DailyStudy({
     (item) => item.kind === "highlight" && item.schedule.dueAt <= now,
   ).length;
   const weakCards = weakStudyCards(rows);
+  const paused = savedReview(vaultId);
+  const resume =
+    paused &&
+    reviewQueue(
+      reviewCollection(
+        rows,
+        new URLSearchParams(paused.path.split("?", 2)[1]),
+        paused.state.studyReviewIds,
+      ),
+      paused.snapshot.practiced,
+      now,
+    ).length
+      ? paused
+      : undefined;
   const lastRead =
     books
       .filter((entry) => entry.lastReadAt !== undefined)
@@ -100,21 +131,26 @@ function DailyStudy({
         ) : null}
       </div>
       <div className="flex flex-wrap gap-2">
+        {resume ? (
+          <Button onClick={() => void navigate(resume.path, { state: resume.state })}>
+            {t("study.today.resumeReview")}
+          </Button>
+        ) : null}
         {dueCards ? (
-          <Button onClick={() => go("review")}>
+          <Button variant={resume ? "outline" : "default"} onClick={() => go("review")}>
             {t("study.today.cardsDue", { count: dueCards })}
           </Button>
         ) : null}
         {dueHighlights ? (
           <Button
-            variant={dueCards ? "outline" : "default"}
+            variant={resume || dueCards ? "outline" : "default"}
             onClick={() => go("review", { kind: "highlights" })}
           >
             {t("study.today.highlightsDue", { count: dueHighlights })}
           </Button>
         ) : null}
         <Button
-          variant={dueCards || dueHighlights ? "outline" : "default"}
+          variant={resume || dueCards || dueHighlights ? "outline" : "default"}
           onClick={() => (lastRead ? read(lastRead) : go("library"))}
         >
           {lastRead ? "Continue reading" : "Add a document"}
@@ -368,6 +404,12 @@ export default function StudyWorkspace({
   const saved = useStudyRecords();
   const notes = useNotes();
   const tab: Tab = tabs.find((entry) => entry === params.get("tab")) ?? "today";
+  const [directReviewId] = useState(() => {
+    const id = studyId();
+    return tab === "review" && location.key === "default"
+      ? directReviewSession(location.pathname + location.search, id)
+      : id;
+  });
   const ready = saved !== undefined && notes !== undefined;
   const sourceTitles = useSourceTitles(tab === "tutor");
   const selection = tab === "review" ? reviewSelection(location.state) : undefined;
@@ -384,8 +426,8 @@ export default function StudyWorkspace({
   );
   const reviewVault = selection?.studyReviewVault;
   const linkedVault = ready
-    ? (scope.linkedVault(params) ??
-      (reviewVault && vaults.some(({ id }) => id === reviewVault) ? reviewVault : undefined))
+    ? ((reviewVault && vaults.some(({ id }) => id === reviewVault) ? reviewVault : undefined) ??
+      scope.linkedVault(params))
     : undefined;
   const studyVaultId = linkedVault ?? vaultId;
   const rows = (saved ?? [])
@@ -434,22 +476,9 @@ export default function StudyWorkspace({
   const requestedReview = selection?.studyReviewIds;
   const reviewingHighlights = params.get("kind") === "highlights";
   const weakMode = tab === "review" && !reviewingHighlights && params.get("mode") === "weak";
-  const reviewIds = weakMode
-    ? new Set(weakStudyCards(rows).map(({ card }) => card.id))
-    : requestedReview
-      ? new Set(requestedReview)
-      : null;
-  const filteredCards = cards.filter(
-    (row) =>
-      (!book ||
-        (row.origin?.kind === "book"
-          ? row.origin.bookId === book.id
-          : row.notebookId === book.notebookId)) &&
-      (!notebookId || row.notebookId === notebookId) &&
-      (!output || (row.origin?.kind === "studio" && row.origin.outputId === output)) &&
-      (!fromReport || matchesStudyReport(row.origin, thread?.id ?? null, fromReport)) &&
-      (!cardId || row.id === cardId),
-  );
+  const filteredCards = studyCardsInScope(cards, params, book, thread?.id ?? null);
+  const reviewSessionId =
+    selection?.studyReviewSession ?? (location.key === "default" ? directReviewId : location.key);
   const filteredHighlights = book
     ? highlights.filter((item) => item.bookId === book.id)
     : highlights;
@@ -530,6 +559,7 @@ export default function StudyWorkspace({
         <DailyStudy
           rows={rows}
           books={books}
+          vaultId={studyVaultId}
           go={go}
           read={read}
           teachBack={(item) =>
@@ -634,26 +664,41 @@ export default function StudyWorkspace({
       ) : null}
       {ready && !unavailableBook && tab === "review" ? (
         <StudyReview
-          key={location.key}
+          key={`${location.key}:${studyVaultId}`}
           vaultId={studyVaultId}
-          cards={reviewIds ? filteredCards.filter(({ id }) => reviewIds.has(id)) : filteredCards}
-          highlights={reviewIds && reviewingHighlights
-            ? filteredHighlights.filter(({ id }) => reviewIds.has(id))
-            : filteredHighlights}
+          items={reviewCollection(rows, params, requestedReview)}
           useHighlights={reviewingHighlights}
           books={books}
           threads={threads}
           practice={(item, state) => void openTutorSelection(item.kind, [item.id], state)}
           openingPractice={openingPractice}
           initialPractice={weakMode}
-          libraryHref={reviewingHighlights && book
-            ? studyHref("highlights", { book: book.id })
-            : reportFilter ? studyHref("cards", reportFilter) : undefined}
+          sessionId={reviewSessionId}
+          ratedInDatabase={
+            rows.filter(
+              (row) =>
+                row.kind === "session" &&
+                row.activity === "review" &&
+                row.reviewSessionId === reviewSessionId,
+            ).length
+          }
+          libraryHref={
+            reviewingHighlights && book
+              ? studyHref("highlights", { book: book.id })
+              : reportFilter
+                ? studyHref("cards", reportFilter)
+                : undefined
+          }
           collection={
             weakMode
               ? t("study.recall.weakSet")
-              : reviewIds
-                ? t(reviewingHighlights ? "study.highlights.selection" : "study.recall.cardSelection", { count: reviewIds.size })
+              : requestedReview
+                ? t(
+                    reviewingHighlights
+                      ? "study.highlights.selection"
+                      : "study.recall.cardSelection",
+                    { count: new Set(requestedReview).size },
+                  )
                 : (reportCollection ?? book?.title)
           }
         />

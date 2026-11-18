@@ -1,6 +1,7 @@
 import {
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ClipboardEvent,
@@ -11,9 +12,23 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { StudyFlashcardGenerator } from "./study-flashcard-generator";
 import { StudyOriginLink } from "./study-origin-link";
-import { originHref, studyCitationOrigin, studyHighlightOrigin, studyHref } from "@/lib/study/links";
+import {
+  originHref,
+  studyCitationOrigin,
+  studyHighlightOrigin,
+  studyHref,
+} from "@/lib/study/links";
 import { studyHighlightPreview } from "@/lib/study/recall";
-import { loadReviewSession, reviewReturnState, reviewSelection, saveReviewSession } from "@/lib/study/review-session";
+import {
+  loadReviewSession,
+  resumeReviewSnapshot,
+  reviewQueue,
+  reviewReturnState,
+  reviewSelection,
+  saveReviewCheckpoint,
+  saveReviewSession,
+  type ReviewSnapshot,
+} from "@/lib/study/review-session";
 import { toast } from "sonner";
 import { Button } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
@@ -57,8 +72,7 @@ function useReviewClock() {
 }
 
 export function StudyReview({
-  cards,
-  highlights,
+  items,
   useHighlights,
   books,
   threads,
@@ -68,9 +82,10 @@ export function StudyReview({
   initialPractice,
   vaultId,
   libraryHref,
+  ratedInDatabase,
+  sessionId,
 }: {
-  cards: Card[];
-  highlights: Highlight[];
+  items: (Card | Highlight)[];
   useHighlights: boolean;
   books: StudyBook[];
   threads: StudyThread[];
@@ -80,51 +95,81 @@ export function StudyReview({
   initialPractice?: boolean;
   vaultId: string;
   libraryHref?: string;
+  ratedInDatabase: number;
+  sessionId: string;
 }) {
   const { t } = useTranslation("home");
   const now = useReviewClock();
   const location = useLocation();
-  const selection = reviewSelection(location.state);
-  const sessionId = selection?.studyReviewSession ?? location.key;
   const path = location.pathname + location.search;
+  const destination = useMemo(() => {
+    const selection = reviewSelection(location.state);
+    return {
+      path,
+      state: {
+        ...selection,
+        studyReviewSession: sessionId,
+        studyReviewVault: vaultId,
+      },
+    };
+  }, [location.state, path, vaultId, sessionId]);
   const storageId = JSON.stringify([sessionId, path, vaultId]);
   const [session, setSession] = useState(
     () =>
+      resumeReviewSnapshot(vaultId, destination) ??
       loadReviewSession(storageId) ?? {
         revealed: "",
         rated: 0,
         practiced: initialPractice ? [] : null,
       },
   );
-  const { revealed, rated, practiced } = session;
-  const setRevealed = (id: string) => setSession((value) => ({ ...value, revealed: id }));
+  const { revealed, practiced, position } = session;
+  const rated = Math.max(session.rated, ratedInDatabase);
   const [started, setStarted] = useState(Date.now);
   const [busy, setBusy] = useState(false);
+  const [finished, setFinished] = useState<ReviewSnapshot["position"]>();
   const answer = useRef<HTMLDivElement>(null);
   const reveal = useRef<HTMLButtonElement>(null);
   const grading = useRef(false);
-  const all = useHighlights ? highlights : cards;
-  const due = all
-    .filter(({ schedule }) => schedule.dueAt <= now)
-    .toSorted((a, b) => a.schedule.dueAt - b.schedule.dueAt);
-  const practiceQueue = practiced ? all.filter(({ id }) => !practiced.includes(id)) : [];
-  const queue = practiced ? practiceQueue : due;
-  const item = queue.find(({ id }) => id === revealed) ?? queue[0];
-  const remaining = all.toSorted((a, b) => a.schedule.dueAt - b.schedule.dueAt)[0];
-  const isRevealed = Boolean(item && revealed === item.id);
+  const queue = reviewQueue(items, practiced, now).filter(
+    ({ id, schedule }) => practiced || id !== finished?.id || schedule.dueAt !== finished.dueAt,
+  );
+  const pinned = queue.find(({ id, schedule }) =>
+    position
+      ? id === position.id && (practiced || schedule.dueAt === position.dueAt)
+      : id === revealed,
+  );
+  const item = pinned ?? queue[0];
+  const remaining = items.toSorted((a, b) => a.schedule.dueAt - b.schedule.dueAt)[0];
+  const isRevealed = Boolean(item && revealed === item.id && (!position || pinned));
   const highlightBook =
     item?.kind === "highlight" ? books.find(({ id }) => id === item.bookId) : undefined;
+
+  function revealAnswer() {
+    if (item)
+      setSession((value) => ({
+        ...value,
+        revealed: item.id,
+        position: { id: item.id, dueAt: item.schedule.dueAt },
+      }));
+  }
 
   async function grade(rating: StudyRating, gradedAt: number) {
     if (!item || practiced || grading.current) return;
     grading.current = true;
     setBusy(true);
     try {
-      const committed = await rateStudyItem(item.id, rating, (gradedAt - started) / 1000);
+      const dueAt = item.schedule.dueAt;
+      const committed = await rateStudyItem(item.id, rating, (gradedAt - started) / 1000, {
+        sessionId,
+        dueAt,
+      });
+      setFinished({ id: item.id, dueAt });
       setSession((value) => ({
         ...value,
         revealed: "",
-        rated: value.rated + (committed ? 1 : 0),
+        position: undefined,
+        rated: Math.max(rated, value.rated) + (committed ? 1 : 0),
       }));
       setStarted(gradedAt);
     } catch (error) {
@@ -135,7 +180,18 @@ export function StudyReview({
     }
   }
 
-  useEffect(() => saveReviewSession(storageId, session), [storageId, session]);
+  const itemId = item?.id;
+  const dueAt = item?.schedule.dueAt;
+  useLayoutEffect(() => {
+    const snapshot = {
+      revealed: isRevealed ? revealed : "",
+      rated,
+      practiced,
+      position: itemId && dueAt !== undefined ? { id: itemId, dueAt } : undefined,
+    };
+    saveReviewSession(storageId, snapshot);
+    saveReviewCheckpoint(vaultId, destination, snapshot);
+  }, [isRevealed, revealed, rated, practiced, itemId, dueAt, storageId, vaultId, destination]);
 
   useLayoutEffect(() => {
     const target = isRevealed ? answer.current : reveal.current;
@@ -148,7 +204,7 @@ export function StudyReview({
     if (event.key === " " && !isRevealed) {
       if (event.target instanceof HTMLElement && event.target.closest("button, a")) return;
       event.preventDefault();
-      setRevealed(item.id);
+      revealAnswer();
     }
     const rating = studyRatings[Number(event.key) - 1];
     if (rating && isRevealed && !practiced) {
@@ -163,13 +219,7 @@ export function StudyReview({
       ? threads.find(({ id }) => id === origin.threadId)?.messages[origin.message]
       : undefined;
   const citations = message?.role === "assistant" ? (message.citations ?? []) : [];
-  const returnState = {
-    studyReturn: {
-      path,
-      state: { ...selection, studyReviewSession: sessionId, studyReviewVault: vaultId },
-    },
-  };
-  const rememberReview = () => saveReviewSession(storageId, session);
+  const returnState = { studyReturn: destination };
 
   return (
     <section className="space-y-5">
@@ -179,8 +229,8 @@ export function StudyReview({
         </h2>
         <p className="text-sm text-muted-foreground">
           {practiced
-            ? t("study.recall.practiceRemaining", { count: practiceQueue.length })
-            : `${due.length} due · ${rated} reviewed this session`}
+            ? t("study.recall.practiceRemaining", { count: queue.length })
+            : `${queue.length} due · ${rated} reviewed this session`}
           {collection ? ` · ${collection}` : ""}
         </p>
       </div>
@@ -206,7 +256,7 @@ export function StudyReview({
             />
           ) : null}
           {!isRevealed ? (
-            <Button ref={reveal} onClick={() => setRevealed(item.id)}>
+            <Button ref={reveal} onClick={revealAnswer}>
               Show answer
             </Button>
           ) : (
@@ -230,7 +280,6 @@ export function StudyReview({
                 <StudyOriginLink
                   origin={origin}
                   state={returnState}
-                  onClick={rememberReview}
                 />
               ) : null}
               {citations.length && !busy ? (
@@ -243,7 +292,6 @@ export function StudyReview({
                         origin={studyCitationOrigin(citation)}
                         label={`[${citation.index}] ${citation.title}`}
                         state={returnState}
-                        onClick={rememberReview}
                       />
                     ))}
                   </div>
@@ -253,10 +301,7 @@ export function StudyReview({
                 variant="outline"
                 size="sm"
                 disabled={busy || openingPractice}
-                onClick={() => {
-                  rememberReview();
-                  practice(item, returnState);
-                }}
+                onClick={() => practice(item, returnState)}
               >
                 {t(item.kind === "card" ? "study.recall.tutorCardAction" : "study.highlights.discussOne")}
               </Button>
@@ -267,6 +312,7 @@ export function StudyReview({
                       ...value,
                       practiced: [...practiced, item.id],
                       revealed: "",
+                      position: undefined,
                     }));
                   }}
                 >
@@ -310,10 +356,17 @@ export function StudyReview({
             )}
           </p>
           <div className="flex flex-wrap items-center gap-3">
-            {all.length ? (
+            {items.length ? (
               <Button
                 variant="outline"
-                onClick={() => setSession((value) => ({ ...value, practiced: [], revealed: "" }))}
+                onClick={() =>
+                  setSession((value) => ({
+                    ...value,
+                    practiced: [],
+                    revealed: "",
+                    position: undefined,
+                  }))
+                }
               >
                 {t("study.recall.practiceNow")}
               </Button>

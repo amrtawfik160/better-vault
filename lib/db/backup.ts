@@ -1,4 +1,5 @@
 import { studyRecordSchema, type StudyRecord } from "@/lib/study/records";
+import { clearAllReviewCheckpoints } from "@/lib/study/review-session";
 import { clearAllTutorDraftRecovery } from "@/lib/study/tutor-draft-recovery";
 import { z } from "zod";
 import { conversationTitle } from "@/lib/chat/title";
@@ -222,6 +223,7 @@ function upgradeBackup(backup: OldBackup): Backup {
 export async function deleteAllData() {
   await store().clearAll();
   clearAllTutorDraftRecovery();
+  clearAllReviewCheckpoints();
 }
 
 function toBase64(bytes: Uint8Array): string {

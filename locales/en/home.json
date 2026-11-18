@@ -145,6 +145,7 @@
   "study": {
     "sections": "Study sections",
     "today": {
+      "resumeReview": "Resume review",
       "streak_one": "{{count}} day study streak",
       "streak_other": "{{count}} day study streak",
       "cardsDue_one": "Review {{count}} due flashcard",

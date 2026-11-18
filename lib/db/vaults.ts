@@ -1,5 +1,6 @@
 import { generateId } from "ai";
 import { useSyncExternalStore } from "react";
+import { clearReviewCheckpoint } from "@/lib/study/review-session";
 import { studyVaultIndex } from "@/lib/study/vault";
 import { useStoreQuery } from "./live";
 import { store } from "./store";
@@ -90,6 +91,7 @@ export async function deleteVault(id: string) {
   for (const skill of (await store().listSkills()).filter((item) => item.vaultId === id))
     await store().deleteSkill(skill.id);
   await store().deleteVault(id);
+  clearReviewCheckpoint(id);
   if (currentVaultId() === id) setCurrentVault(DEFAULT_VAULT);
 }
 
