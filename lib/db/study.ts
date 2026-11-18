@@ -47,6 +47,7 @@ import type {
   StudySection,
   StudyReportChange,
   StudyReadingPlace,
+  StudyTutorDraft,
   StudyTutorDraftChange,
   StudyWord,
   StudyVisualOrigin,
@@ -802,7 +803,7 @@ export async function startSourceTutor(sourceId: string) {
   return thread;
 }
 
-export async function startCardTutor(ids: string[], vaultId: string, title: string) {
+export async function startCardTutor(ids: string[], vaultId: string, title: string, draft?: StudyTutorDraft) {
   const cards = await readStudyCardsInVault(ids, vaultId);
   if (!cards.length) return null;
   const thread: StudyThread = {
@@ -815,6 +816,7 @@ export async function startCardTutor(ids: string[], vaultId: string, title: stri
     cardIds: cards.map(({ id }) => id),
     practiceCardId: cards[0].id,
     vaultId,
+    draft,
     messages: [],
     updatedAt: Date.now(),
   };
@@ -822,7 +824,7 @@ export async function startCardTutor(ids: string[], vaultId: string, title: stri
   return thread;
 }
 
-export async function startHighlightTutor(ids: string[], vaultId: string, title: string) {
+export async function startHighlightTutor(ids: string[], vaultId: string, title: string, draft?: StudyTutorDraft) {
   const highlights = highlightSources(await readStudyRowsInVault(ids, vaultId), [...new Set(ids)]);
   if (!highlights.length) return null;
   const thread: StudyThread = {
@@ -834,6 +836,7 @@ export async function startHighlightTutor(ids: string[], vaultId: string, title:
     scope: "materials",
     highlightIds: highlights.map(({ highlight }) => highlight.id),
     vaultId,
+    draft,
     messages: [],
     updatedAt: Date.now(),
   };

@@ -460,12 +460,14 @@ export function StudyTutor({
   const location = useLocation();
   const composer = useStudyTutorDraft(thread);
   const input = composer.draft.text;
+  const composerField = useRef<HTMLTextAreaElement>(null);
+  const focusDraft = location.state?.focusStudyDraft === true;
   const [operation, setOperation] = useState<"answer" | "report" | null>(null);
   const [failed, setFailed] = useState<TutorFailure>();
   const busy = operation !== null;
   const [changingCard, setChangingCard] = useState(false);
-  const [answerImageCardId, setAnswerImageCardId] = useState<string>();
-  const revealedImageCardId = useRef<string | undefined>(undefined);
+  const [answerImageCardId, setAnswerImageCardId] = useState(focusDraft ? thread.practiceCardId : undefined);
+  const revealedImageCardId = useRef(answerImageCardId);
   const answerImageRegion = useId();
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState(thread.title);
@@ -590,6 +592,10 @@ export function StudyTutor({
       window.speechSynthesis?.cancel();
     };
   }, []);
+
+  useEffect(() => {
+    if (focusDraft) composerField.current?.focus();
+  }, [focusDraft]);
 
   useEffect(() => {
     if (focusMessage !== undefined) {
@@ -1438,6 +1444,7 @@ export function StudyTutor({
         className="grid gap-2 rounded-2xl border bg-card p-3"
       >
         <textarea
+          ref={composerField}
           className="min-h-24 w-full rounded-xl border bg-background p-3"
           aria-label="Study message"
           placeholder="Ask a question or explain what you learned"

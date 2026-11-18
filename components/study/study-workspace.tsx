@@ -724,16 +724,19 @@ export default function StudyWorkspace({
     kind: "card" | "highlight",
     ids: string[],
     state?: ReturnType<typeof studyReturnState>,
+    draftText?: string,
   ) {
     if (openingPractice) return;
     setOpeningPractice(true);
     try {
+      const draft = draftText ? { id: studyId(), text: draftText, at: Date.now() } : undefined;
       const thread = kind === "card"
-        ? await startCardTutor(ids, studyVaultId, t("study.recall.tutorTitle"))
-        : await startHighlightTutor(ids, studyVaultId, t("study.highlights.tutorTitle"));
+        ? await startCardTutor(ids, studyVaultId, t("study.recall.tutorTitle"), draft)
+        : await startHighlightTutor(ids, studyVaultId, t("study.highlights.tutorTitle"), draft);
       if (thread) {
+        const returnState = state ?? studyReturnState(location.state);
         setParams({ view: "study", tab: "tutor", vault: studyVaultId, thread: thread.id }, {
-          state: state ?? studyReturnState(location.state),
+          state: draft ? { ...returnState, focusStudyDraft: true } : returnState,
         });
       } else toast.error(t(kind === "card" ? "study.materials.noCardsSelected" : "study.highlights.unavailable"));
     } catch (error) {
@@ -898,7 +901,7 @@ export default function StudyWorkspace({
           books={books}
           words={words}
           threads={threads}
-          practice={(item, state) => void openTutorSelection(item.kind, [item.id], state)}
+          practice={(item, state, draftText) => void openTutorSelection(item.kind, [item.id], state, draftText)}
           practiceDifficult={(ids) =>
             go("review", { ...Object.fromEntries(params), vault: studyVaultId, mode: "weak" }, ids)
           }

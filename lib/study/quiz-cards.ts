@@ -22,9 +22,13 @@ export function legacyQuizCardSource(card: StudyRecordOf<"card">) {
   return { notebookId, outputId, position: Number(suffix) };
 }
 
+export function quizChoiceLabel(index: number) {
+  return index < 26 ? String.fromCharCode(65 + index) : String(index + 1);
+}
+
 export function quizChoicesText(choices: readonly string[], limit = Infinity) {
   const parts = choices.map((choice, index) => ({
-    marker: `${index < 26 ? String.fromCharCode(65 + index) : index + 1}. `,
+    marker: `${quizChoiceLabel(index)}. `,
     choice,
   }));
   const full = parts.map(({ marker, choice }) => marker + choice).join("\n");

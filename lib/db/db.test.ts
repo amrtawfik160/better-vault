@@ -1088,8 +1088,10 @@ describe.each(backends)("%s store", (name, create) => {
       await store().addOutput(output);
       const legacy = { ...card, quizChoices: undefined };
       await putStudyRecords(legacy);
-      const tutor = await startCardTutor([card.id], DEFAULT_VAULT, "Quiz practice");
+      const draft = { id: "quiz-feedback", text: "I chose option A. How should I revise my reasoning?", at: Date.now() };
+      const tutor = await startCardTutor([card.id], DEFAULT_VAULT, "Quiz practice", draft);
       if (!tutor) throw new Error("Missing flashcard practice conversation");
+      expect(await readStudyThread(tutor.id)).toMatchObject({ draft, messages: [], practiceCardId: card.id });
       const readCard = async () => (await readStudyTutorSources(tutor, DEFAULT_VAULT)).cards?.[0];
       expect(await readCard()).toMatchObject({ quizChoices: ["A", "B"], schedule: card.schedule });
       expect(await store().getStudy(card.id)).toEqual(legacy);
@@ -1589,9 +1591,10 @@ describe.each(backends)("%s store", (name, create) => {
       const first = await createHighlight("chosen-mark", work);
       await createHighlight("unchosen-mark", work);
       await createHighlight("private-mark", other);
-      const thread = await startHighlightTutor(["chosen-mark", "private-mark", "chosen-mark"], work, "Discuss highlights");
+      const draft = { id: "highlight-feedback", text: "I tried explaining why the election succeeds.", at: Date.now() };
+      const thread = await startHighlightTutor(["chosen-mark", "private-mark", "chosen-mark"], work, "Discuss highlights", draft);
       if (!thread) throw new Error("Expected a Tutor conversation for the available highlight");
-      expect(thread).toMatchObject({ scope: "materials", highlightIds: ["chosen-mark"] });
+      expect(thread).toMatchObject({ scope: "materials", highlightIds: ["chosen-mark"], draft, messages: [] });
       const selected = await readStudyTutorSources(thread, work);
       expect(selected.highlights).toMatchObject([{ highlight: { id: "chosen-mark" }, book: { id: first.id } }]);
       expect(selected.books).toEqual([]);
@@ -1600,7 +1603,7 @@ describe.each(backends)("%s store", (name, create) => {
       const backup = JSON.parse(JSON.stringify(await exportBackup()));
       await deleteAllData();
       await importBackup(backup);
-      expect((await readStudyThread(thread.id)).highlightIds).toEqual(["chosen-mark"]);
+      expect(await readStudyThread(thread.id)).toMatchObject({ highlightIds: ["chosen-mark"], draft, messages: [] });
       expect(await store().getStudy("chosen-mark")).toMatchObject({ schedule: freshSchedule(0) });
       await updateNotebook(first.notebookId, { vaultId: other });
       expect((await readStudyTutorSources(thread, work)).highlights).toEqual([]);

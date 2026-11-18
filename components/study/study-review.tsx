@@ -26,7 +26,7 @@ import {
   studyHref,
 } from "@/lib/study/links";
 import { difficultStudyItems, studyHighlightPreview } from "@/lib/study/recall";
-import { quizChoicesText } from "@/lib/study/quiz-cards";
+import { quizChoiceLabel, quizChoicesText } from "@/lib/study/quiz-cards";
 import {
   loadReviewSession,
   maxReviewResponseLength,
@@ -110,7 +110,7 @@ export function StudyReview({
   books: StudyBook[];
   words: Word[];
   threads: StudyThread[];
-  practice: (item: Card | Highlight, state: ReturnType<typeof reviewReturnState>) => void;
+  practice: (item: Card | Highlight, state: ReturnType<typeof reviewReturnState>, draftText?: string) => void;
   practiceDifficult: (ids: string[]) => void;
   openingPractice: boolean;
   collection?: string;
@@ -188,6 +188,7 @@ export function StudyReview({
     ? choices?.[savedResponse.index] ? savedResponse : undefined
     : choices ? undefined : savedResponse;
   const attemptedAnswer = response?.kind === "choice" ? choices?.[response.index] : response?.value.trim();
+  const question = item?.kind === "card" ? item.front : item?.cue || t("study.recall.highlightPrompt");
   const highlightBook =
     item?.kind === "highlight" ? books.find(({ id }) => id === item.bookId) : undefined;
 
@@ -297,6 +298,20 @@ export function StudyReview({
   const libraryName = libraryLabel ?? (useHighlights ? "Open highlights" : "Open flashcards");
   const returnState = { studyReturn: destination };
 
+  function openTutor() {
+    if (!item) return;
+    const responseText = attemptedAnswer?.slice(0, 10_000);
+    const draftText = attemptedAnswer
+      ? t(item.kind === "card" ? "study.recall.cardFeedbackPrompt" : "study.recall.highlightFeedbackPrompt", {
+          cue: question.slice(0, 500),
+          response: response?.kind === "choice"
+            ? t("study.recall.feedbackChoice", { choice: quizChoiceLabel(response.index), response: responseText })
+            : responseText,
+        })
+      : undefined;
+    practice(item, returnState, draftText);
+  }
+
   return (
     <section className="space-y-5">
       <div>
@@ -335,14 +350,7 @@ export function StudyReview({
               {highlightBook.sections[item.kind === "highlight" ? item.section : 0]?.title}
             </p>
           ) : null}
-          {item.kind === "card" ? (
-            <StudyText text={item.front} className="text-xl font-medium wrap-break-word" />
-          ) : (
-            <StudyText
-              text={item.cue || "Recall why you saved this passage."}
-              className="text-xl font-medium wrap-break-word"
-            />
-          )}
+          <StudyText text={question} className="text-xl font-medium wrap-break-word" />
           <StudyCardChoices choices={choices} selection={isRevealed ? undefined : {
             index: response?.kind === "choice" ? response.index : undefined,
             choose: (index) => respond({ kind: "choice", index }),
@@ -417,9 +425,10 @@ export function StudyReview({
                 variant="outline"
                 size="sm"
                 disabled={busy || openingPractice}
-                onClick={() => practice(item, returnState)}
+                onClick={openTutor}
               >
-                {t(item.kind === "card" ? "study.recall.tutorCardAction" : "study.highlights.discussOne")}
+                {t(attemptedAnswer ? "study.recall.tutorFeedback" :
+                  item.kind === "card" ? "study.recall.tutorCardAction" : "study.highlights.discussOne")}
               </Button>
               {practiced ? (
                 <Button
