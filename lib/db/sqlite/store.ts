@@ -1,4 +1,5 @@
 import type { StudyRecord } from "@/lib/study/records";
+import { patchedStudyReviewItem } from "@/lib/study/recall";
 import { patchedStudyThread } from "@/lib/study/reports";
 import { patchedStudyBook, revisedStudyBook } from "@/lib/study/text-edits";
 import { detachedVocabularyCard, vocabularyCardId, vocabularyChanges } from "@/lib/study/vocabulary";
@@ -560,6 +561,13 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
         put("study", next);
         return true;
       }),
+    patchStudyReviewItem: (write) =>
+      transaction(db, () => {
+        const next = patchedStudyReviewItem(get<StudyRecord>("study", write.id), write);
+        if (!next) return false;
+        put("study", next);
+        return true;
+      }),
     applyStudyReview: ({ id, previousDueAt, schedule, activity }) =>
       transaction(db, () => {
         const item = get<StudyRecord>("study", id);
@@ -568,7 +576,7 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
           item.schedule.dueAt !== previousDueAt
         )
           return false;
-        put("study", { ...item, schedule, updatedAt: activity.updatedAt });
+        put("study", { ...item, schedule, updatedAt: Math.max(item.updatedAt, activity.updatedAt) });
         add("study", activity);
         return true;
       }),

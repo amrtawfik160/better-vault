@@ -14,6 +14,7 @@ import { textDirection } from "@/lib/text/direction";
 import { StudyFlashcardGenerator } from "./study-flashcard-generator";
 import { StudyOriginLink } from "./study-origin-link";
 import { StudyText } from "./study-text";
+import { highlightColors } from "./study-highlight-colors";
 import {
   originHref,
   studyCitationOrigin,
@@ -37,18 +38,21 @@ import { Button } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import {
-  freshSchedule,
-  putStudyRecords,
   rateStudyItem,
+  saveStudyCard,
   saveStudyNote,
   removeStudyRecord,
   studyId,
+  updateStudyReviewItem,
 } from "@/lib/db/study";
 import { scheduleState, studyIntervalLabel } from "@/lib/study/schedule";
 import { vocabularyOrigin } from "@/lib/study/vocabulary";
 import {
+  studyHighlightColor,
   studyRatings,
   type StudyBook,
+  type StudyCardEdit,
+  type StudyHighlightColor,
   type StudyRating,
   type StudyRecordOf,
   type StudyThread,
@@ -58,6 +62,7 @@ import { useStudyClock } from "./use-study-clock";
 type Card = StudyRecordOf<"card">;
 type Highlight = StudyRecordOf<"highlight">;
 type Word = StudyRecordOf<"word">;
+type CardEditor = StudyCardEdit & { id: string; mode: "create" | "edit" };
 const date = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 const textArea = "min-h-20 w-full rounded-xl border bg-background p-3 text-sm";
 
@@ -540,7 +545,7 @@ export function CardLibrary({
   const now = useStudyClock(cards);
   const [generating, setGenerating] = useState(false);
   const [query, setQuery] = useState("");
-  const [editing, setEditing] = useState<Card | null>(null);
+  const [editing, setEditing] = useState<CardEditor | null>(null);
   const [deleting, setDeleting] = useState<string[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
   const [status, setStatus] = useState("all");
@@ -587,17 +592,31 @@ export function CardLibrary({
 
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (!editing?.front.trim() || !editing.back.trim()) return;
+    if (!editing?.front.trim() || !editing.back.trim() || saving) return;
+    const change = {
+      front: editing.front.trim(),
+      back: editing.back.trim(),
+      tags: [...new Set(editing.tags.map((tag) => tag.trim()).filter(Boolean))],
+      image: editing.image,
+      backImage: editing.backImage,
+    };
     setSaving(true);
     try {
-      await putStudyRecords({
-        ...editing,
-        front: editing.front.trim(),
-        back: editing.back.trim(),
-        tags: [...new Set(editing.tags.map((tag) => tag.trim()).filter(Boolean))],
-        schedule: cards.find(({ id }) => id === editing.id)?.schedule ?? editing.schedule,
-        updatedAt: Date.now(),
-      });
+      if (editing.mode === "create") {
+        if (!creation) return;
+        await saveStudyCard({ ...creation, ...change }, editing.id);
+      } else {
+        const saved = await updateStudyReviewItem({
+          kind: "card",
+          id: editing.id,
+          change,
+          updatedAt: Date.now(),
+        });
+        if (!saved) {
+          toast.error(t("study.recall.editUnavailable"));
+          return;
+        }
+      }
       setEditing(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
@@ -665,12 +684,10 @@ export function CardLibrary({
               onClick={() =>
                 setEditing({
                   id: studyId(),
-                  kind: "card",
+                  mode: "create",
                   front: "",
                   back: "",
-                  ...creation,
-                  updatedAt: Date.now(),
-                  schedule: freshSchedule(),
+                  tags: creation.tags,
                 })
               }
             >
@@ -879,7 +896,11 @@ export function CardLibrary({
                 </Button>
               ) : null}
               {card.origin ? <StudyOriginLink origin={card.origin} /> : null}
-              <Button size="sm" variant="ghost" onClick={() => setEditing(card)}>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setEditing({ ...card, mode: "edit" })}
+              >
                 Edit
               </Button>
               <Button size="sm" variant="ghost" onClick={() => setDeleting([card.id])}>
@@ -939,20 +960,49 @@ export function HighlightsLibrary({
   discuss: (ids: string[]) => void;
   openingTutor: boolean;
 }) {
-  const { t } = useTranslation("home");
+  const { t } = useTranslation(["home", "common"]);
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
+  const [color, setColor] = useState<StudyHighlightColor | "all">("all");
   const [selected, setSelected] = useState<string[]>([]);
   const [editing, setEditing] = useState<Highlight | null>(null);
   const [deleting, setDeleting] = useState<Highlight | null>(null);
+  const [saving, setSaving] = useState(false);
   const search = query.trim().toLowerCase();
-  const visible = highlights.filter(({ quote, note, cue }) =>
-    `${quote} ${note} ${cue ?? ""}`.toLowerCase().includes(search),
+  const visible = highlights.filter(
+    (item) => (color === "all" || item.color === color) &&
+      `${item.quote} ${item.note} ${item.cue ?? ""}`.toLowerCase().includes(search),
   );
   const selectedIds = new Set(selected);
-  const checked = highlights.filter(({ id }) => selectedIds.has(id));
+  const checked = visible.filter(({ id }) => selectedIds.has(id));
   const targetIds = (checked.length ? checked : visible).map(({ id }) => id);
-  const narrowed = !!(checked.length || search);
+  const narrowed = Boolean(checked.length || search || color !== "all");
+  const reviewLabel = checked.length
+    ? t("study.highlights.reviewSelected", { count: checked.length })
+    : narrowed
+      ? t("study.highlights.reviewMatches", { count: visible.length })
+      : t("study.highlights.review");
+
+  async function saveHighlight(event: FormEvent) {
+    event.preventDefault();
+    if (!editing || saving) return;
+    const { id, note, cue, color } = editing;
+    setSaving(true);
+    try {
+      const saved = await updateStudyReviewItem({
+        kind: "highlight",
+        id,
+        change: { note, cue, color },
+        updatedAt: Date.now(),
+      });
+      if (!saved) toast.error(t("study.recall.editUnavailable"));
+      setEditing(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSaving(false);
+    }
+  }
   return (
     <section className="space-y-5">
       <div className="flex flex-wrap justify-between gap-2">
@@ -967,19 +1017,41 @@ export function HighlightsLibrary({
               ? t("study.highlights.discuss", { count: targetIds.length })
               : t("study.highlights.tutorTitle")}
           </Button>
-          <Button onClick={() => review(narrowed ? targetIds : undefined)} disabled={!targetIds.length}>
-            {narrowed ? t("study.highlights.reviewSelected", { count: targetIds.length }) : t("study.highlights.review")}
+          <Button
+            onClick={() => review(narrowed ? targetIds : undefined)}
+            disabled={!targetIds.length}
+          >
+            {reviewLabel}
           </Button>
         </div>
       </div>
       {filter ? <FilterCaption label={filter} clear={clearFilter} /> : null}
-      <Input
-        type="search"
-        aria-label="Search highlights"
-        placeholder="Search highlights"
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-      />
+      <div className="flex flex-wrap gap-2">
+        <Input
+          type="search"
+          aria-label="Search highlights"
+          placeholder="Search highlights"
+          className="min-w-0 flex-1 basis-48"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        <select
+          aria-label={t("study.highlights.colorFilter")}
+          className="h-9 rounded-lg border bg-background px-2 text-sm"
+          value={color}
+          onChange={(event) => {
+            const choice = studyHighlightColor.safeParse(event.target.value);
+            setColor(choice.success ? choice.data : "all");
+          }}
+        >
+          <option value="all">{t("study.highlights.allColors")}</option>
+          {studyHighlightColor.options.map((name) => (
+            <option key={name} value={name}>
+              {t(`study.highlights.colors.${name}`)}
+            </option>
+          ))}
+        </select>
+      </div>
       <ul className="space-y-3">
         {visible.map((item) => (
             <li key={item.id} className="space-y-2 rounded-2xl border p-4">
@@ -997,19 +1069,16 @@ export function HighlightsLibrary({
                 <DirectionalText
                   as="blockquote"
                   text={item.quote}
-                  className="min-w-0 font-medium wrap-break-word"
+                  className="min-w-0 flex-1 font-medium wrap-break-word"
                 />
+                <span
+                  className={`shrink-0 rounded px-2 py-0.5 text-xs font-medium ${highlightColors[item.color]}`}
+                >
+                  {t(`study.highlights.colors.${item.color}`)}
+                </span>
               </div>
               {editing?.id === item.id ? (
-                <form
-                  className="space-y-2"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    void putStudyRecords({ ...editing, updatedAt: Date.now() })
-                      .then(() => setEditing(null))
-                      .catch((error: Error) => toast.error(error.message));
-                  }}
-                >
+                <form className="space-y-2" onSubmit={saveHighlight}>
                   <Input
                     dir={textDirection(editing.cue ?? "")}
                     aria-label={t("study.recall.cue")}
@@ -1025,21 +1094,35 @@ export function HighlightsLibrary({
                     value={editing.note}
                     onChange={(event) => setEditing({ ...editing, note: event.target.value })}
                   />
-                  <select
-                    aria-label="Highlight color"
-                    className="rounded-lg border bg-background p-2"
-                    value={editing.color}
-                    onChange={(event) =>
-                      setEditing({ ...editing, color: event.target.value as Highlight["color"] })
-                    }
-                  >
-                    {["yellow", "green", "blue", "pink"].map((color) => (
-                      <option key={color}>{color}</option>
-                    ))}
-                  </select>
-                  <Button type="submit" size="sm">
-                    Save highlight
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select
+                      aria-label={t("study.highlights.colorLabel")}
+                      className="h-8 rounded-lg border bg-background px-2 text-sm"
+                      value={editing.color}
+                      onChange={(event) => {
+                        const choice = studyHighlightColor.safeParse(event.target.value);
+                        if (choice.success) setEditing({ ...editing, color: choice.data });
+                      }}
+                    >
+                      {studyHighlightColor.options.map((name) => (
+                        <option key={name} value={name}>
+                          {t(`study.highlights.colors.${name}`)}
+                        </option>
+                      ))}
+                    </select>
+                    <Button type="submit" size="sm" loading={saving}>
+                      Save highlight
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={saving}
+                      onClick={() => setEditing(null)}
+                    >
+                      {t("common:actions.cancel")}
+                    </Button>
+                  </div>
                 </form>
               ) : (
                 <>

@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { StudyText } from "./study-text";
+import { highlightColors } from "./study-highlight-colors";
 import { flashcardMaterialLimit, flashcardPassageSize } from "@/lib/study/ai";
 import { directionalInline, DirectionalText } from "@/components/common/directional-text";
 import { Button } from "@/components/panelui/button";
@@ -33,15 +34,15 @@ import { routes } from "@/lib/routes";
 import { textDirection, textLines } from "@/lib/text/direction";
 import { askStudyModel } from "@/lib/study/client";
 import { originHref, studyHref, studyNotesHref } from "@/lib/study/links";
-import type { StudyBook, StudyOrigin, StudyRecordOf, StudyThread } from "@/lib/study/records";
+import {
+  studyHighlightColor,
+  type StudyBook,
+  type StudyHighlightColor,
+  type StudyOrigin,
+  type StudyRecordOf,
+  type StudyThread,
+} from "@/lib/study/records";
 import { locateStudyMark, resolveStudyRange, studyTextRevision } from "@/lib/study/text-edits";
-
-const colors = {
-  yellow: "bg-yellow-200 text-yellow-950 dark:bg-yellow-900 dark:text-yellow-100",
-  green: "bg-green-200 text-green-950 dark:bg-green-900 dark:text-green-100",
-  blue: "bg-blue-200 text-blue-950 dark:bg-blue-900 dark:text-blue-100",
-  pink: "bg-pink-200 text-pink-950 dark:bg-pink-900 dark:text-pink-100",
-};
 
 type Selection = { text: string; offset: number; revision: number };
 type AssistResult = {
@@ -94,7 +95,7 @@ function highlighted(
         <mark
           id={range.offset >= start ? range.id : undefined}
           key={range.id}
-          className={colors[range.color]}
+          className={highlightColors[range.color]}
         >
           {directionalInline(text.slice(from, to), direction)}
         </mark>,
@@ -183,7 +184,7 @@ export function StudyReader({
   const [cardSaving, setCardSaving] = useState(false);
   const [language, setLanguage] = useState("");
   const [translating, setTranslating] = useState(false);
-  const [color, setColor] = useState<keyof typeof colors>("yellow");
+  const [color, setColor] = useState<StudyHighlightColor>("yellow");
   const [search, setSearch] = useState("");
   const [edit, setEdit] = useState<{ original: string; text: string } | null>(null);
   const [savingText, setSavingText] = useState(false);
@@ -983,22 +984,17 @@ export function StudyReader({
                 <Menu.Item onClick={() => saveVocabulary(selection)}>Save vocabulary</Menu.Item>
                 <Menu.Separator />
                 <Menu.Group>
-                  <Menu.GroupLabel>Highlight color</Menu.GroupLabel>
+                  <Menu.GroupLabel>{t("study.highlights.colorLabel")}</Menu.GroupLabel>
                   <Menu.RadioGroup
                     value={color}
                     onValueChange={(value) => {
-                      if (
-                        value === "yellow" ||
-                        value === "green" ||
-                        value === "blue" ||
-                        value === "pink"
-                      )
-                        setColor(value);
+                      const choice = studyHighlightColor.safeParse(value);
+                      if (choice.success) setColor(choice.data);
                     }}
                   >
-                    {Object.keys(colors).map((name) => (
-                      <Menu.RadioItem key={name} value={name} className="capitalize">
-                        {name}
+                    {studyHighlightColor.options.map((name) => (
+                      <Menu.RadioItem key={name} value={name} closeOnClick>
+                        {t(`study.highlights.colors.${name}`)}
                       </Menu.RadioItem>
                     ))}
                   </Menu.RadioGroup>

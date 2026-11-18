@@ -156,6 +156,16 @@
       "highlightsDue_other": "Review {{count}} due highlights"
     },
     "highlights": {
+      "colorLabel": "Highlight color",
+      "colorFilter": "Filter highlights by color",
+      "allColors": "All colors",
+      "colors": {
+        "yellow": "Yellow",
+        "green": "Green",
+        "blue": "Blue",
+        "pink": "Pink",
+        "purple": "Purple"
+      },
       "tutorTitle": "Discuss highlights",
       "discuss_one": "Discuss {{count}} highlight with Tutor",
       "discuss_other": "Discuss {{count}} highlights with Tutor",
@@ -166,15 +176,18 @@
       "review": "Review highlights",
       "reviewSelected_one": "Review {{count}} selected highlight",
       "reviewSelected_other": "Review {{count}} selected highlights",
+      "reviewMatches_one": "Review {{count}} matching highlight",
+      "reviewMatches_other": "Review {{count}} matching highlights",
       "selection_one": "{{count}} chosen highlight",
       "selection_other": "{{count}} chosen highlights",
       "unavailable": "Choose an available highlight to discuss with Tutor.",
       "empty": "Select text in a document to save a highlight.",
-      "noMatches": "No highlights match your search.",
+      "noMatches": "No highlights match your filters.",
       "savedExcerpt": "Saved excerpt",
       "annotation": "Your highlight note"
     },
     "recall": {
+      "editUnavailable": "This study item is no longer available.",
       "backToReview": "Back to review",
       "backToQuiz": "Back to quiz",
       "backToStudioCards": "Back to Studio flashcards",

@@ -28,6 +28,7 @@ import type {
   StudyRecordOf,
   StudyRating,
   StudyRecord,
+  StudyReviewItemWrite,
   StudySection,
   StudyReportChange,
   StudyReadingPlace,
@@ -499,6 +500,10 @@ export async function saveStudyCard(content: CardContent, id?: string) {
   const card = newStudyCard(content, id);
   await store().insertStudy([card]);
   return card;
+}
+
+export function updateStudyReviewItem(write: StudyReviewItemWrite) {
+  return store().patchStudyReviewItem(write);
 }
 
 export async function saveStudyWord(

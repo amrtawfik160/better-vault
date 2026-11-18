@@ -1,4 +1,5 @@
 import type { StudyRecord } from "@/lib/study/records";
+import { patchedStudyReviewItem } from "@/lib/study/recall";
 import { patchedStudyThread } from "@/lib/study/reports";
 import { patchedStudyBook, revisedStudyBook } from "@/lib/study/text-edits";
 import { detachedVocabularyCard, vocabularyCardId, vocabularyChanges } from "@/lib/study/vocabulary";
@@ -278,6 +279,13 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
         await db.study.put(next);
         return true;
       }),
+    patchStudyReviewItem: (write) =>
+      db.transaction("rw", db.study, async () => {
+        const next = patchedStudyReviewItem(await db.study.get(write.id), write);
+        if (!next) return false;
+        await db.study.put(next);
+        return true;
+      }),
     applyStudyReview: ({ id, previousDueAt, schedule, activity }) =>
       db.transaction("rw", db.study, async () => {
         const item = await db.study.get(id);
@@ -286,7 +294,7 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
           item.schedule.dueAt !== previousDueAt
         )
           return false;
-        const reviewed: StudyRecord = { ...item, schedule, updatedAt: activity.updatedAt };
+        const reviewed: StudyRecord = { ...item, schedule, updatedAt: Math.max(item.updatedAt, activity.updatedAt) };
         await db.study.put(reviewed);
         await db.study.add(activity);
         return true;

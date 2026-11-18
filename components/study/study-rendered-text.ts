@@ -1,9 +1,8 @@
 import { useEffect, type RefObject } from "react";
 import { locateStudyQuote } from "@/lib/study/locators";
-import type { StudyRecordOf } from "@/lib/study/records";
+import { studyHighlightColor, type StudyRecordOf } from "@/lib/study/records";
 
 type Mark = Pick<StudyRecordOf<"highlight">, "quote" | "offset" | "color">;
-const markColors = ["yellow", "green", "blue", "pink"] as const;
 const compact = (text: string) => text.replace(/\s/gu, "");
 
 export function renderedSelection(root: HTMLElement, canonical: string) {
@@ -86,7 +85,7 @@ export function useRenderedStudyMarks(
     const region = root.current;
     if (!ready || !region || !globalThis.CSS?.highlights || !marks.length) return;
     const indexed = renderedTextIndex(region);
-    const colored = new Map(markColors.map((color) => [color, new Highlight()]));
+    const colored = new Map(studyHighlightColor.options.map((color) => [color, new Highlight()]));
     for (const mark of marks) {
       const range = locateRenderedRange(indexed, canonical, mark);
       if (range) colored.get(mark.color)?.add(range);
@@ -95,7 +94,7 @@ export function useRenderedStudyMarks(
       if (highlighting.size) CSS.highlights.set(`study-${color}`, highlighting);
     }
     return () => {
-      for (const color of markColors) CSS.highlights.delete(`study-${color}`);
+      for (const color of colored.keys()) CSS.highlights.delete(`study-${color}`);
     };
   }, [root, ready, canonical, marks]);
 }

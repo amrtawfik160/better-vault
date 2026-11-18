@@ -74,6 +74,7 @@ export const studyGoals = ["book", "teach-back", "language", "general"] as const
 export const studyScopes = ["passage", "chapter", "book", "notes", "materials", "cards", "general"] as const;
 export const studyCorrections = ["live", "report", "off"] as const;
 export const studyRatings = ["again", "hard", "good", "easy"] as const;
+export const studyHighlightColor = z.enum(["yellow", "green", "blue", "pink", "purple"]);
 
 export const studyTutorContextSchema = z.object({
   goal: z.enum(studyGoals),
@@ -185,7 +186,7 @@ export const studyRecordSchema = z.discriminatedUnion("kind", [
     quote: z.string(),
     offset: z.number().int().nonnegative(),
     revision: index.optional(),
-    color: z.enum(["yellow", "green", "blue", "pink"]),
+    color: studyHighlightColor,
     note: z.string(),
     cue: z.string().optional(),
     schedule,
@@ -239,6 +240,7 @@ export type StudyOrigin = z.infer<typeof studyOriginSchema>;
 export type StudyCitation = z.infer<typeof citation>;
 export type StudyRecord = z.infer<typeof studyRecordSchema>;
 export type StudyRecordOf<K extends StudyRecord["kind"]> = Extract<StudyRecord, { kind: K }>;
+export type StudyHighlightColor = z.infer<typeof studyHighlightColor>;
 export type StudyWord = StudyRecordOf<"word">;
 export type StudyWordWrite =
   | { kind: "capture" | "edit"; word: StudyWord; vaultId: string }
@@ -297,4 +299,13 @@ export type StudyReviewWrite = {
   schedule: StudySchedule;
   activity: StudyRecordOf<"session">;
 };
+export type StudyCardEdit = Pick<StudyRecordOf<"card">, "front" | "back" | "image" | "backImage" | "tags">;
+export type StudyHighlightEdit = Pick<StudyRecordOf<"highlight">, "note" | "cue" | "color">;
+export type StudyReviewItemWrite = {
+  id: string;
+  updatedAt: number;
+} & (
+  | { kind: "card"; change: StudyCardEdit }
+  | { kind: "highlight"; change: StudyHighlightEdit }
+);
 export type StudyRating = (typeof studyRatings)[number];

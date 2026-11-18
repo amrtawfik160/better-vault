@@ -1,4 +1,9 @@
-import type { StudyRecordOf, StudyThread } from "./records";
+import type { StudyRecord, StudyRecordOf, StudyReviewItemWrite, StudyThread } from "./records";
+
+export function patchedStudyReviewItem(item: StudyRecord | undefined, write: StudyReviewItemWrite) {
+  if (item?.kind !== write.kind) return;
+  return { ...item, ...write.change, updatedAt: Math.max(item.updatedAt, write.updatedAt) };
+}
 
 export function studyHighlightPreview(quote: string) {
   const text = quote.replace(/\s+/g, " ").trim();

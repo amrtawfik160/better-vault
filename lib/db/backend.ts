@@ -2,6 +2,7 @@ import type {
   StudyBookTextWrite,
   StudyBookWrite,
   StudyRecord,
+  StudyReviewItemWrite,
   StudyReviewWrite,
   StudyThreadWrite,
   StudyWordResult,
@@ -145,6 +146,7 @@ export interface Backend {
   patchStudyBook(write: StudyBookWrite): Promise<void>;
   patchStudyThread(write: StudyThreadWrite): Promise<boolean>;
   writeStudyVocabulary(write: StudyWordWrite): Promise<StudyWordResult>;
+  patchStudyReviewItem(write: StudyReviewItemWrite): Promise<boolean>;
   applyStudyReview(write: StudyReviewWrite): Promise<boolean>;
   replaceStudyText(
     write: StudyBookTextWrite,
@@ -257,6 +259,7 @@ export const writes = {
   patchStudyBook: ["study"],
   patchStudyThread: ["study"],
   writeStudyVocabulary: ["study"],
+  patchStudyReviewItem: ["study"],
   applyStudyReview: ["study"],
   replaceStudyText: ["study", "sources", "chunks", "notebooks"],
   deleteStudy: ["study"],
@@ -363,6 +366,7 @@ export const backendMethods = [
   "patchStudyBook",
   "patchStudyThread",
   "writeStudyVocabulary",
+  "patchStudyReviewItem",
   "applyStudyReview",
   "replaceStudyText",
   "deleteStudy",

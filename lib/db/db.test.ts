@@ -25,6 +25,7 @@ import {
   studyVocabularyCards,
   updateStudyBook,
   updateStudyReport,
+  updateStudyReviewItem,
   updateStudyThread,
   updateStudyWord,
 } from "./study";
@@ -890,6 +891,61 @@ describe.each(backends)("%s store", (name, create) => {
       expect((await store().listStudy()).filter(({ kind }) => kind === "session")).toMatchObject([
         { reviewSessionId: review.sessionId, itemId: card.id },
       ]);
+    });
+
+    it("preserves schedules and source links when saving an edit drafted before a review", async () => {
+      const book = await addStudyBook({
+        title: "Quorum notes",
+        format: "text",
+        sections: [{ title: "Proof", text: "Two majorities overlap." }],
+      });
+      const origin = { kind: "book", bookId: book.id, section: 0, offset: 0 } as const;
+      const card = await saveStudyCard({ front: "Question", back: "Answer", tags: [], origin });
+      const highlight = {
+        id: "highlight-to-edit",
+        kind: "highlight" as const,
+        notebookId: book.notebookId,
+        bookId: book.id,
+        section: 0,
+        quote: "Two majorities overlap.",
+        offset: 0,
+        schedule: freshSchedule(0),
+        color: "yellow" as const,
+        note: "",
+        updatedAt: 0,
+      };
+      await putStudyRecords(highlight);
+
+      expect(await rateStudyItem(card.id, "easy", 5)).toBe(true);
+      expect(await rateStudyItem(highlight.id, "easy", 5)).toBe(true);
+      const cardAfterReview = await store().getStudy(card.id);
+      const highlightAfterReview = await store().getStudy(highlight.id);
+      if (cardAfterReview?.kind !== "card" || highlightAfterReview?.kind !== "highlight")
+        throw new Error("Expected both graded items");
+
+      const cardEdit = {
+        kind: "card" as const,
+        id: card.id,
+        change: { front: card.front, back: "Revised answer", tags: ["quorums"] },
+        updatedAt: Date.now(),
+      };
+      expect(await updateStudyReviewItem(cardEdit)).toBe(true);
+      expect(await updateStudyReviewItem({
+        kind: "highlight", id: highlight.id, updatedAt: Date.now(),
+        change: { color: "purple", note: "Proof to revisit", cue: "What must intersect?" },
+      })).toBe(true);
+      expect(await store().getStudy(card.id)).toMatchObject({
+        origin, back: "Revised answer", schedule: cardAfterReview.schedule,
+      });
+      expect(await store().getStudy(highlight.id)).toMatchObject({
+        quote: highlight.quote, offset: 0, color: "purple", note: "Proof to revisit",
+        schedule: highlightAfterReview.schedule,
+      });
+      expect((await store().listStudy()).filter(({ kind }) => kind === "session")).toHaveLength(2);
+
+      await removeStudyRecord(card.id);
+      expect(await updateStudyReviewItem(cardEdit)).toBe(false);
+      expect(await store().getStudy(card.id)).toBeUndefined();
     });
 
     it("pairs vocabulary with one scheduled card and keeps the sources and card edits", async () => {
