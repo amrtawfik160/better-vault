@@ -543,6 +543,7 @@ export default function StudyWorkspace({
   const reviewingHighlights = params.get("kind") === "highlights";
   const reviewingVocabulary = params.get("kind") === "vocabulary";
   const weakMode = tab === "review" && params.get("mode") === "weak";
+  const practiceMode = tab === "review" && params.get("mode") === "practice";
   const filteredCards = studyCardsInScope(cards, params, book, thread?.id ?? null);
   const reviewSessionId =
     selection?.studyReviewSession ?? (location.key === "default" ? directReviewId : location.key);
@@ -871,7 +872,7 @@ export default function StudyWorkspace({
                   }
                 : { notebookId: notebookId ?? undefined, vaultId: studyVaultId, tags: [] }
           }
-          review={(ids) =>
+          review={(ids, practiceOnly) =>
             go(
               "review",
               {
@@ -881,6 +882,7 @@ export default function StudyWorkspace({
                 ...(notebookId ? { notebook: notebookId } : {}),
                 ...(output ? { output } : {}),
                 ...(cardId ? { card: cardId } : {}),
+                ...(practiceOnly ? { mode: "practice" } : {}),
               },
               ids,
             )
@@ -901,7 +903,7 @@ export default function StudyWorkspace({
             go("review", { ...Object.fromEntries(params), vault: studyVaultId, mode: "weak" }, ids)
           }
           openingPractice={openingPractice}
-          initialPractice={weakMode}
+          initialPractice={weakMode || practiceMode}
           sessionId={reviewSessionId}
           history={rows.filter((row) => row.kind === "session")}
           studioReturn={studioReturn}
@@ -912,8 +914,15 @@ export default function StudyWorkspace({
               ? studyHref("highlights", { book: book.id })
               : reportFilter
                 ? studyHref("cards", reportFilter)
-                : noteFilter || output
-                  ? studyHref("cards", { ...noteFilter, output: output ?? undefined, vault: studyVaultId })
+                : noteFilter || output || book || notebookId || cardId
+                  ? studyHref("cards", {
+                      ...bookFilter,
+                      ...noteFilter,
+                      output: output ?? undefined,
+                      notebook: notebookId ?? undefined,
+                      card: cardId ?? undefined,
+                      vault: studyVaultId,
+                    })
                   : undefined
           }
           libraryLabel={reviewingVocabulary ? t("study.vocabulary.open") : undefined}
@@ -941,7 +950,9 @@ export default function StudyWorkspace({
           locate={(item) =>
             go("library", { book: item.bookId, page: String(item.section), highlight: item.id })
           }
-          review={(ids) => go("review", { kind: "highlights", ...bookFilter }, ids)}
+          review={(ids, practiceOnly) => go("review", {
+            kind: "highlights", ...bookFilter, ...(practiceOnly ? { mode: "practice" } : {}),
+          }, ids)}
           discuss={(ids) => void openTutorSelection("highlight", ids)}
           openingTutor={openingPractice}
         />

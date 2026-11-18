@@ -29,6 +29,7 @@ import { difficultStudyItems, studyHighlightPreview } from "@/lib/study/recall";
 import { quizChoicesText } from "@/lib/study/quiz-cards";
 import {
   loadReviewSession,
+  maxReviewResponseLength,
   pendingReviewLearning,
   resumeReviewSnapshot,
   reviewQueue,
@@ -36,11 +37,13 @@ import {
   reviewSelection,
   saveReviewCheckpoint,
   saveReviewSession,
+  type ReviewResponse,
   type ReviewSnapshot,
 } from "@/lib/study/review-session";
 import { toast } from "sonner";
 import { Button } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
+import { Textarea } from "@/components/panelui/textarea";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import {
   rateStudyItem,
@@ -135,7 +138,7 @@ export function StudyReview({
     };
   }, [location.state, path, vaultId, sessionId]);
   const storageId = JSON.stringify([sessionId, path, vaultId]);
-  const [session, setSession] = useState(
+  const [session, setSession] = useState<ReviewSnapshot>(
     () =>
       resumeReviewSnapshot(vaultId, destination) ??
       loadReviewSession(storageId) ?? {
@@ -179,6 +182,12 @@ export function StudyReview({
     : [];
   const remaining = items.toSorted((a, b) => a.schedule.dueAt - b.schedule.dueAt)[0];
   const isRevealed = Boolean(item && revealed === item.id && (!position || pinned));
+  const choices = item?.kind === "card" && item.quizChoices?.length ? item.quizChoices : undefined;
+  const savedResponse = position && pinned ? session.response : undefined;
+  const response = savedResponse?.kind === "choice"
+    ? choices?.[savedResponse.index] ? savedResponse : undefined
+    : choices ? undefined : savedResponse;
+  const attemptedAnswer = response?.kind === "choice" ? choices?.[response.index] : response?.value.trim();
   const highlightBook =
     item?.kind === "highlight" ? books.find(({ id }) => id === item.bookId) : undefined;
 
@@ -188,6 +197,16 @@ export function StudyReview({
         ...value,
         revealed: item.id,
         position: { id: item.id, dueAt: item.schedule.dueAt },
+        response,
+      }));
+  }
+
+  function respond(next: ReviewResponse) {
+    if (item && !busy && !isRevealed)
+      setSession((value) => ({
+        ...value,
+        position: { id: item.id, dueAt: item.schedule.dueAt },
+        response: next,
       }));
   }
 
@@ -210,6 +229,7 @@ export function StudyReview({
         ...value,
         revealed: "",
         position: undefined,
+        response: undefined,
         rated: Math.max(rated, value.rated) + (committed ? 1 : 0),
       }));
       setStarted(gradedAt);
@@ -232,11 +252,12 @@ export function StudyReview({
       rated,
       practiced,
       position: itemId && dueAt !== undefined ? { id: itemId, dueAt } : undefined,
+      response,
     };
     saveReviewSession(storageId, snapshot);
     saveReviewCheckpoint(vaultId, destination, snapshot);
   }, [
-    isRevealed, revealed, rated, practiced, itemId, dueAt, storageId, vaultId, destination,
+    isRevealed, revealed, rated, practiced, itemId, dueAt, response, storageId, vaultId, destination,
     busy, awaitingHistory,
   ]);
 
@@ -249,7 +270,8 @@ export function StudyReview({
   function keydown(event: KeyboardEvent) {
     if (!item || event.altKey || event.metaKey || event.ctrlKey || event.shiftKey || event.repeat)
       return;
-    if (previewing.current === item.id) return;
+    if (previewing.current === item.id || event.nativeEvent.isComposing) return;
+    if (event.target instanceof HTMLElement && event.target.closest("input, textarea, select, [contenteditable]")) return;
     if (event.key === " " && !isRevealed) {
       if (event.target instanceof HTMLElement && event.target.closest("button, a")) return;
       event.preventDefault();
@@ -321,7 +343,10 @@ export function StudyReview({
               className="text-xl font-medium wrap-break-word"
             />
           )}
-          {item.kind === "card" ? <StudyCardChoices choices={item.quizChoices} /> : null}
+          <StudyCardChoices choices={choices} selection={isRevealed ? undefined : {
+            index: response?.kind === "choice" ? response.index : undefined,
+            choose: (index) => respond({ kind: "choice", index }),
+          }} />
           {item.kind === "card" && item.image ? (
             <StudyCardImage
               side="question"
@@ -330,16 +355,31 @@ export function StudyReview({
             />
           ) : null}
           {!isRevealed ? (
-            <Button ref={reveal} disabled={busy} onClick={revealAnswer}>
-              Show answer
-            </Button>
+            <>
+              {!choices ? (
+                <label className="grid gap-1.5 text-sm font-medium">
+                  {t("study.recall.writeAnswer")}
+                  <Textarea dir="auto" minRows={2} maxRows={5} maxLength={maxReviewResponseLength}
+                    value={response?.kind === "text" ? response.value : ""}
+                    onChange={(event) => respond({ kind: "text", value: event.target.value })} />
+                </label>
+              ) : null}
+              <Button ref={reveal} disabled={busy} onClick={revealAnswer}>
+                Show answer
+              </Button>
+            </>
           ) : (
             <div ref={answer} tabIndex={-1} className="space-y-3 outline-none">
-              {item.kind === "card" ? (
-                <StudyText text={item.back} className="border-t pt-4 wrap-break-word" />
-              ) : (
-                <StudyText text={item.quote} className="border-t pt-4 wrap-break-word" />
-              )}
+              {attemptedAnswer ? (
+                <div className="space-y-1 rounded-xl bg-muted/50 p-3">
+                  <p className="text-sm font-medium">{t(response?.kind === "choice" ? "study.recall.yourChoice" : "study.recall.yourAnswer")}</p>
+                  <StudyText text={attemptedAnswer} className="wrap-break-word" />
+                </div>
+              ) : null}
+              <div className="space-y-1 border-t pt-4">
+                {attemptedAnswer ? <p className="text-sm font-medium">{t("study.recall.savedAnswer")}</p> : null}
+                <StudyText text={item.kind === "card" ? item.back : item.quote} className="wrap-break-word" />
+              </div>
               {item.kind === "card" && item.backImage ? (
                 <StudyCardImage
                   side="answer"
@@ -389,6 +429,7 @@ export function StudyReview({
                       practiced: [...practiced, item.id],
                       revealed: "",
                       position: undefined,
+                      response: undefined,
                     }));
                   }}
                 >
@@ -453,6 +494,7 @@ export function StudyReview({
                     practiced: [],
                     revealed: "",
                     position: undefined,
+                    response: undefined,
                   }))
                 }
               >
@@ -545,7 +587,7 @@ export function CardLibrary({
   filter?: string;
   noteId?: string;
   clearFilter: () => void;
-  review: (ids?: string[]) => void;
+  review: (ids?: string[], practiceOnly?: boolean) => void;
   practice: (ids: string[]) => void;
   openingPractice: boolean;
   creation: Pick<Card, "notebookId" | "origin" | "tags" | "vaultId"> | false;
@@ -586,6 +628,7 @@ export function CardLibrary({
   const allShownSelected =
     cardsShown.length > 0 && cardsShown.every((card) => selected.includes(card.id));
   const reviewSet = selectedCards.length ? selectedCards : cardsShown;
+  const reviewIds = reviewSet.length === cards.length ? undefined : reviewSet.map(({ id }) => id);
 
   function changeImage(side: "image" | "backImage", value?: string) {
     const editingId = editing?.id;
@@ -669,9 +712,7 @@ export function CardLibrary({
           ) : null}
           <Button
             variant="outline"
-            onClick={() =>
-              review(reviewSet.length === cards.length ? undefined : reviewSet.map(({ id }) => id))
-            }
+            onClick={() => review(reviewIds)}
             disabled={!reviewSet.length}
           >
             {selectedCards.length
@@ -679,13 +720,18 @@ export function CardLibrary({
               : "Review these cards"}
           </Button>
           {reviewSet.length ? (
-            <Button
-              variant="outline"
-              disabled={openingPractice}
-              onClick={() => practice(reviewSet.map(({ id }) => id))}
-            >
-              {t("study.recall.tutorAction")}
-            </Button>
+            <>
+              <Button variant="outline" onClick={() => review(reviewIds, true)}>
+                {t("study.recall.practiceNow")}
+              </Button>
+              <Button
+                variant="outline"
+                disabled={openingPractice}
+                onClick={() => practice(reviewSet.map(({ id }) => id))}
+              >
+                {t("study.recall.tutorAction")}
+              </Button>
+            </>
           ) : null}
           {!filter && !generating ? (
             <>
@@ -1000,7 +1046,7 @@ export function HighlightsLibrary({
   filter?: string;
   clearFilter: () => void;
   locate: (item: Highlight) => void;
-  review: (ids?: string[]) => void;
+  review: (ids?: string[], practiceOnly?: boolean) => void;
   discuss: (ids: string[]) => void;
   openingTutor: boolean;
 }) {
@@ -1061,6 +1107,11 @@ export function HighlightsLibrary({
               ? t("study.highlights.discuss", { count: targetIds.length })
               : t("study.highlights.tutorTitle")}
           </Button>
+          {targetIds.length ? (
+            <Button variant="outline" onClick={() => review(narrowed ? targetIds : undefined, true)}>
+              {t("study.recall.practiceNow")}
+            </Button>
+          ) : null}
           <Button
             onClick={() => review(narrowed ? targetIds : undefined)}
             disabled={!targetIds.length}

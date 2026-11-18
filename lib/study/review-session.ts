@@ -5,17 +5,24 @@ import type { StudyBook, StudyRecord, StudyRecordOf } from "./records";
 import { matchesStudyReport } from "./reports";
 import { scheduleState } from "./schedule";
 
+export const maxReviewResponseLength = 2_000;
+const responseSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("text"), value: z.string().max(maxReviewResponseLength) }),
+  z.object({ kind: z.literal("choice"), index: z.number().int().nonnegative() }),
+]);
 const snapshotSchema = z.object({
   revealed: z.string(),
   rated: z.number().int().nonnegative(),
   practiced: z.array(z.string()).nullable(),
   position: z.object({ id: z.string(), dueAt: z.number() }).optional(),
+  response: responseSchema.optional(),
 });
 const savedSessions = z.array(z.tuple([z.string(), snapshotSchema]));
 const storageKey = "better-vault:study-review-sessions";
 const directKey = `${storageKey}:direct`;
 const directSession = z.tuple([z.string(), z.string().min(1).max(80)]);
 export type ReviewSnapshot = z.infer<typeof snapshotSchema>;
+export type ReviewResponse = z.infer<typeof responseSchema>;
 
 const selectionSchema = z.object({
   studyReviewSession: z.string().min(1).max(80).optional(),
