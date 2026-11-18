@@ -35,6 +35,7 @@ import {
 } from "@/lib/study/review-session";
 import { toast } from "sonner";
 import { Button } from "@/components/panelui/button";
+import { Dialog } from "@/components/panelui/dialog";
 import { Input } from "@/components/panelui/input";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import {
@@ -65,6 +66,46 @@ type Word = StudyRecordOf<"word">;
 type CardEditor = StudyCardEdit & { id: string; mode: "create" | "edit" };
 const date = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 const textArea = "min-h-20 w-full rounded-xl border bg-background p-3 text-sm";
+
+function ReviewImage({
+  side,
+  image,
+  onOpenChange,
+}: {
+  side: "question" | "answer";
+  image: string;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { t } = useTranslation("home");
+  const { t: common } = useTranslation();
+  const question = side === "question";
+  const title = t(question ? "study.visualCard.questionImage" : "study.visualCard.answerImage");
+  return (
+    <Dialog onOpenChange={onOpenChange}>
+      <Dialog.Trigger
+        render={
+          <button
+            type="button"
+            aria-label={t(question ? "study.visualCard.enlargeQuestion" : "study.visualCard.enlargeAnswer")}
+            className="block max-w-full cursor-zoom-in rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          />
+        }
+      >
+        <img
+          className="max-h-52 max-w-full rounded-lg object-contain"
+          src={image}
+          alt={question ? "Flashcard attachment" : "Answer attachment"}
+        />
+      </Dialog.Trigger>
+      <Dialog.Content size="lg" closeLabel={common("actions.close")}>
+        <Dialog.Header title={title} />
+        <Dialog.Body>
+          <img src={image} alt={title} className="mx-auto max-h-[72dvh] max-w-full object-contain" />
+        </Dialog.Body>
+      </Dialog.Content>
+    </Dialog>
+  );
+}
 
 function RetryCountdown({ dueAt }: { dueAt: number }) {
   const { t, i18n } = useTranslation("home");
@@ -154,6 +195,7 @@ export function StudyReview({
   const reveal = useRef<HTMLButtonElement>(null);
   const status = useRef<HTMLParagraphElement>(null);
   const grading = useRef(false);
+  const previewing = useRef<string | undefined>(undefined);
   const queue = reviewQueue(items, practiced, now).filter(
     ({ id, schedule }) => practiced || id !== finished?.id || schedule.dueAt !== finished.dueAt,
   );
@@ -183,6 +225,10 @@ export function StudyReview({
         revealed: item.id,
         position: { id: item.id, dueAt: item.schedule.dueAt },
       }));
+  }
+
+  function previewImage(open: boolean) {
+    previewing.current = open ? item?.id : undefined;
   }
 
   async function grade(rating: StudyRating, gradedAt: number) {
@@ -239,6 +285,7 @@ export function StudyReview({
   function keydown(event: KeyboardEvent) {
     if (!item || event.altKey || event.metaKey || event.ctrlKey || event.shiftKey || event.repeat)
       return;
+    if (previewing.current === item.id) return;
     if (event.key === " " && !isRevealed) {
       if (event.target instanceof HTMLElement && event.target.closest("button, a")) return;
       event.preventDefault();
@@ -311,10 +358,10 @@ export function StudyReview({
             />
           )}
           {item.kind === "card" && item.image ? (
-            <img
-              className="max-h-52 rounded-lg object-contain"
-              src={item.image}
-              alt="Flashcard attachment"
+            <ReviewImage
+              side="question"
+              image={item.image}
+              onOpenChange={previewImage}
             />
           ) : null}
           {!isRevealed ? (
@@ -329,10 +376,10 @@ export function StudyReview({
                 <StudyText text={item.quote} className="border-t pt-4 wrap-break-word" />
               )}
               {item.kind === "card" && item.backImage ? (
-                <img
-                  className="max-h-52 rounded-lg object-contain"
-                  src={item.backImage}
-                  alt="Answer attachment"
+                <ReviewImage
+                  side="answer"
+                  image={item.backImage}
+                  onOpenChange={previewImage}
                 />
               ) : null}
               {item.kind === "highlight" && item.note ? (

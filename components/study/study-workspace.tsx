@@ -45,6 +45,7 @@ import {
   type StudyBook,
   type StudyRecord,
   type StudyThread,
+  type StudyVisualOrigin,
 } from "@/lib/study/records";
 import { StudyLibrary } from "./study-library";
 import { StudyReader } from "./study-reader";
@@ -504,6 +505,14 @@ export default function StudyWorkspace({
   const at = queryIndex(params.get("at"));
   const length = queryIndex(params.get("length"));
   const revision = queryIndex(params.get("rev"));
+  const figure = queryIndex(params.get("figure"));
+  const pageTop = queryIndex(params.get("pageTop"));
+  const focusedVisual: StudyVisualOrigin | undefined =
+    book?.format === "epub" && figure !== undefined
+      ? { kind: "epub", figure }
+      : book?.format === "pdf" && pageTop !== undefined && pageTop <= 10_000
+        ? { kind: "pdf", top: pageTop }
+        : undefined;
   const focusedRange = at !== undefined && length ? { offset: at, length, revision } : undefined;
   const output = params.get("output");
   const studioOutput = useOutput(tab === "review" ? output : null);
@@ -767,6 +776,7 @@ export default function StudyWorkspace({
             reference={params.get("reference") === "1"}
             focusedHighlight={params.get("highlight") ?? undefined}
             focusedRange={focusedRange}
+            focusedVisual={focusedVisual}
             highlights={highlights.filter((highlight) => highlight.bookId === book.id)}
             back={() => go("library", libraryScope)}
             openPage={(section) => locate(book.id, section)}

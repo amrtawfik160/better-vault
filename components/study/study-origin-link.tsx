@@ -1,4 +1,5 @@
 import { Link, useLocation } from "react-router";
+import { useTranslation } from "react-i18next";
 import { originHref, originLabel } from "@/lib/study/links";
 import { reviewReturnState } from "@/lib/study/review-session";
 import type { StudyOrigin } from "@/lib/study/records";
@@ -14,6 +15,7 @@ export function StudyOriginLink({
   state?: ReturnType<typeof reviewReturnState>;
   onClick?: () => void;
 }) {
+  const { t } = useTranslation("home");
   const location = useLocation();
   const current = reviewReturnState(location.state);
   const params = new URLSearchParams(location.search);
@@ -35,7 +37,10 @@ export function StudyOriginLink({
       onClick={onClick}
       className="inline-flex rounded-lg px-2 py-1 text-sm text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring"
     >
-      {label ?? originLabel(origin)}
+      {label ??
+        (origin.kind === "book" && origin.visual
+          ? t("study.visualCard.openSource")
+          : originLabel(origin))}
     </Link>
   );
 }

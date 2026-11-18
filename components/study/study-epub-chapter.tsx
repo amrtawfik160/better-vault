@@ -1,7 +1,10 @@
 import { createElement, useEffect, useRef, useState, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
+import { Button } from "@/components/panelui/button";
 import { loadBlob } from "@/lib/db/blobs";
 import { epubPath, openStudyEpub } from "@/lib/study/epub";
 import type { StudySection } from "@/lib/study/records";
+import type { StudyImageCapture } from "@/lib/study/visual-card";
 import { textDirection, type TextDirection } from "@/lib/text/direction";
 import { directionalInline } from "@/components/common/directional-text";
 import { useRenderedStudyMarks, type StudyTextMark } from "./study-rendered-text";
@@ -52,6 +55,7 @@ const retainedTags = new Set([
 
 type EpubArchive = Awaited<ReturnType<typeof openStudyEpub>>;
 type Chapter = NonNullable<Awaited<ReturnType<EpubArchive["readChapter"]>>>;
+type EpubPicture = { url: string; blob: Blob };
 
 const textBlocks = new Set([
   "p",
@@ -95,24 +99,74 @@ async function loadPictures(
       epubPath(item.getAttribute("src") ?? "", path),
     ),
   );
-  const pictures = new Map<string, string>();
+  const pictures = new Map<string, EpubPicture>();
   await Promise.all(
     [...paths].slice(0, 20).map(async (path) => {
       if (!path) return;
       const image = await book.readImage(path);
-      if (image) pictures.set(path, createUrl(image));
+      if (image) pictures.set(path, { url: createUrl(image), blob: image });
     }),
   );
   return pictures;
 }
 
+type FigureCapture = Extract<StudyImageCapture, { kind: "epub" }>;
+
+function FigureAction({
+  capture,
+  onVisual,
+}: {
+  capture: FigureCapture;
+  onVisual: (capture: StudyImageCapture) => void;
+}) {
+  const { t } = useTranslation("home");
+  return (
+    <Button
+      type="button"
+      data-study-reading-control
+      className="select-none"
+      variant="ghost"
+      size="sm"
+      aria-label={
+        capture.description
+          ? t("study.visualCard.captureNamedFigure", { description: capture.description })
+          : undefined
+      }
+      onClick={() => onVisual(capture)}
+    >
+      {t("study.visualCard.captureFigure")}
+    </Button>
+  );
+}
+
 function displayChapter(
   chapter: Chapter,
   path: string,
-  pictures: Map<string, string>,
+  pictures: Map<string, EpubPicture>,
   destinations: ReadonlyMap<string, number>,
   go: (index: number) => void,
+  onVisual: (capture: StudyImageCapture) => void,
 ) {
+  const figures = new Map<Element, number>();
+  chapter.body.querySelectorAll("img").forEach((image, index) => figures.set(image, index));
+  function figureOf(node: Element) {
+    const relative = epubPath(node.getAttribute("src") ?? "", path);
+    const picture = relative ? pictures.get(relative) : undefined;
+    const figure = figures.get(node);
+    if (!picture || figure === undefined) return;
+    const capture: FigureCapture = {
+      kind: "epub",
+      blob: picture.blob,
+      figure,
+      description: node.getAttribute("alt") ?? "",
+    };
+    return { picture, capture };
+  }
+  function chapterDestination(node: Element) {
+    const href = node.getAttribute("href") ?? "";
+    const target = href && !href.startsWith("#") ? epubPath(href, path) : null;
+    return target ? destinations.get(target) : undefined;
+  }
   function display(
     node: Node,
     key: number,
@@ -124,17 +178,25 @@ function displayChapter(
     if (!(node instanceof Element)) return null;
     const tag = node.localName;
     if (tag === "img") {
-      const pathToImage = epubPath(node.getAttribute("src") ?? "", path);
-      const url = pathToImage ? pictures.get(pathToImage) : undefined;
-      return url ? (
-        <img
+      const figure = figureOf(node);
+      if (!figure) return null;
+      const link = node.closest("a");
+      const linked = link && chapterDestination(link) !== undefined;
+      return (
+        <span
           key={key}
-          src={url}
-          alt={node.getAttribute("alt") ?? ""}
-          loading="lazy"
-          className="my-3 max-h-[60vh] max-w-full object-contain"
-        />
-      ) : null;
+          className="my-3 inline-flex max-w-full flex-col items-start gap-1 align-middle"
+        >
+          <img
+            src={figure.picture.url}
+            alt={figure.capture.description}
+            loading="lazy"
+            data-study-figure={figure.capture.figure}
+            className="max-h-[60vh] max-w-full object-contain"
+          />
+          {linked ? null : <FigureAction capture={figure.capture} onVisual={onVisual} />}
+        </span>
+      );
     }
     const heading = /^h[1-6]$/.test(tag);
     const declared = bookDirection(node.getAttribute("dir"));
@@ -150,24 +212,33 @@ function displayChapter(
       display(child, index, dir ?? inherited, declared ?? authored),
     );
     if (tag === "a") {
-      const href = node.getAttribute("href") ?? "";
-      const target = href && !href.startsWith("#") ? epubPath(href, path) : null;
-      const destination = target ? destinations.get(target) : undefined;
+      const destination = chapterDestination(node);
       return destination === undefined ? (
         <span key={key} dir={dir} lang={lang}>
           {children}
         </span>
       ) : (
-        <button
-          type="button"
-          key={key}
-          dir={dir}
-          lang={lang}
-          className="cursor-pointer text-primary underline"
-          onClick={() => go(destination)}
-        >
-          {children}
-        </button>
+        <span key={key} dir={dir} lang={lang}>
+          <button
+            type="button"
+            className="cursor-pointer text-primary underline"
+            onClick={() => go(destination)}
+          >
+            {children}
+          </button>
+          {[...node.querySelectorAll("img")].flatMap((image) => {
+            const figure = figureOf(image);
+            return figure
+              ? [
+                  <FigureAction
+                    key={figure.capture.figure}
+                    capture={figure.capture}
+                    onVisual={onVisual}
+                  />,
+                ]
+              : [];
+          })}
+        </span>
       );
     }
     if (heading)
@@ -221,6 +292,7 @@ export function StudyEpubChapter({
   theme,
   onSelect,
   onReadingSurface,
+  onVisual,
   go,
 }: {
   fileId: string;
@@ -232,12 +304,13 @@ export function StudyEpubChapter({
   theme: StudyEpubTheme;
   onSelect: (root: HTMLElement) => void;
   onReadingSurface: (surface: { section: number; root: HTMLElement | null }) => void;
+  onVisual: (capture: StudyImageCapture) => void;
   go: (index: number) => void;
 }) {
   const [loaded, setLoaded] = useState<{
     chapter: Chapter;
     path: string;
-    pictures: Map<string, string>;
+    pictures: Map<string, EpubPicture>;
   } | null>();
   const content = useRef<HTMLDivElement>(null);
   useRenderedStudyMarks(content, Boolean(loaded), section.text, marks);
@@ -306,7 +379,7 @@ export function StudyEpubChapter({
       onTouchEnd={capture}
       onKeyUp={capture}
     >
-      {displayChapter(loaded.chapter, loaded.path, loaded.pictures, destinations, go)}
+      {displayChapter(loaded.chapter, loaded.path, loaded.pictures, destinations, go, onVisual)}
     </div>
   );
 }

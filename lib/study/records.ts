@@ -34,6 +34,10 @@ const textEdit = z.object({
   section: index,
   ranges: z.array(z.object({ before: index, after: index, length: z.number().int().positive() })),
 });
+const studyVisualOrigin = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("pdf"), top: index.max(10_000) }),
+  z.object({ kind: z.literal("epub"), figure: index }),
+]);
 export const studyOriginSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("book"),
@@ -43,6 +47,7 @@ export const studyOriginSchema = z.discriminatedUnion("kind", [
     offset: index.optional(),
     length: index.optional(),
     revision: index.optional(),
+    visual: studyVisualOrigin.optional(),
   }),
   z.object({ kind: z.literal("note"), noteId: z.string(), heading: z.string().optional() }),
   z.object({
@@ -281,6 +286,7 @@ export type StudyWordResult =
   | { kind: "cards"; cardIds: string[] }
   | { kind: "duplicate" | "unavailable" };
 export type StudyBook = StudyRecordOf<"book">;
+export type StudyVisualOrigin = z.infer<typeof studyVisualOrigin>;
 export type StudyReadingPlace = z.infer<typeof readingPlace>;
 export type StudyTextEdit = z.infer<typeof textEdit>;
 export type StudyBookWrite = {

@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
+import { Button } from "@/components/panelui/button";
 import { loadBlob } from "@/lib/db/blobs";
+import type { StudyImageCapture } from "@/lib/study/visual-card";
 import { useRenderedStudyMarks, type StudyTextMark } from "./study-rendered-text";
 import "./study-pdf-page.css";
 
@@ -11,6 +15,7 @@ export function StudyPdfPage({
   zoom,
   onSelect,
   onReadingSurface,
+  onVisual,
 }: {
   fileId: string;
   page: number;
@@ -19,12 +24,15 @@ export function StudyPdfPage({
   zoom: number;
   onSelect: (root: HTMLElement) => void;
   onReadingSurface: (surface: { section: number; root: HTMLElement | null }) => void;
+  onVisual: (capture: StudyImageCapture) => void;
 }) {
+  const { t } = useTranslation("home");
   const paper = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const text = useRef<HTMLDivElement>(null);
   const [drawFailed, setDrawFailed] = useState(false);
   const [ready, setReady] = useState(false);
+  const [capturing, setCapturing] = useState(false);
   useRenderedStudyMarks(text, ready, sectionText, marks);
   useEffect(() => {
     if (ready || drawFailed) onReadingSurface({ section: page, root: text.current });
@@ -107,31 +115,48 @@ export function StudyPdfPage({
     if (text.current) onSelect(text.current);
   }
 
+  function capturePage() {
+    const original = canvas.current;
+    if (!original || !ready || capturing) return;
+    setCapturing(true);
+    original.toBlob((blob) => {
+      if (canvas.current !== original || !original.isConnected) return;
+      setCapturing(false);
+      if (blob) onVisual({ kind: "pdf", blob });
+      else toast.error(t("study.visualCard.captureFailed"));
+    });
+  }
+
   return (
-    <div className="overflow-auto">
-      <div
-        ref={paper}
-        className="relative mx-auto overflow-hidden rounded-lg border bg-white"
-        style={{
-          width: `calc(var(--study-page-width, 800px) * ${zoom / 100})`,
-          maxWidth: `${zoom}%`,
-        }}
-      >
-        <canvas
-          ref={canvas}
-          className="block h-auto w-full"
-          role="img"
-          aria-label={`Original PDF page ${page + 1}`}
-        />
+    <div className="space-y-2">
+      <Button variant="outline" size="sm" disabled={!ready || capturing} onClick={capturePage}>
+        {t("study.visualCard.capturePage")}
+      </Button>
+      <div className="overflow-auto">
         <div
-          ref={text}
-          role="region"
-          aria-label="Selectable PDF text"
-          className="study-pdf-text"
-          onMouseUp={capture}
-          onTouchEnd={capture}
-          onKeyUp={capture}
-        />
+          ref={paper}
+          className="relative mx-auto overflow-hidden rounded-lg border bg-white"
+          style={{
+            width: `calc(var(--study-page-width, 800px) * ${zoom / 100})`,
+            maxWidth: `${zoom}%`,
+          }}
+        >
+          <canvas
+            ref={canvas}
+            className="block h-auto w-full"
+            role="img"
+            aria-label={`Original PDF page ${page + 1}`}
+          />
+          <div
+            ref={text}
+            role="region"
+            aria-label="Selectable PDF text"
+            className="study-pdf-text"
+            onMouseUp={capture}
+            onTouchEnd={capture}
+            onKeyUp={capture}
+          />
+        </div>
       </div>
     </div>
   );

@@ -44,6 +44,8 @@ export function originHref(origin: StudyOrigin) {
         at: origin.offset,
         length: origin.length,
         rev: origin.revision,
+        figure: origin.visual?.kind === "epub" ? origin.visual.figure : undefined,
+        pageTop: origin.visual?.kind === "pdf" ? origin.visual.top : undefined,
         reference: origin.section === undefined ? undefined : "1",
       });
     case "note":

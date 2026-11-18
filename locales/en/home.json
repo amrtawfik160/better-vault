@@ -413,6 +413,30 @@
         "speaking": "Tutor is speaking. You can interrupt to continue."
       }
     },
+    "visualCard": {
+      "title": "Make an image flashcard",
+      "capturePage": "Make flashcard from page",
+      "captureFigure": "Make flashcard from image",
+      "captureNamedFigure": "Make flashcard from {{description}}",
+      "preview": "Image to use on the flashcard",
+      "crop": "Crop image",
+      "reset": "Reset crop",
+      "cropHelp": "Drag on the image or set the crop edges as percentages.",
+      "edges": { "left": "Left", "top": "Top", "right": "Right", "bottom": "Bottom" },
+      "imageSide": "Show the image on",
+      "question": "Question",
+      "answer": "Answer",
+      "save": "Save flashcard",
+      "saved": "Image flashcard saved",
+      "review": "Review flashcard",
+      "captureFailed": "Could not save this image. Try a smaller crop.",
+      "previewFailed": "Could not open the flashcard image.",
+      "questionImage": "Question image",
+      "answerImage": "Answer image",
+      "enlargeQuestion": "Enlarge question image",
+      "enlargeAnswer": "Enlarge answer image",
+      "openSource": "Open image source"
+    },
     "capture": {
       "draftCards": "Draft flashcards",
       "cardsFromSection": "Draft cards from this section",

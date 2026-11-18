@@ -50,7 +50,7 @@ import { asBackend, createSqliteStore, schemaVersion } from "./sqlite/store";
 import { setStoreForTests, store } from "./store";
 import { conversationTitle } from "@/lib/chat/title";
 import { studyVaultIndex } from "@/lib/study/vault";
-import { studyCitationOrigin } from "@/lib/study/links";
+import { originHref, studyCitationOrigin } from "@/lib/study/links";
 import { studyDocumentDraftId } from "@/lib/study/document-drafts";
 import type { StudyDocumentRecovery } from "@/lib/study/records";
 import { ingestFile } from "@/lib/sources/ingest";
@@ -702,6 +702,34 @@ describe.each(backends)("%s store", (name, create) => {
   });
 
   describe("study", () => {
+    it("keeps a visual flashcard's image and original location through a backup", async () => {
+      const image = "data:image/png;base64,cGljdHVyZQ==";
+      const book = await addStudyBook({
+        title: "Assembly",
+        format: "pdf",
+        sections: [{ title: "Page 1", text: "Assembly diagram" }],
+      });
+      const card = await saveStudyCard({
+        front: "Which component moves first?",
+        back: "The cam follower.",
+        backImage: image,
+        notebookId: book.notebookId,
+        origin: { kind: "book", bookId: book.id, section: 0, visual: { kind: "pdf", top: 2780 } },
+        tags: [],
+      });
+      const backup = await exportBackup();
+      await deleteAllData();
+      await importBackup(backup);
+      const restored = await store().getStudy(card.id);
+      expect(restored).toMatchObject({ backImage: image, origin: card.origin });
+      if (restored?.kind !== "card" || !restored.origin) throw new Error("Card source was lost.");
+      const destination = new URL(originHref(restored.origin), "https://deep-le.test");
+      expect(destination.searchParams.get("book")).toBe(book.id);
+      expect(destination.searchParams.get("page")).toBe("0");
+      expect(destination.searchParams.get("pageTop")).toBe("2780");
+      expect(destination.searchParams.get("reference")).toBe("1");
+    });
+
     it("keeps document drafts out of notebook sources and rejects writes after deletion", async () => {
       const vaultId = await createVault({ name: "Physics" });
       const notebookId = await createNotebook("Mechanics", { vaultId });

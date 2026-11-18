@@ -6,20 +6,22 @@ import { studyHighlightColor, type StudyRecordOf } from "@/lib/study/records";
 export type StudyTextMark = Pick<StudyRecordOf<"highlight">, "quote" | "offset" | "color">;
 const compact = (text: string) => text.replace(/\s/gu, "");
 const formulaSelector = `[${studyFormulaAttribute}]`;
+const readingControl = "[data-study-reading-control]";
+const projectedSelector = `${formulaSelector}, ${readingControl}`;
 
-function formulaAt(node: Node) {
-  return (node instanceof Element ? node : node.parentElement)?.closest(formulaSelector);
+function projectionAt(node: Node) {
+  return (node instanceof Element ? node : node.parentElement)?.closest(projectedSelector);
 }
 
-function projectedText(range: Range, formulas: readonly Element[]) {
+function projectedText(range: Range, projections: readonly Element[]) {
   const tail = range.cloneRange();
   let text = "";
-  for (const formula of formulas) {
-    if (!range.intersectsNode(formula)) continue;
+  for (const element of projections) {
+    if (!range.intersectsNode(element)) continue;
     const before = tail.cloneRange();
-    before.setEndBefore(formula);
-    text += before.toString() + (formula.getAttribute(studyFormulaAttribute) ?? "");
-    tail.setStartAfter(formula);
+    before.setEndBefore(element);
+    text += before.toString() + (element.getAttribute(studyFormulaAttribute) ?? "");
+    tail.setStartAfter(element);
   }
   return text + tail.toString();
 }
@@ -32,19 +34,24 @@ export function renderedSelection(root: HTMLElement, canonical: string) {
   return canonicalRenderedRange(root, range, canonical, 3_000);
 }
 
-export function canonicalRenderedRange(root: HTMLElement, range: Range, canonical: string, limit: number) {
-  const formulas = Array.from(root.querySelectorAll(formulaSelector));
+export function canonicalRenderedRange(
+  root: HTMLElement,
+  range: Range,
+  canonical: string,
+  limit: number,
+) {
+  const projections = Array.from(root.querySelectorAll(projectedSelector));
   const selection = range.cloneRange();
-  const firstFormula = formulaAt(selection.startContainer);
-  const lastFormula = formulaAt(selection.endContainer);
-  if (firstFormula) selection.setStartBefore(firstFormula);
-  if (lastFormula) selection.setEndAfter(lastFormula);
-  const quote = compact(projectedText(selection, formulas).trim().slice(0, limit));
+  const firstProjection = projectionAt(selection.startContainer);
+  const lastProjection = projectionAt(selection.endContainer);
+  if (firstProjection) selection.setStartBefore(firstProjection);
+  if (lastProjection) selection.setEndAfter(lastProjection);
+  const quote = compact(projectedText(selection, projections).trim().slice(0, limit));
   if (!quote) return;
   const prefix = range.cloneRange();
   prefix.selectNodeContents(root);
   prefix.setEnd(selection.startContainer, selection.startOffset);
-  const expected = compact(projectedText(prefix, formulas)).length;
+  const expected = compact(projectedText(prefix, projections)).length;
   const at = locateStudyQuote(compact(canonical), quote, expected);
   if (at < 0) return null;
 
@@ -68,7 +75,11 @@ function renderedTextIndex(root: HTMLElement) {
   const pieces: RenderedPiece[] = [];
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
     acceptNode(node) {
-      if (node.parentElement?.closest(formulaSelector)) return NodeFilter.FILTER_REJECT;
+      if (
+        node.parentElement?.closest(projectedSelector) ||
+        (node instanceof Element && node.matches(readingControl))
+      )
+        return NodeFilter.FILTER_REJECT;
       return node instanceof Text || (node instanceof Element && node.matches(formulaSelector))
         ? NodeFilter.FILTER_ACCEPT
         : NodeFilter.FILTER_SKIP;

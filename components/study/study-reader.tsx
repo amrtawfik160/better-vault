@@ -10,6 +10,7 @@ import { directionalInline, DirectionalText } from "@/components/common/directio
 import { Button } from "@/components/panelui/button";
 import { StudyEpubChapter, type StudyEpubTheme } from "./study-epub-chapter";
 import { StudyPdfPage } from "./study-pdf-page";
+import { StudyVisualCard, type VisualFlashcard } from "./study-visual-card";
 import { StudyFlashcardDraftDialog, type FlashcardSource } from "./study-flashcard-generator";
 import { renderedSelection, renderedStudyRange, useRenderedStudyMarks } from "./study-rendered-text";
 import { useStudyReadingPlace } from "./study-reading-place";
@@ -40,7 +41,9 @@ import {
   type StudyOrigin,
   type StudyRecordOf,
   type StudyThread,
+  type StudyVisualOrigin,
 } from "@/lib/study/records";
+import type { StudyImageCapture } from "@/lib/study/visual-card";
 import { locateStudyMark, resolveStudyRange, studyTextRevision } from "@/lib/study/text-edits";
 import { studyDocumentFormulaMode } from "@/lib/study/markdown-document";
 
@@ -122,6 +125,7 @@ export function StudyReader({
   reference,
   focusedHighlight,
   focusedRange,
+  focusedVisual,
   highlights,
   openPage,
   resume,
@@ -138,6 +142,7 @@ export function StudyReader({
   reference: boolean;
   focusedHighlight?: string;
   focusedRange?: { offset: number; length: number; revision?: number };
+  focusedVisual?: StudyVisualOrigin;
   highlights: StudyRecordOf<"highlight">[];
   openPage: (section: number) => void;
   resume: () => void;
@@ -168,7 +173,7 @@ export function StudyReader({
   const navigate = useNavigate();
   const location = useLocation();
   const returnState = reviewReturnState(location.state);
-  const visitingPassage = reference || !!(focusedHighlight || focusedRange);
+  const visitingPassage = reference || !!(focusedHighlight || focusedRange || focusedVisual);
   const { t } = useTranslation("home");
   const source = useSource(book.sourceId);
   const fileId = source === null ? undefined : book.fileId;
@@ -190,6 +195,7 @@ export function StudyReader({
   const [cardBack, setCardBack] = useState("");
   const [draftSource, setDraftSource] = useState<FlashcardSource | null>(null);
   const [cardSaving, setCardSaving] = useState(false);
+  const [visualCard, setVisualCard] = useState<{ capture: StudyImageCapture; section: number }>();
   const [language, setLanguage] = useState("");
   const [translating, setTranslating] = useState(false);
   const [color, setColor] = useState<StudyHighlightColor>("yellow");
@@ -201,7 +207,8 @@ export function StudyReader({
   const [surfaceChoice, setSurfaceChoice] = useState<StudyBook["preferredReadingSurface"]>();
   const [savingSurface, setSavingSurface] = useState(false);
   const showLayout =
-    (surfaceChoice ?? book.preferredReadingSurface ?? book.readingPlace?.surface) === "layout";
+    (surfaceChoice ?? (focusedVisual ? "layout" : undefined) ??
+      book.preferredReadingSurface ?? book.readingPlace?.surface) === "layout";
   const [readingSurface, setReadingSurface] = useState<{ section: number; root: HTMLElement | null }>();
   const viewPdf = showLayout && book.format === "pdf";
   const viewEpub = showLayout && book.format === "epub";
@@ -262,6 +269,9 @@ export function StudyReader({
   );
   useRenderedStudyMarks(textBody, !waitingMath && markdown !== undefined, section.text, renderedMarks);
   const bookmarkPlaces = book.bookmarkPlaces ?? [];
+  const visualKind = focusedVisual?.kind;
+  const figure = focusedVisual?.kind === "epub" ? focusedVisual.figure : undefined;
+  const pageTop = focusedVisual?.kind === "pdf" ? focusedVisual.top : undefined;
 
   useEffect(() => {
     if (!visitingPassage) void updateStudyBook(book.id, { section: index });
@@ -336,19 +346,38 @@ export function StudyReader({
         return;
       }
       textBody.current?.querySelector("#focused-passage")?.scrollIntoView({ block: "center" });
+    } else if (layout && viewport && visualKind === "pdf" && pageTop !== undefined) {
+      const bounds = layout.getBoundingClientRect();
+      const top = bounds.top + bounds.height * (pageTop / 10_000);
+      viewport.scrollBy({
+        top: top - viewport.getBoundingClientRect().top - 32,
+        behavior: "instant",
+      });
+    } else if (layout && visualKind === "epub" && figure !== undefined) {
+      const picture = layout.querySelector<HTMLImageElement>(`img[data-study-figure="${figure}"]`);
+      if (!picture) return;
+      const center = () => picture.scrollIntoView({ block: "center", behavior: "instant" });
+      center();
+      if (!picture.complete) {
+        picture.addEventListener("load", center, { once: true });
+        return () => picture.removeEventListener("load", center);
+      }
     } else if (missingPassage) {
       passageNotice.current?.scrollIntoView({ block: "nearest" });
     }
   }, [
     focusMark,
+    figure,
     layout,
     loadingLayout,
     location.key,
     markdown,
     missingPassage,
+    pageTop,
     restoredLayout,
     section.text,
     viewport,
+    visualKind,
     waitingMath,
   ]);
 
@@ -362,10 +391,33 @@ export function StudyReader({
 
   function go(page: number) {
     clearSelection();
+    setVisualCard(undefined);
     setEditingSection(undefined);
     setResult(null);
     setSearch("");
     openPage(page);
+  }
+
+  function openVisualCard(capture: StudyImageCapture) {
+    clearSelection();
+    setVisualCard({ capture, section: index });
+  }
+
+  async function saveVisualCard({ visual, ...content }: VisualFlashcard, section: number) {
+    const card = await saveStudyCard({
+      ...content,
+      notebookId: book.notebookId,
+      vaultId,
+      tags: [book.title],
+      origin: { kind: "book", bookId: book.id, section, visual },
+    });
+    setVisualCard(undefined);
+    toast.success(t("study.visualCard.saved"), {
+      action: {
+        label: t("study.visualCard.review"),
+        onClick: () => navigate(studyHref("review", { card: card.id, vault: vaultId })),
+      },
+    });
   }
 
   async function toggleLayout(visible: boolean) {
@@ -877,6 +929,7 @@ export function StudyReader({
               zoom={zoom}
               onSelect={captureRendered}
               onReadingSurface={setReadingSurface}
+              onVisual={openVisualCard}
             />
           </>
         ) : null}
@@ -907,6 +960,7 @@ export function StudyReader({
               go={go}
               onSelect={captureRendered}
               onReadingSurface={setReadingSurface}
+              onVisual={openVisualCard}
             />
           </>
         ) : null}
@@ -1150,6 +1204,13 @@ export function StudyReader({
             </div>
           ) : null}
         </div>
+      ) : null}
+      {visualCard ? (
+        <StudyVisualCard
+          capture={visualCard.capture}
+          onClose={() => setVisualCard(undefined)}
+          onSave={(card) => saveVisualCard(card, visualCard.section)}
+        />
       ) : null}
       {draftSource ? (
         <StudyFlashcardDraftDialog
