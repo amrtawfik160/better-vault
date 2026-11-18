@@ -5,7 +5,7 @@ import {
   type StudyCitation,
   type StudyThread,
 } from "./records";
-import type { StudyPassage } from "./passages";
+import type { StudyDraftPassage } from "./passages";
 import { studyCitationOrigin } from "./links";
 
 export const studyAction = z.enum(["chat", "explain", "translate", "cards", "report"]);
@@ -75,13 +75,15 @@ export const flashcardPassageSize = flashcardMaterialLimit / 8;
 
 export function flashcardCitationsFor(
   citations: readonly number[] | undefined,
-  passages: readonly StudyPassage[],
+  passages: readonly StudyDraftPassage[],
+  textOnly = false,
 ): StudyCitation[] {
   return [...new Set(citations)]
     .flatMap((index) => {
       if (!Number.isInteger(index) || index < 1) return [];
       const passage = passages[index - 1];
-      return passage ? [{ index, title: passage.title, origin: passage.origin }] : [];
+      if (!passage || (textOnly && passage.image && !passage.text.trim())) return [];
+      return [{ index, title: passage.title, origin: passage.origin }];
     })
     .slice(0, 3);
 }

@@ -20,6 +20,7 @@ import {
   saveStudyReadingPlace,
   saveStudyOcrText,
   saveStudyOcrPages,
+  saveStudyVisualCard,
   writeStudyOcrDraft,
   saveStudyText,
   startSourceTutor,
@@ -1809,6 +1810,64 @@ describe.each(backends)("%s store", (name, create) => {
       await saveStudyText(book.id, "A different proof.", { section: 0, original: prefix + quote });
       expect(await read(card.id)).toEqual([]);
       expect(await read(readerCard.id)).toEqual([]);
+    });
+
+    it("follows an earlier flashcard to its exact source when drafting and practicing a correction", async () => {
+      const quote = "Any two majorities must have a replica in common.";
+      const prefix = "Unrelated network background.\n\n";
+      const book = await addStudyBook({ title: "Consensus", format: "text", sections: [{ title: "Proof", text: quote }] });
+      const original = await saveStudyCard({
+        front: "Which replicas overlap?", back: "A shared replica belongs to both majorities.", tags: [],
+        origin: { kind: "book", bookId: book.id, section: 0, offset: 0, length: quote.length },
+      });
+      const cardOrigin = { kind: "card" as const, cardId: original.id };
+      const correction = await saveStudyCard({
+        front: "Why do large enough sets overlap?", back: quote, tags: [],
+        citations: [{ index: 1, title: original.front, origin: cardOrigin }],
+      });
+      await saveStudyText(book.id, prefix + quote, { section: 0, original: quote });
+      const draftSources = await readFlashcardDraftPassages([cardOrigin, {
+        kind: "book", bookId: book.id, section: 0, offset: prefix.length, length: quote.length, revision: 1,
+      }], DEFAULT_VAULT);
+      expect(draftSources).toMatchObject([
+        { origin: cardOrigin, text: `Question: ${original.front}\n\nAnswer: ${original.back}` },
+        { origin: { kind: "book", bookId: book.id, offset: prefix.length, revision: 1 }, text: quote },
+      ]);
+      expect(draftSources).toHaveLength(2);
+      const tutor = await startCardTutor([correction.id], DEFAULT_VAULT, "Correction");
+      if (!tutor) throw new Error("Expected correction practice");
+      expect((await readStudyTutorSources(tutor, DEFAULT_VAULT)).cardEvidence?.get(correction.id))
+        .toEqual([draftSources[1]]);
+
+      await putStudyRecords({
+        ...original,
+        citations: [{ index: 1, title: correction.front, origin: { kind: "card", cardId: correction.id } }],
+      });
+      expect((await readFlashcardDraftPassages([cardOrigin], DEFAULT_VAULT)).map(({ title }) => title))
+        .toEqual([original.front, correction.front]);
+      const other = await createVault({ name: "Private" });
+      expect(await readFlashcardDraftPassages([cardOrigin], other)).toEqual([]);
+    });
+
+    it("preserves visual source captures and can use an older card's picture as card evidence", async () => {
+      const book = await addStudyBook({
+        title: "Diagrams", format: "pdf", mime: "application/pdf", bytes: Uint8Array.of(37, 80, 68, 70),
+        sections: [{ title: "Page 1", text: "" }],
+      });
+      const original = "data:image/png;base64,cGljdHVyZQ==";
+      const replacement = "data:image/png;base64,b3RoZXI=";
+      const visual = { kind: "pdf" as const, top: 1000 };
+      const saved = await saveStudyVisualCard(book, 0, visual, { front: "Which face?", back: "The inner face.", backImage: original, tags: [] });
+      await putStudyRecords({ ...saved, backImage: replacement });
+      const draft = async (id: string) => readFlashcardDraftPassages([{ kind: "card", cardId: id }], DEFAULT_VAULT);
+      const captured = await draft(saved.id);
+      expect(captured[0].image).toBeUndefined();
+      expect(captured[1]).toMatchObject({ origin: { kind: "book", bookId: book.id, visual }, image: original });
+      const legacy = await saveStudyCard({
+        front: "Which side?", back: "The other side.", image: replacement, tags: [],
+        origin: { kind: "book", bookId: book.id, section: 0, visual: { kind: "pdf", top: 7000 } },
+      });
+      expect(await draft(legacy.id)).toMatchObject([{ origin: { kind: "card", cardId: legacy.id }, image: replacement }]);
     });
 
     it("keeps dated reports, flashcard origins and follow-ups through regeneration and backup", async () => {

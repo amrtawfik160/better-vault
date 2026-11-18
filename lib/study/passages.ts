@@ -274,6 +274,22 @@ function highlightPassages(
   ];
 }
 
+export function studyCardPassage(
+  { id, front, back, quizChoices }: StudyRecordOf<"card">,
+  limit: number,
+): StudyPassage {
+  const question = front.trim().slice(0, Math.floor(limit / 3));
+  const choicesHeading = "\n\nAnswer choices:\n";
+  const choices = quizChoices?.length
+    ? choicesHeading + quizChoicesText(quizChoices, Math.floor(limit / 3) - choicesHeading.length)
+    : "";
+  return {
+    origin: { kind: "card", cardId: id },
+    title: question.slice(0, 500),
+    text: `Question: ${question}${choices}\n\nAnswer: ${back.trim().slice(0, limit - question.length - choices.length - 20)}`,
+  };
+}
+
 export function passagesFor(
   thread: StudyThread,
   {
@@ -310,18 +326,7 @@ export function passagesFor(
       purpose === "report"
         ? 1_300
         : 10_500 - sources.reduce((total, passage) => total + passage.text.length, 0);
-    const exercises = material.map(({ id, front, back, quizChoices }): StudyPassage => {
-      const question = front.trim().slice(0, Math.floor(limit / 3));
-      const choicesHeading = "\n\nAnswer choices:\n";
-      const choices = quizChoices?.length
-        ? choicesHeading + quizChoicesText(quizChoices, Math.floor(limit / 3) - choicesHeading.length)
-        : "";
-      return {
-        origin: { kind: "card", cardId: id },
-        title: question.slice(0, 500),
-        text: `Question: ${question}${choices}\n\nAnswer: ${back.trim().slice(0, limit - question.length - choices.length - 20)}`,
-      };
-    });
+    const exercises = material.map((card) => studyCardPassage(card, limit));
     return [...exercises, ...sources];
   }
   if (thread.scope === "notes" || thread.scope === "materials") {

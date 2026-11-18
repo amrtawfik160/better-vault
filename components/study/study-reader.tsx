@@ -35,6 +35,7 @@ import {
   recordStudyActivity,
   saveStudyCard,
   saveStudyNote,
+  saveStudyVisualCard,
   saveStudyWord,
   studyId,
   updateStudyBook,
@@ -466,12 +467,11 @@ export function StudyReader({
   }
 
   async function saveVisualCard({ visual, ...content }: VisualFlashcard, section: number) {
-    const card = await saveStudyCard({
+    const card = await saveStudyVisualCard(book, section, visual, {
       ...content,
       notebookId: book.notebookId,
       vaultId,
       tags: [book.title],
-      origin: { kind: "book", bookId: book.id, section, visual },
     });
     setVisualAction(undefined);
     toast.success(t("study.visualCard.saved"), {

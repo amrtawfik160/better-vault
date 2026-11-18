@@ -78,6 +78,11 @@ export type StudyImageSnapshot = {
   file: { mime: string; data: Uint8Array };
 };
 
+export function studyImageFile(dataUrl: string): StudyImageSnapshot["file"] {
+  const [header, encoded] = dataUrl.split(",", 2);
+  return { mime: header.slice(5, -7), data: fromBase64(encoded) };
+}
+
 export async function captureStudyImage(
   capture: StudyImageCapture,
 ): Promise<StudyImageSnapshot | undefined> {
@@ -88,13 +93,12 @@ export async function captureStudyImage(
     await image.decode();
     const snapshot = studyCardImage(image, capture.crop ?? fullStudyImage);
     if (!snapshot) return;
-    const [header, encoded] = snapshot.split(",", 2);
     return {
       context: {
         anchor: studyImageAnchor(capture),
         description: capture.kind === "epub" ? capture.description.slice(0, 500) : undefined,
       },
-      file: { mime: header.slice(5, -7), data: fromBase64(encoded) },
+      file: studyImageFile(snapshot),
     };
   } finally {
     URL.revokeObjectURL(url);

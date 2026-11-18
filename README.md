@@ -100,6 +100,8 @@ For scanned PDFs, choose **Recognize page text** in the reader and review the re
 
 Open a note in Tutor to get answers that cite it. Session reports can save corrections as flashcards and suggested terms to Vocabulary. Reading, reviewing, and speaking time appear in Today. The local library and review work without an account. AI requests use the model you choose in **Settings → AI providers**, including a local provider when you want to work without an AI subscription.
 
+When you choose **Draft cards from this answer** during flashcard practice, the draft can use the original card and the available source passages behind it. Links the model cites appear on the draft for you to check before you save.
+
 For voice practice in the desktop app or on localhost, install [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and place its [multilingual tiny model](https://huggingface.co/ggerganov/whisper.cpp/blob/main/ggml-tiny.bin) at `~/.cache/deeple/whisper/ggml-tiny.bin`. deepLe looks for `whisper-cli` on your system path, including the standard Homebrew locations on macOS. You can also set `DEEPLE_WHISPER_BIN` and `DEEPLE_WHISPER_MODEL` to absolute paths before launching. **Dictate** adds a transcript to your draft. **Speak to tutor** sends the transcript to your selected model and uses an installed system voice to read its reply. Use a local AI model as well to keep the entire conversation on your computer.
 
 Temporary voice turns clear after a report or when you leave the conversation. Enable transcript retention or select a default correction mode under **Study → Tutor → Tutor preferences**.

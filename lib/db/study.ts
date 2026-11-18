@@ -1,5 +1,5 @@
 import { generateId } from "ai";
-import { flashcardPassageSize, maxDraftImages, maxStudyImageBytes, studyImageSchema } from "@/lib/study/ai";
+import { flashcardPassageSize, maxDraftImages, maxStudyImageBytes, studyImageSchema, studyPracticeImages } from "@/lib/study/ai";
 import { toBase64 } from "@/lib/base64";
 import type { PassageRef } from "@/lib/chat/types";
 import { notebookAnswerEvidence } from "@/lib/chat/study";
@@ -15,7 +15,7 @@ import { clearDocumentRecoveries } from "@/lib/study/document-drafts";
 import { scanDraftId } from "@/lib/study/ocr-write";
 import { clearFlashcardDraftsFrom } from "@/lib/study/flashcard-draft-recovery";
 import { locateStudyMark, resolveStudyRange, studyTextEdit, studyTextRevision } from "@/lib/study/text-edits";
-import { cardEvidenceLimit, type StudyDraftPassage, type StudyPassage, type StudyTutorSources } from "@/lib/study/passages";
+import { cardEvidenceLimit, studyCardPassage, type StudyDraftPassage, type StudyPassage, type StudyTutorSources } from "@/lib/study/passages";
 import { locateCitedChunk } from "@/lib/study/locators";
 import { vocabularyOrigin } from "@/lib/study/vocabulary";
 import { recentPracticeCards, selectedStudyCards, studyHighlightPreview } from "@/lib/study/recall";
@@ -24,7 +24,7 @@ import { studyFollowUpId, studyReportKey, studyReports } from "@/lib/study/repor
 import { studyTutorContextSchema } from "@/lib/study/records";
 import { studyOriginRecordId, studyVaultIndex } from "@/lib/study/vault";
 import { clearTutorDraftRecovery } from "@/lib/study/tutor-draft-recovery";
-import { studyImageCropKey, studyImageId, type StudyImageSnapshot } from "@/lib/study/visual-card";
+import { studyImageCropKey, studyImageFile, studyImageId, type StudyImageSnapshot } from "@/lib/study/visual-card";
 import { flashcardsData } from "@/studio/tools/flashcards/definition";
 import { quizData } from "@/studio/tools/quiz/definition";
 import { normaliseText } from "@/lib/grounding/chunk";
@@ -203,6 +203,7 @@ async function studyEvidenceReader(vaultId: string, limit = cardEvidenceLimit, i
   const sourceReads = new Map<string, ReturnType<typeof readNotebookSource>>();
   const savedSourceReads = new Map<string, Promise<StudyBook | undefined>>();
   const bookReads = new Map<string, ReturnType<typeof readStudyRowsInVault>>();
+  const cardReads = new Map<string, ReturnType<typeof readStudyCardsInVault>>();
 
   async function readNotebookSource(id: string) {
     const source = await backend.getSource(id);
@@ -332,26 +333,8 @@ async function studyEvidenceReader(vaultId: string, limit = cardEvidenceLimit, i
     }
   }
 
-  return { notebookOwner, readPassage };
-}
-
-export async function readFlashcardDraftPassages(origins: readonly StudyOrigin[], vaultId: string) {
-  if (!origins.length) return [];
-  const { readPassage } = await studyEvidenceReader(vaultId, flashcardPassageSize, true);
-  const distinct = new Map(origins.map((origin) => [JSON.stringify(origin), origin]));
-  const passages = await Promise.all([...distinct.values()].slice(0, 8).map(readPassage));
-  let images = 0;
-  return passages.flatMap((passage) => passage && (!passage.image || ++images <= maxDraftImages) ? [passage] : []);
-}
-
-async function readFlashcardEvidence(cards: StudyCard[], vaultId: string) {
-  const backend = store();
-  const evidence = new Map<string, StudyPassage[]>();
-  if (!cards.some((card) => card.origin || card.citations?.length)) return evidence;
-  const { notebookOwner, readPassage } = await studyEvidenceReader(vaultId);
-
   async function originsOf(card: StudyCard): Promise<StudyOrigin[]> {
-    if (card.citations) return card.citations.map(studyCitationOrigin);
+    if (card.citations) return card.citations.slice(0, 8).map(studyCitationOrigin);
     const origin = card.origin;
     if (!origin) return [];
     if (origin.kind === "word") {
@@ -362,7 +345,7 @@ async function readFlashcardEvidence(cards: StudyCard[], vaultId: string) {
     if (origin.kind === "tutor" && origin.message !== undefined) {
       const [thread] = await readStudyRowsInVault([origin.threadId], vaultId);
       const answer = thread?.kind === "thread" ? thread.messages[origin.message] : undefined;
-      return answer?.role === "assistant" ? (answer.citations ?? []).map(studyCitationOrigin) : [];
+      return answer?.role === "assistant" ? (answer.citations ?? []).slice(0, 8).map(studyCitationOrigin) : [];
     }
     if (origin.kind === "notebook-answer") {
       if (notebookOwner(origin.notebookId) !== vaultId) return [];
@@ -373,28 +356,87 @@ async function readFlashcardEvidence(cards: StudyCard[], vaultId: string) {
           message.id === origin.messageId &&
           message.role === "assistant",
       )?.message;
-      return answer ? notebookAnswerEvidence(answer, origin.notebookId) : [];
+      return answer ? notebookAnswerEvidence(answer, origin.notebookId).slice(0, 8) : [];
     }
     return [origin];
   }
 
-  const loaded = new Map<string, Promise<StudyPassage | undefined>>();
+  const passages = new Map<string, ReturnType<typeof readPassage>>();
+  function readOnce(origin: StudyOrigin) {
+    const key = JSON.stringify(origin);
+    const reading = passages.get(key) ?? readPassage(origin);
+    passages.set(key, reading);
+    return reading;
+  }
+
+  async function cardPassage(card: StudyCard, sources: StudyOrigin[]): Promise<StudyDraftPassage> {
+    const passage = studyCardPassage(card, limit);
+    const visual = sources.find((origin) => origin.kind === "book" && origin.visual);
+    const original = visual && await readOnce(visual);
+    if (original?.image) return passage;
+    const { question, answer } = studyPracticeImages(card);
+    return { ...passage, image: question ?? answer };
+  }
+
+  async function readEvidence(origins: readonly StudyOrigin[], count: number, includeCards = false) {
+    const result: StudyDraftPassage[] = [];
+    const seen = new Set<string>();
+    const included = new Set<string>();
+    let pending = origins;
+    while (pending.length && result.length < count && seen.size < 32) {
+      const group = new Map<string, StudyOrigin>();
+      for (const origin of pending) {
+        const key = JSON.stringify(origin);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        group.set(key, origin);
+        if (group.size === 8 || seen.size === 32) break;
+      }
+      const resolved = await Promise.all([...group.values()].map(async (origin) => {
+        if (origin.kind === "card") {
+          const reading = cardReads.get(origin.cardId) ?? readStudyCardsInVault([origin.cardId], vaultId);
+          cardReads.set(origin.cardId, reading);
+          const [card] = await reading;
+          if (!card) return {};
+          const sources = await originsOf(card);
+          return { passage: includeCards ? await cardPassage(card, sources) : undefined, sources };
+        }
+        return { passage: await readOnce(origin) };
+      }));
+      for (const { passage } of resolved) {
+        if (!passage) continue;
+        const { origin } = passage;
+        const href = originHref(origin);
+        const key = origin.kind === "note" && origin.passage
+          ? JSON.stringify([href, origin.passage.offset, origin.passage.quote.length])
+          : href;
+        if (included.has(key)) continue;
+        included.add(key);
+        result.push(passage);
+        if (result.length === count) break;
+      }
+      pending = resolved.flatMap(({ sources }) => sources ?? []);
+    }
+    return result;
+  }
+  return { originsOf, readEvidence };
+}
+
+export async function readFlashcardDraftPassages(origins: readonly StudyOrigin[], vaultId: string) {
+  if (!origins.length) return [];
+  const { readEvidence } = await studyEvidenceReader(vaultId, flashcardPassageSize, true);
+  const passages = await readEvidence(origins, 8, true);
+  let images = 0;
+  return passages.filter((passage) => !passage.image || ++images <= maxDraftImages);
+}
+
+async function readFlashcardEvidence(cards: StudyCard[], vaultId: string) {
+  const evidence = new Map<string, StudyPassage[]>();
+  if (!cards.some((card) => card.origin || card.citations?.length)) return evidence;
+  const { originsOf, readEvidence } = await studyEvidenceReader(vaultId);
   await Promise.all(
     cards.map(async (card) => {
-      const origins = new Map(
-        (await originsOf(card)).map((origin) => [JSON.stringify(origin), origin]),
-      );
-      const passages = await Promise.all(
-        [...origins].slice(0, 3).map(([key, origin]) => {
-          const pending = loaded.get(key) ?? readPassage(origin);
-          loaded.set(key, pending);
-          return pending;
-        }),
-      );
-      evidence.set(
-        card.id,
-        passages.filter((passage) => passage !== undefined),
-      );
+      evidence.set(card.id, await readEvidence(await originsOf(card), 3));
     }),
   );
   return evidence;
@@ -656,6 +698,14 @@ export async function saveStudyCard(content: CardContent, id?: string) {
   return card;
 }
 
+export async function saveStudyVisualCard(book: StudyBook, section: number, visual: StudyVisualOrigin, content: CardContent) {
+  const { question, answer } = studyPracticeImages(content);
+  const image = question ?? answer;
+  if (!image) throw new Error("The document image could not be saved.");
+  await saveStudyImageSnapshot(book, section, visual, studyImageFile(image));
+  return saveStudyCard({ ...content, origin: { kind: "book", bookId: book.id, section, visual } });
+}
+
 export function saveStudyDraftCards(cards: StudyCard[]) {
   return store().insertStudy(cards);
 }
@@ -906,9 +956,9 @@ export async function startBookTutor(
   return thread;
 }
 
-export async function startBookImageTutor(book: StudyBook, section: number, snapshot: StudyImageSnapshot) {
-  const { context, file } = snapshot;
-  const { anchor } = context;
+async function saveStudyImageSnapshot(
+  book: StudyBook, section: number, anchor: StudyVisualOrigin, file: StudyImageSnapshot["file"],
+) {
   const backend = store();
   if (!file.data.byteLength || file.data.byteLength > maxStudyImageBytes ||
     !studyImageSchema.safeParse(`data:${file.mime};base64,${toBase64(file.data)}`).success) {
@@ -926,6 +976,13 @@ export async function startBookImageTutor(book: StudyBook, section: number, snap
     createdAt: Date.now(),
     ...file,
   });
+  return fileId;
+}
+
+export async function startBookImageTutor(book: StudyBook, section: number, snapshot: StudyImageSnapshot) {
+  const { context, file } = snapshot;
+  const fileId = await saveStudyImageSnapshot(book, section, context.anchor, file);
+  const backend = store();
   const thread: StudyThread = {
     ...(await studyConversationDefaults("book")),
     id: `${fileId}:tutor`,

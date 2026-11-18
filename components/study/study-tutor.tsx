@@ -1385,7 +1385,10 @@ export function StudyTutor({
                         draftCards(
                           entry.text,
                           { kind: "tutor", threadId: thread.id, message: index },
-                          entry.citations?.map(studyCitationOrigin),
+                          [
+                            ...(entry.citations ?? []).map(studyCitationOrigin),
+                            ...(entry.practiceCardId ? [{ kind: "card" as const, cardId: entry.practiceCardId }] : []),
+                          ],
                         )
                       }
                     >

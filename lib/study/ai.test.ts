@@ -97,4 +97,9 @@ it("assigns each card its own valid numbered citations", () => {
     { index: 2, title: "Second", origin: passages[1].origin },
   ]);
   expect(flashcardCitationsFor([], passages)).toEqual([]);
+  const image = "data:image/png;base64,cGljdHVyZQ==";
+  expect(flashcardCitationsFor([1, 2], [
+    { ...passages[0], text: "", image },
+    { ...passages[1], image },
+  ], true)).toEqual([{ index: 2, title: "Second", origin: passages[1].origin }]);
 });

@@ -183,10 +183,7 @@ export function StudyFlashcardGenerator({
                 front,
                 back,
                 citations: material?.evidence?.length || material?.passages?.length
-                  ? flashcardCitationsFor(
-                      answer.imageFallback ? citations?.filter((index) => !passages[index - 1]?.image) : citations,
-                      passages,
-                    )
+                  ? flashcardCitationsFor(citations, passages, answer.imageFallback)
                   : undefined,
               },
             ]),
@@ -338,7 +335,7 @@ export function StudyFlashcardGenerator({
           }}
           maxLength={flashcardMaterialLimit}
         />
-        {material?.evidence?.some((origin) => origin.kind === "book" && origin.visual) ? (
+        {material?.evidence?.some((origin) => origin.kind === "card" || (origin.kind === "book" && origin.visual)) ? (
           <p className="text-xs text-muted-foreground">
             {t("study.capture.draftUsesImages", { count: maxDraftImages })}
           </p>
