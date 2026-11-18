@@ -206,6 +206,11 @@
     "followUps": {
       "title": "Tutor follow-ups",
       "nextSteps": "Next steps",
+      "practice": "Practice with Tutor",
+      "resumePractice": "Resume practice",
+      "startPractice": "Start follow-up practice",
+      "practicePrompt": "Help me practice this follow-up. Ask me to try the first step.",
+      "practiceUnavailable": "This follow-up is no longer available for practice.",
       "add": "Add to Today",
       "remove": "Remove from Today",
       "complete": "Mark done",

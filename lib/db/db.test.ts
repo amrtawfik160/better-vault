@@ -17,6 +17,7 @@ import {
   startBookTutor,
   startCardTutor,
   startHighlightTutor,
+  startStudyFollowUp,
   StudyTextConflict,
   updateStudyBook,
   updateStudyReport,
@@ -36,7 +37,7 @@ import { setStoreForTests, store } from "./store";
 import { conversationTitle } from "@/lib/chat/title";
 import { studyVaultIndex } from "@/lib/study/vault";
 import { resolveStudyRange } from "@/lib/study/text-edits";
-import { matchesStudyReport, plannedStudySteps, studyReports } from "@/lib/study/reports";
+import { captureReportPracticeContext, matchesStudyReport, plannedStudySteps, studyReports } from "@/lib/study/reports";
 import {
   deleteConversation,
   latestConversation,
@@ -1032,6 +1033,59 @@ describe.each(backends)("%s store", (name, create) => {
       ).toBeUndefined();
       await store().deleteStudy(thread.id);
       expect(await updateStudyReport(thread.id, { kind: "save", report: newReport })).toBe(false);
+    });
+
+    it("resumes one practice conversation per saved step with the original report's context", async () => {
+      const vaultId = await createVault({ name: "Distributed systems" });
+      const note = await createNote({ vaultId, title: "Quorum proof", body: "Majorities share a replica." });
+      const later = await createNote({ vaultId, title: "Later material", body: "Leader epochs are monotonic." });
+      const threadId = "report-conversation";
+      const step = { threadId, reportId: "first-report", index: 0 };
+      const draft = { id: "original-draft", text: "Keep my question about quorum sizes.", at: 1 };
+      await putStudyRecords({
+        id: threadId,
+        kind: "thread",
+        title: "Quorums",
+        scope: "notes",
+        goal: "teach-back",
+        noteIds: [note.id],
+        vaultId,
+        draft,
+        messages: [],
+        updatedAt: 0,
+      });
+      const parent = await readStudyThread(threadId);
+      const context = captureReportPracticeContext(parent, await readStudyTutorSources(parent, vaultId, "report"));
+      await updateStudyReport(threadId, { kind: "save", report: {
+        id: step.reportId,
+        summary: "Reviewed intersecting quorums.",
+        nextSteps: ["State the quorum intersection proof without notes."],
+        corrections: [],
+        practiceContext: context,
+      } });
+      expect(await startStudyFollowUp(step, vaultId)).toBeUndefined();
+      await updateStudyReport(threadId, { kind: "step", reportId: step.reportId, index: step.index, action: "plan" });
+      await updateStudyThread(threadId, { noteIds: [later.id] });
+      await updateStudyReport(threadId, { kind: "save", report: { id: "latest", summary: "A newer report.", nextSteps: [], corrections: [] } });
+      expect(await startStudyFollowUp(step, DEFAULT_VAULT)).toBeUndefined();
+      const [first, second] = await Promise.all([startStudyFollowUp(step, vaultId), startStudyFollowUp(step, vaultId)]);
+      if (!first) throw new Error("Expected a follow-up conversation");
+      expect(second).toBe(first);
+      const practice = await readStudyThread(first);
+      expect(practice).toMatchObject({ vaultId, followUp: step, noteIds: [note.id], messages: [] });
+      expect(practice.draft).toBeUndefined();
+      expect((await readStudyTutorSources(practice, vaultId)).notes).toMatchObject([{ id: note.id }]);
+      const attempt = { role: "user" as const, text: "Two disjoint majorities would exceed the whole set." };
+      await updateStudyThread(first, {}, [attempt]);
+      await updateStudyReport(threadId, { kind: "step", reportId: step.reportId, index: step.index, action: "complete" });
+      expect(await startStudyFollowUp(step, vaultId)).toBeUndefined();
+      await updateStudyReport(threadId, { kind: "step", reportId: step.reportId, index: step.index, action: "reopen" });
+      const saved = JSON.parse(JSON.stringify(await exportBackup()));
+      await deleteAllData();
+      await importBackup(saved);
+      expect(await startStudyFollowUp(step, vaultId)).toBe(first);
+      expect((await readStudyThread(first)).messages).toEqual([attempt]);
+      expect((await readStudyThread(threadId)).draft).toEqual(draft);
     });
 
     it("retains newer Tutor drafts and appends a retried delivery once", async () => {

@@ -4,13 +4,16 @@ import { originHref } from "@/lib/study/links";
 import { studyPdfSections } from "@/lib/study/read-file";
 import { studyTextEdit, studyTextRevision } from "@/lib/study/text-edits";
 import type { StudyTutorSources } from "@/lib/study/passages";
-import { recentPracticeCards, selectedStudyCards } from "@/lib/study/recall";
+import { recentPracticeCards, selectedStudyCards, studyHighlightPreview } from "@/lib/study/recall";
+import { studyFollowUpId, studyReportKey, studyReports } from "@/lib/study/reports";
+import { studyTutorContextSchema } from "@/lib/study/records";
 import { studyOriginRecordId, studyVaultIndex } from "@/lib/study/vault";
 import { clearTutorDraftRecovery } from "@/lib/study/tutor-draft-recovery";
 import { flashcardsData } from "@/studio/tools/flashcards/definition";
 import { quizData } from "@/studio/tools/quiz/definition";
 import { normaliseText } from "@/lib/grounding/chunk";
 import type {
+  StudyFollowUp,
   StudyBook,
   StudyBookWrite,
   StudyOrigin,
@@ -470,6 +473,42 @@ export async function startHighlightTutor(ids: string[], vaultId: string, title:
   };
   await putStudyRecords(thread);
   return thread;
+}
+
+export async function startStudyFollowUp(
+  target: Omit<StudyFollowUp, "text">,
+  vaultId: string,
+) {
+  const id = studyFollowUpId(target);
+  const rows = await readStudyRowsInVault([target.threadId, id], vaultId);
+  const parent = rows.find((row) => row.id === target.threadId);
+  if (parent?.kind !== "thread") return;
+  const report = studyReports(parent).find((report) => studyReportKey(report) === target.reportId);
+  const step = report?.plannedSteps?.[target.index];
+  const text = report?.nextSteps[target.index]?.trim();
+  if (!step || step.completedAt !== undefined || !text) return;
+
+  const existing = rows.find((row) => row.id === id);
+  if (existing?.kind === "thread" && existing.followUp && studyFollowUpId(existing.followUp) === id)
+    return id;
+
+  const context = report.practiceContext ?? studyTutorContextSchema.parse(parent);
+  const backend = store();
+  const inserted = await backend.insertStudy([{
+    ...(await studyConversationDefaults(context.goal)),
+    ...context,
+    id,
+    kind: "thread",
+    title: studyHighlightPreview(text),
+    notebookId: parent.notebookId,
+    vaultId,
+    followUp: { ...target, text },
+    messages: [],
+    updatedAt: Date.now(),
+  }]);
+  if (inserted) return id;
+  const saved = (await readStudyRowsInVault([id], vaultId))[0];
+  if (saved?.kind === "thread" && saved.followUp && studyFollowUpId(saved.followUp) === id) return id;
 }
 
 export async function startBookTutor(

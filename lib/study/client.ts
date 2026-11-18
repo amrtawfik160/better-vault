@@ -38,6 +38,7 @@ export async function askStudyModel({
         .slice(-16)
         .map(({ role, text }) => ({ role, text: text.slice(0, 12_000) })),
       goal: thread?.goal,
+      followUp: thread?.followUp?.text.slice(0, 20_000),
       flashcardPractice: thread?.scope === "cards" || undefined,
       correct: thread?.corrections === "live",
       cardCount,

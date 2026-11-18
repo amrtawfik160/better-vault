@@ -22,6 +22,7 @@ export function StudySessionReport({
   onSaveNote,
   onFeedback,
   onPlanStep,
+  practiceStep,
   actions,
 }: {
   report: StudyReport;
@@ -31,6 +32,7 @@ export function StudySessionReport({
   onSaveNote: () => void;
   onFeedback: (key: string, value: boolean) => void;
   onPlanStep: (index: number, action: "plan" | "remove" | "reopen") => void;
+  practiceStep: (index: number, description: string) => ReactNode;
   actions?: ReactNode;
 }) {
   const { t } = useTranslation("home");
@@ -175,12 +177,13 @@ export function StudySessionReport({
               const id = `${nextStepId}-${index}`;
               return (
                 <li key={index} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
-                  <p id={id} dir="auto" className="min-w-0 flex-1 wrap-break-word">
+                  <p id={id} dir="auto" className="min-w-0 basis-full wrap-break-word sm:flex-1">
                     {text}
                   </p>
                   {done ? (
                     <span className="text-muted-foreground">{t("study.followUps.done")}</span>
                   ) : null}
+                  {state && !done ? practiceStep(index, id) : null}
                   <Button
                     size="sm"
                     variant="outline"

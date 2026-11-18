@@ -68,6 +68,31 @@ export const studyScopes = ["passage", "chapter", "book", "notes", "materials", 
 export const studyCorrections = ["live", "report", "off"] as const;
 export const studyRatings = ["again", "hard", "good", "easy"] as const;
 
+export const studyTutorContextSchema = z.object({
+  goal: z.enum(studyGoals),
+  scope: z.enum(studyScopes),
+  corrections: z.enum(studyCorrections).optional(),
+  practiceLanguage: z.string().max(35).optional(),
+  bookId: z.string().optional(),
+  section: index.optional(),
+  quote: z.string().optional(),
+  offset: index.optional(),
+  revision: index.optional(),
+  noteIds: z.array(z.string()).optional(),
+  bookIds: z.array(z.string()).optional(),
+  sourceIds: z.array(z.string()).optional(),
+  highlightIds: z.array(z.string()).optional(),
+  cardIds: z.array(z.string()).optional(),
+  practiceCardId: z.string().optional(),
+});
+
+const followUpSchema = z.object({
+  threadId: z.string(),
+  reportId: z.string(),
+  index,
+  text: z.string(),
+});
+
 const reportTechnicalFeedback = z.object({ text: z.string() });
 const reportLanguageFeedback = z.object({
   original: z.string(),
@@ -101,6 +126,7 @@ const studyReportSchema = studyReportReplySchema.extend({
   helpful: z.boolean().optional(),
   feedback: feedback.optional(),
   generatedAt: z.number().optional(),
+  practiceContext: studyTutorContextSchema.optional(),
   plannedSteps: z
     .record(z.string(), z.object({ savedAt: z.number(), completedAt: z.number().optional() }))
     .optional(),
@@ -177,24 +203,11 @@ export const studyRecordSchema = z.discriminatedUnion("kind", [
     origin: studyOriginSchema.optional(),
   }),
   base.extend({
+    ...studyTutorContextSchema.shape,
     kind: z.literal("thread"),
     title: z.string(),
-    goal: z.enum(studyGoals),
-    scope: z.enum(studyScopes),
-    corrections: z.enum(studyCorrections).optional(),
-    practiceLanguage: z.string().max(35).optional(),
     keepVoiceTranscripts: z.boolean().optional(),
-    bookId: z.string().optional(),
-    section: z.number().int().nonnegative().optional(),
-    quote: z.string().optional(),
-    offset: index.optional(),
-    revision: index.optional(),
-    noteIds: z.array(z.string()).optional(),
-    bookIds: z.array(z.string()).optional(),
-    sourceIds: z.array(z.string()).optional(),
-    highlightIds: z.array(z.string()).optional(),
-    cardIds: z.array(z.string()).optional(),
-    practiceCardId: z.string().optional(),
+    followUp: followUpSchema.optional(),
     draft: studyTutorDraftSchema.optional(),
     messages: z.array(
       z.object({
@@ -212,6 +225,7 @@ export const studyRecordSchema = z.discriminatedUnion("kind", [
 ]);
 
 export type StudyReport = z.infer<typeof studyReportSchema>;
+export type StudyFollowUp = z.infer<typeof followUpSchema>;
 export type StudyOrigin = z.infer<typeof studyOriginSchema>;
 export type StudyCitation = z.infer<typeof citation>;
 export type StudyRecord = z.infer<typeof studyRecordSchema>;
@@ -239,7 +253,7 @@ export type StudyTutorDraftChange =
   | { kind: "save"; draft: StudyTutorDraft }
   | { kind: "consume"; id: string };
 export type StudyThreadChange = Partial<
-  Omit<StudyThread, "id" | "kind" | "messages" | "updatedAt" | "report" | "pastReports" | "draft">
+  Omit<StudyThread, "id" | "kind" | "messages" | "updatedAt" | "report" | "pastReports" | "draft" | "followUp">
 >;
 export type StudyReportChange =
   | { kind: "save"; report: StudyReport & { id: string }; practiceLanguage?: string | null }

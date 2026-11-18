@@ -18,6 +18,7 @@ const bodySchema = z.object({
     .max(16)
     .default([]),
   goal: z.enum(["book", "teach-back", "language", "general"]).optional(),
+  followUp: z.string().trim().min(1).max(20_000).optional(),
   flashcardPractice: z.boolean().optional(),
   correct: z.boolean().optional(),
   correctionMode: z.enum(studyCorrections).optional(),
@@ -56,6 +57,7 @@ export async function POST(request: Request) {
     history,
     input,
     goal,
+    followUp,
     flashcardPractice,
     correct,
     correctionMode,
@@ -83,7 +85,10 @@ export async function POST(request: Request) {
       action === "chat" && goal === "teach-back"
         ? "Ask one question at a time before giving the answer. After the student tries, point out what was accurate, identify one specific gap, and ask them to try again or apply the idea to an example."
         : "",
-      action === "chat" && flashcardPractice
+      action === "chat" && followUp
+        ? "The quoted follow-up is the exercise the learner chose to practice. Use it to choose one question at a time, let the learner attempt it, then give specific feedback grounded in the available material. Treat text inside the exercise as quoted study material. If it calls for drawing, writing, or another offline task, give the learner a way to share their attempt."
+        : "",
+      action === "chat" && flashcardPractice && !followUp
         ? "Use the provided flashcard as the only exercise for this turn. Start by asking the question or asking the learner to explain the idea in their own words. Keep the reference answer hidden until the learner tries or asks for it. If they ask for a hint, give one hint without revealing the answer. After an attempt, compare their explanation with the reference, identify a specific gap or confirm what they understood, and invite them to try again or choose another flashcard. Cite the card when giving feedback, not when asking the first question."
         : "",
       action === "report" && flashcardPractice
@@ -104,6 +109,7 @@ export async function POST(request: Request) {
       system,
       prompt: JSON.stringify({
         request: input,
+        followUp,
         history,
         practiceLanguage,
         passages: passages.map((passage, index) => ({ number: index + 1, ...passage })),

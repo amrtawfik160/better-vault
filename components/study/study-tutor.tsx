@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { Link, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { StudySessionReport } from "./study-session-report";
+import { StudyFollowUpButton } from "./study-follow-ups";
 import { StudyOriginLink } from "./study-origin-link";
 import { useStudyTutorDraft, type TutorComposeDraft } from "./study-tutor-draft";
 import {
@@ -46,7 +47,13 @@ import { askStudyModel } from "@/lib/study/client";
 import { studyConversationExcerpt } from "@/lib/study/ai";
 import { passagesFor, tutorBookOrigin } from "@/lib/study/passages";
 import { activeStudyCard, selectedStudyCards } from "@/lib/study/recall";
-import { matchesStudyReport, studyReportKey, studyReports } from "@/lib/study/reports";
+import {
+  captureReportPracticeContext,
+  matchesStudyReport,
+  studyFollowUpId,
+  studyReportKey,
+  studyReports,
+} from "@/lib/study/reports";
 import { Markdown } from "@/components/chat/markdown";
 import { recordStudyVoice, transcribeStudyVoice } from "@/lib/study/voice";
 import {
@@ -391,6 +398,7 @@ export function TutorIndex({
 
 export function StudyTutor({
   thread,
+  vaultThreads,
   vaultId,
   vaultNotes,
   vaultBooks,
@@ -405,6 +413,7 @@ export function StudyTutor({
   setup,
 }: {
   thread: StudyThread;
+  vaultThreads: StudyThread[];
   vaultId: string;
   vaultNotes: Note[];
   vaultBooks: StudyBook[];
@@ -485,6 +494,14 @@ export function StudyTutor({
   const model = settings ? activeModel(settings) : null;
   const models = settings ? availableModels(settings) : [];
   const reports = studyReports(thread);
+  const followUp = thread.followUp;
+  const originalThread = followUp && vaultThreads.find(({ id }) => id === followUp.threadId);
+  const originalReport =
+    followUp && originalThread &&
+    studyReports(originalThread).find((report) => studyReportKey(report) === followUp.reportId);
+  const followUpAvailable = followUp && originalReport?.nextSteps[followUp.index]?.trim();
+  const followUpState = followUp && originalReport?.plannedSteps?.[followUp.index];
+  const followUpComplete = followUpState?.completedAt !== undefined;
   const visibleReport = selectedReportId
     ? reports.find((entry) => studyReportKey(entry) === selectedReportId)
     : openReport
@@ -592,7 +609,8 @@ export function StudyTutor({
       const consume = consumedId ? { kind: "consume" as const, id: consumedId } : undefined;
       const sources = await readStudyTutorSources(current, vaultId);
       signal.throwIfAborted();
-      const passages = passagesFor(current, sources, text);
+      const query = current.followUp ? `${current.followUp.text}\n${text}` : text;
+      const passages = passagesFor(current, sources, query);
       if (current.scope !== "general" && !passages.length)
         throw new Error(
           current.scope === "cards"
@@ -809,6 +827,7 @@ export function StudyTutor({
           ...generated,
           id: reportId,
           generatedAt,
+          practiceContext: captureReportPracticeContext(reportThread, sources),
           languageStatus,
           languageFeedback: languageStatus === "reviewed" ? generated.languageFeedback : [],
           vocabulary: languageStatus === "reviewed" ? generated.vocabulary : [],
@@ -866,8 +885,8 @@ export function StudyTutor({
     });
   }
 
-  function changeReport(change: StudyReportChange) {
-    void updateStudyReport(thread.id, change)
+  function changeReport(change: StudyReportChange, targetThread = thread.id) {
+    void updateStudyReport(targetThread, change)
       .then((saved) => {
         if (!saved) toast.error(t("study.followUps.unavailable"));
       })
@@ -949,6 +968,49 @@ export function StudyTutor({
           </Button>
         </div>
       </div>
+      {followUp ? (
+        <div className="space-y-2 rounded-xl border p-3 text-sm">
+          {thread.title !== followUp.text ? (
+            <p dir="auto" className="whitespace-pre-wrap wrap-break-word">{followUp.text}</p>
+          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            {!conversation.length && !input.trim() && !followUpComplete ? (
+              <Button
+                size="sm"
+                disabled={workPending || !model || !contextReady}
+                onClick={() => void send(t("study.followUps.practicePrompt"), Date.now())}
+              >
+                {t("study.followUps.startPractice")}
+              </Button>
+            ) : null}
+            {followUpAvailable ? (
+              <>
+                <StudyOriginLink
+                  origin={{ kind: "report", threadId: followUp.threadId, reportId: followUp.reportId }}
+                />
+                {followUpComplete ? <span role="status">{t("study.followUps.done")}</span> : null}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => changeReport(
+                    {
+                      kind: "step",
+                      reportId: followUp.reportId,
+                      index: followUp.index,
+                      action: !followUpState ? "plan" : followUpComplete ? "reopen" : "complete",
+                    },
+                    followUp.threadId,
+                  )}
+                >
+                  {t(!followUpState ? "study.followUps.add" : followUpComplete ? "study.followUps.reopen" : "study.followUps.complete")}
+                </Button>
+              </>
+            ) : (
+              <p role="status" className="text-muted-foreground">{t("study.followUps.unavailable")}</p>
+            )}
+          </div>
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-3 rounded-xl border p-3 text-sm">
         <label className="grid gap-1">
           AI model
@@ -1139,7 +1201,7 @@ export function StudyTutor({
             </div>
           ))}
         </div>
-      ) : !cardPractice ? (
+      ) : !cardPractice && !followUp ? (
         <div className="flex flex-wrap gap-2">
           {selected.highlightIds.length ? (
             <Button
@@ -1481,6 +1543,18 @@ export function StudyTutor({
               onPlanStep={(index, action) =>
                 changeReport({ kind: "step", reportId, index, action })
               }
+              practiceStep={(index, description) => {
+                const target = { threadId: thread.id, reportId, index };
+                return (
+                  <StudyFollowUpButton
+                    target={target}
+                    vaultId={vaultId}
+                    resume={vaultThreads.some(({ id }) => id === studyFollowUpId(target))}
+                    description={description}
+                    disabled={workPending}
+                  />
+                );
+              }}
               onSaveCard={(front, back, key) =>
                 makeCard(
                   front,

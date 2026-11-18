@@ -171,7 +171,7 @@ function DailyStudy({
           />
         ) : null}
       </div>
-      <StudyFollowUps threads={threads} today={today.getTime()} />
+      <StudyFollowUps threads={threads} today={today.getTime()} vaultId={vaultId} />
       {activity.length ? (
         <div className="grid gap-3 sm:grid-cols-3">
           {(
@@ -724,6 +724,7 @@ export default function StudyWorkspace({
           <StudyTutor
             key={`${thread.id}:${params.get("report") ?? ""}:${params.get("reportId") ?? ""}`}
             thread={thread}
+            vaultThreads={threads}
             vaultId={studyVaultId}
             vaultNotes={vaultNotes}
             vaultBooks={books}

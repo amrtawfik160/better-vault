@@ -1,4 +1,12 @@
-import type { StudyOrigin, StudyReport, StudyThread, StudyThreadWrite } from "./records";
+import type { StudyTutorSources } from "./passages";
+import {
+  studyTutorContextSchema,
+  type StudyFollowUp,
+  type StudyOrigin,
+  type StudyReport,
+  type StudyThread,
+  type StudyThreadWrite,
+} from "./records";
 
 export const studyReportKey = (report: StudyReport) => report.id ?? "legacy";
 
@@ -6,6 +14,28 @@ export function studyReports(thread: StudyThread): StudyReport[] {
   return thread.report
     ? [thread.report, ...(thread.pastReports ?? [])]
     : [...(thread.pastReports ?? [])];
+}
+
+export function studyFollowUpId({ threadId, reportId, index }: Omit<StudyFollowUp, "text">) {
+  return `follow-up:${encodeURIComponent(threadId)}:${encodeURIComponent(reportId)}:${index}`;
+}
+
+export function captureReportPracticeContext(thread: StudyThread, sources: StudyTutorSources) {
+  const context = studyTutorContextSchema.parse(thread);
+  if (thread.scope === "cards") {
+    const cardIds = sources.cards?.map(({ id }) => id) ?? [];
+    return { ...context, cardIds, practiceCardId: cardIds[0] };
+  }
+  if (thread.scope === "notes" || thread.scope === "materials") {
+    return {
+      ...context,
+      noteIds: sources.notes?.map(({ id }) => id),
+      bookIds: sources.books?.map(({ id }) => id),
+      sourceIds: sources.notebookSources?.map(({ id }) => id),
+      highlightIds: sources.highlights?.map(({ highlight }) => highlight.id),
+    };
+  }
+  return { ...context, section: context.section ?? sources.book?.section };
 }
 
 export function matchesStudyReport(
@@ -43,9 +73,10 @@ export function patchedStudyThread(
     ...change,
     messages: alreadyDelivered ? thread.messages : [...thread.messages, ...append],
     ...(draft ? { draft } : {}),
-    updatedAt: draftChange && !append.length && !report && !Object.keys(change).length
-      ? thread.updatedAt
-      : Math.max(thread.updatedAt, updatedAt),
+    updatedAt:
+      draftChange && !append.length && !report && !Object.keys(change).length
+        ? thread.updatedAt
+        : Math.max(thread.updatedAt, updatedAt),
   };
   if (!report) return next;
   const reports = studyReports(thread);

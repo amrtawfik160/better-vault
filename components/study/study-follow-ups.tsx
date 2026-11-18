@@ -1,17 +1,84 @@
-import { useId } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/panelui/button";
 import { Card } from "@/components/panelui/card";
-import { updateStudyReport } from "@/lib/db/study";
-import type { StudyThread } from "@/lib/study/records";
-import { plannedStudySteps } from "@/lib/study/reports";
+import { startStudyFollowUp, updateStudyReport } from "@/lib/db/study";
+import { studyHref } from "@/lib/study/links";
+import type { StudyFollowUp, StudyThread } from "@/lib/study/records";
+import { plannedStudySteps, studyFollowUpId } from "@/lib/study/reports";
+import { reviewReturnState } from "@/lib/study/review-session";
 import { StudyOriginLink } from "./study-origin-link";
 
-export function StudyFollowUps({ threads, today }: { threads: StudyThread[]; today: number }) {
+export function StudyFollowUpButton({
+  target,
+  vaultId,
+  resume,
+  description,
+  disabled,
+}: {
+  target: Omit<StudyFollowUp, "text">;
+  vaultId: string;
+  resume: boolean;
+  description: string;
+  disabled?: boolean;
+}) {
+  const { t } = useTranslation("home");
+  const navigate = useNavigate();
+  const { state } = useLocation();
+  const request = useRef<AbortController | null>(null);
+  const [opening, setOpening] = useState(false);
+
+  useEffect(() => () => request.current?.abort(), []);
+
+  async function open() {
+    if (request.current) return;
+    const loading = new AbortController();
+    request.current = loading;
+    setOpening(true);
+    try {
+      const id = await startStudyFollowUp(target, vaultId);
+      if (loading.signal.aborted) return;
+      if (id)
+        void navigate(studyHref("tutor", { thread: id }), { state: reviewReturnState(state) });
+      else toast.error(t("study.followUps.practiceUnavailable"));
+    } catch (error) {
+      if (!loading.signal.aborted)
+        toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      request.current = null;
+      if (!loading.signal.aborted) setOpening(false);
+    }
+  }
+
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      aria-describedby={description}
+      loading={opening}
+      disabled={disabled}
+      onClick={() => void open()}
+    >
+      {t(resume ? "study.followUps.resumePractice" : "study.followUps.practice")}
+    </Button>
+  );
+}
+
+export function StudyFollowUps({
+  threads,
+  today,
+  vaultId,
+}: {
+  threads: StudyThread[];
+  today: number;
+  vaultId: string;
+}) {
   const { t } = useTranslation("home");
   const listId = useId();
   const steps = plannedStudySteps(threads);
+  const threadIds = new Set(threads.map(({ id }) => id));
   const pending = steps.filter(({ completedAt }) => completedAt === undefined);
   const completed = steps.filter(
     ({ completedAt }) => completedAt !== undefined && completedAt >= today,
@@ -28,7 +95,7 @@ export function StudyFollowUps({ threads, today }: { threads: StudyThread[]; tod
               key={JSON.stringify([threadId, reportId, index])}
               className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm"
             >
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 basis-full sm:flex-1">
                 <p id={id} className="wrap-break-word" dir="auto">
                   {text}
                 </p>
@@ -37,6 +104,14 @@ export function StudyFollowUps({ threads, today }: { threads: StudyThread[]; tod
                 </p>
               </div>
               <StudyOriginLink origin={{ kind: "report", threadId, reportId }} />
+              {action === "complete" ? (
+                <StudyFollowUpButton
+                  target={{ threadId, reportId, index }}
+                  vaultId={vaultId}
+                  resume={threadIds.has(studyFollowUpId({ threadId, reportId, index }))}
+                  description={id}
+                />
+              ) : null}
               <Button
                 size="sm"
                 variant="outline"
