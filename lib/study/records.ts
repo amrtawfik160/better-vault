@@ -84,6 +84,12 @@ export const studyReportReplySchema = z.object({
   vocabulary: z.array(reportVocabulary).optional(),
 });
 const feedback = z.record(z.string(), z.boolean());
+export const studyTutorDraftSchema = z.object({
+  id: z.string(),
+  text: z.string().max(12_000),
+  at: z.number(),
+  speech: z.enum(["dictated", "spoken"]).optional(),
+});
 const studyReportSchema = studyReportReplySchema.extend({
   id: z.string().optional(),
   helpful: z.boolean().optional(),
@@ -182,6 +188,7 @@ export const studyRecordSchema = z.discriminatedUnion("kind", [
     highlightIds: z.array(z.string()).optional(),
     cardIds: z.array(z.string()).optional(),
     practiceCardId: z.string().optional(),
+    draft: studyTutorDraftSchema.optional(),
     messages: z.array(
       z.object({
         role: z.enum(["user", "assistant"]),
@@ -189,6 +196,7 @@ export const studyRecordSchema = z.discriminatedUnion("kind", [
         citations: z.array(citation).optional(),
         at: z.number().optional(),
         practiceCardId: z.string().optional(),
+        draftId: z.string().optional(),
       }),
     ),
     report: studyReportSchema.optional(),
@@ -219,8 +227,12 @@ export type StudyBookTextWrite = {
   updatedAt: number;
 };
 export type StudyThread = StudyRecordOf<"thread">;
+export type StudyTutorDraft = z.infer<typeof studyTutorDraftSchema>;
+export type StudyTutorDraftChange =
+  | { kind: "save"; draft: StudyTutorDraft }
+  | { kind: "consume"; id: string };
 export type StudyThreadChange = Partial<
-  Omit<StudyThread, "id" | "kind" | "messages" | "updatedAt" | "report" | "pastReports">
+  Omit<StudyThread, "id" | "kind" | "messages" | "updatedAt" | "report" | "pastReports" | "draft">
 >;
 export type StudyReportChange =
   | { kind: "save"; report: StudyReport & { id: string }; practiceLanguage?: string | null }
@@ -237,6 +249,7 @@ export type StudyThreadWrite = {
   append: StudyThread["messages"];
   updatedAt: number;
   report?: StudyReportChange;
+  draft?: StudyTutorDraftChange;
 };
 export type StudySchedule = z.infer<typeof schedule>;
 export type StudySection = z.infer<typeof section>;

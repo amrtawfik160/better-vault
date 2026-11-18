@@ -1,4 +1,5 @@
 import { studyRecordSchema, type StudyRecord } from "@/lib/study/records";
+import { clearAllTutorDraftRecovery } from "@/lib/study/tutor-draft-recovery";
 import { z } from "zod";
 import { conversationTitle } from "@/lib/chat/title";
 import { store } from "./store";
@@ -220,6 +221,7 @@ function upgradeBackup(backup: OldBackup): Backup {
 /** Deletes every notebook, note, skill, bot, source, chat and output. Settings and keys are kept. */
 export async function deleteAllData() {
   await store().clearAll();
+  clearAllTutorDraftRecovery();
 }
 
 function toBase64(bytes: Uint8Array): string {

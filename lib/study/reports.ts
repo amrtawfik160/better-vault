@@ -25,11 +25,27 @@ export function patchedStudyThread(
   write: StudyThreadWrite,
 ): StudyThread | undefined {
   const { report, change, append, updatedAt } = write;
+  const draftChange = write.draft;
+  let draft = thread.draft;
+  if (
+    draftChange?.kind === "save" &&
+    (!draftChange.draft.speech || thread.keepVoiceTranscripts) &&
+    draftChange.draft.at > (draft?.at ?? -Infinity)
+  ) {
+    draft = draftChange.draft;
+  } else if (draftChange?.kind === "consume" && draft?.id === draftChange.id) {
+    draft = { id: draft.id, text: "", at: draft.at };
+  }
+  const delivery = append.find((entry) => entry.role === "user")?.draftId;
+  const alreadyDelivered = delivery && thread.messages.some((entry) => entry.draftId === delivery);
   const next = {
     ...thread,
     ...change,
-    messages: [...thread.messages, ...append],
-    updatedAt: Math.max(thread.updatedAt, updatedAt),
+    messages: alreadyDelivered ? thread.messages : [...thread.messages, ...append],
+    ...(draft ? { draft } : {}),
+    updatedAt: draftChange && !append.length && !report && !Object.keys(change).length
+      ? thread.updatedAt
+      : Math.max(thread.updatedAt, updatedAt),
   };
   if (!report) return next;
   const reports = studyReports(thread);

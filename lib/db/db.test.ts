@@ -1020,6 +1020,40 @@ describe.each(backends)("%s store", (name, create) => {
       expect(await updateStudyReport(thread.id, { kind: "save", report: newReport })).toBe(false);
     });
 
+    it("retains newer Tutor drafts and appends a retried delivery once", async () => {
+      const id = "draft-conversation";
+      await putStudyRecords({ id, kind: "thread", title: "Practice", scope: "general", goal: "book", messages: [], updatedAt: 0 });
+      const first = { id: "question-one", text: "How does consensus work?", at: 1 };
+      const next = { id: "question-two", text: "Why does this work?", at: 2 };
+      await updateStudyThread(id, {}, [], { kind: "save", draft: first });
+      const assertNewerKept = async () => expect((await readStudyThread(id)).draft).toMatchObject(next);
+      const turns = [
+        { role: "user", text: first.text, draftId: first.id },
+        { role: "assistant", text: "Quorums provide consensus evidence." },
+      ] satisfies import("@/lib/study/records").StudyThread["messages"];
+      const consume = { kind: "consume", id: first.id } as const;
+      await updateStudyThread(id, {}, turns, consume);
+      await updateStudyThread(id, {}, [], { kind: "save", draft: first });
+      expect((await readStudyThread(id)).draft?.text).toBe("");
+      await updateStudyThread(id, {}, [], { kind: "save", draft: next });
+      await updateStudyThread(id, {}, turns, consume);
+      await assertNewerKept();
+      await updateStudyThread(id, {}, [], { kind: "save", draft: {
+        id: "private", text: "A private transcript", at: 3, speech: "spoken",
+      } });
+      await assertNewerKept();
+      const backup = JSON.parse(JSON.stringify(await exportBackup()));
+      await deleteAllData();
+      await importBackup(backup);
+      await assertNewerKept();
+      expect((await readStudyThread(id)).messages).toEqual(turns);
+      await updateStudyThread(id, { keepVoiceTranscripts: true });
+      await updateStudyThread(id, {}, [], { kind: "save", draft: {
+        id: "allow", text: "A retained transcript", at: 4, speech: "dictated",
+      } });
+      expect((await readStudyThread(id)).draft?.speech).toBe("dictated");
+    });
+
     it("keeps the latest reading place when older scroll writes arrive after changing sections", async () => {
       const quote = "Quorum intersection";
       const book = await addStudyBook({

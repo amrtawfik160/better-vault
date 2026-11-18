@@ -6,6 +6,7 @@ import { studyTextEdit, studyTextRevision } from "@/lib/study/text-edits";
 import type { StudyTutorSources } from "@/lib/study/passages";
 import { recentPracticeCards, selectedStudyCards } from "@/lib/study/recall";
 import { studyOriginRecordId, studyVaultIndex } from "@/lib/study/vault";
+import { clearTutorDraftRecovery } from "@/lib/study/tutor-draft-recovery";
 import { flashcardsData } from "@/studio/tools/flashcards/definition";
 import { quizData } from "@/studio/tools/quiz/definition";
 import { normaliseText } from "@/lib/grounding/chunk";
@@ -21,6 +22,7 @@ import type {
   StudySection,
   StudyReportChange,
   StudyReadingPlace,
+  StudyTutorDraftChange,
 } from "@/lib/study/records";
 import { createNote } from "./notes";
 import type { Note, Source, StudioOutput } from "./types";
@@ -188,8 +190,9 @@ export async function updateStudyThread(
   id: string,
   change: StudyThreadChange,
   append: StudyThread["messages"] = [],
+  draft?: StudyTutorDraftChange,
 ) {
-  if (!(await store().patchStudyThread({ id, change, append, updatedAt: Date.now() })))
+  if (!(await store().patchStudyThread({ id, change, append, draft, updatedAt: Date.now() })))
     throw new Error("This Tutor conversation is no longer available.");
 }
 
@@ -205,8 +208,9 @@ export async function studyConversationDefaults(goal: StudyThread["goal"]) {
   } satisfies Pick<StudyThread, "corrections" | "keepVoiceTranscripts">;
 }
 
-export function removeStudyRecord(id: string) {
-  return store().deleteStudy(id);
+export async function removeStudyRecord(id: string) {
+  await store().deleteStudy(id);
+  clearTutorDraftRecovery(id);
 }
 
 export function studyId() {

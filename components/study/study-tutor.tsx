@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { StudySessionReport } from "./study-session-report";
 import { StudyOriginLink } from "./study-origin-link";
+import { useStudyTutorDraft, type TutorComposeDraft } from "./study-tutor-draft";
 import {
   TutorMaterialPicker,
   availableTutorSelection,
@@ -87,6 +88,11 @@ type VoiceCapture = {
 };
 
 type LiveVoice = ReturnType<typeof startStudyVoiceSession> & { abort: AbortController };
+type TutorDelivery = { draft?: TutorComposeDraft; spoken?: boolean; session?: AbortSignal };
+type TutorFailure =
+  | { kind: "answer"; text: string; delivery: Omit<TutorDelivery, "session">; detail?: string }
+  | { kind: "report"; detail?: string };
+const stoppedTutorRequest = Symbol("stopped-tutor-request");
 
 function tutorMaterialOptions(
   scope: StudyThread["scope"],
@@ -413,8 +419,12 @@ export function StudyTutor({
   setup: () => void;
 }) {
   const { t, i18n } = useTranslation("home");
-  const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
+  const { t: common } = useTranslation();
+  const composer = useStudyTutorDraft(thread);
+  const input = composer.draft.text;
+  const [operation, setOperation] = useState<"answer" | "report" | null>(null);
+  const [failed, setFailed] = useState<TutorFailure>();
+  const busy = operation !== null;
   const [changingCard, setChangingCard] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState(thread.title);
@@ -565,16 +575,21 @@ export function StudyTutor({
   async function send(
     message: string,
     submittedAt: number,
-    { spoken = false, session }: { spoken?: boolean; session?: AbortSignal } = {},
+    { spoken = false, session, draft }: TutorDelivery = {},
   ) {
     const text = message.trim();
     if (!text || controller.current || !model) return;
-    setBusy(true);
+    setOperation("answer");
+    setFailed(undefined);
     const abort = new AbortController();
     controller.current = abort;
     const signal = session ? AbortSignal.any([abort.signal, session]) : abort.signal;
     try {
       const current = await currentConversation();
+      const keepTurn = !(spoken || draft?.speech) || current.keepVoiceTranscripts;
+      if (draft && keepTurn) await composer.persist(draft);
+      const consumedId = draft && (keepTurn ? draft.id : draft.replaces);
+      const consume = consumedId ? { kind: "consume" as const, id: consumedId } : undefined;
       const sources = await readStudyTutorSources(current, vaultId);
       signal.throwIfAborted();
       const passages = passagesFor(current, sources, text);
@@ -604,24 +619,26 @@ export function StudyTutor({
         spoken,
       });
       signal.throwIfAborted();
+      if (!answer.text.trim()) throw new Error(t("study.recovery.emptyAnswer"));
       const citations = [...new Set(answer.citations ?? [])].flatMap((index) => {
         const passage = passages[index - 1];
         return passage ? [{ index, origin: passage.origin, title: passage.title }] : [];
       });
       const turns: StudyThread["messages"] = [
-        { role: "user", text, at: submittedAt, practiceCardId },
+        { role: "user", text, at: submittedAt, practiceCardId, draftId: keepTurn ? draft?.id : undefined },
         { role: "assistant", text: answer.text, citations, at: submittedAt, practiceCardId },
       ];
-      if (spoken && !current.keepVoiceTranscripts)
+      if (!keepTurn) {
+        if (consume) await updateStudyThread(thread.id, {}, [], consume);
         saveTemporaryTurns([...recentTurns.current, ...turns]);
-      else
+      } else
         await updateStudyThread(thread.id, {
           practiceLanguage: current.practiceLanguage,
           ...(practiceCardId && practiceCardId !== current.practiceCardId ? { practiceCardId } : {}),
-        }, turns);
+        }, turns, consume);
+      if (draft) composer.completed(draft);
       if (spoken) setVoicePractice(true);
       if (!session) {
-        setInput("");
         if (spoken || readAloud)
           void speakStudyReply(answer.text, language.trim()).then((played) => {
             if (!played) toast.info(t("study.voice.speechUnavailable"));
@@ -629,11 +646,19 @@ export function StudyTutor({
       }
       return answer.text;
     } catch (error) {
+      if (!signal.aborted || signal.reason === stoppedTutorRequest) {
+        const recover = draft ?? (spoken ? composer.recoverSpeech(text) : undefined);
+        setFailed({
+          kind: "answer",
+          text,
+          delivery: { draft: recover, spoken },
+          detail: signal.aborted ? undefined : error instanceof Error ? error.message : String(error),
+        });
+      }
       if (session) throw error;
-      if (!signal.aborted) toast.error(error instanceof Error ? error.message : String(error));
     } finally {
       controller.current = null;
-      setBusy(false);
+      setOperation(null);
     }
   }
 
@@ -669,13 +694,12 @@ export function StudyTutor({
         threadId: thread.id,
       });
       if (sendTurn) {
-        setInput(transcript);
         await Promise.all([
           activity,
           send(transcript, startedAt + Math.round(seconds * 1000), { spoken: true }),
         ]);
       } else {
-        setInput((value) => (value ? `${value} ${transcript}` : transcript));
+        composer.appendSpeech(transcript);
         await activity;
       }
     } catch (error) {
@@ -691,6 +715,7 @@ export function StudyTutor({
     if (voice.current || live.current || controller.current || !model || !contextReady) return;
     const abort = new AbortController();
     const { signal } = abort;
+    let replyFailed = false;
     setLivePhase("opening");
     window.speechSynthesis?.cancel();
     const session = startStudyVoiceSession({
@@ -700,19 +725,19 @@ export function StudyTutor({
       phase: setLivePhase,
       speechUnavailable: () => toast.info(t("study.voice.speechUnavailable")),
       respond: async (transcript, seconds) => {
+        const activity = recordStudyActivity("speaking", seconds, thread.notebookId, {
+          kind: "tutor",
+          threadId: thread.id,
+        }).catch((error: Error) => toast.error(error.message));
         try {
-          const activity = recordStudyActivity("speaking", seconds, thread.notebookId, {
-            kind: "tutor",
-            threadId: thread.id,
-          }).catch((error: Error) => toast.error(error.message));
           const reply = await send(transcript, Date.now(), { spoken: true, session: signal });
-          await activity;
           if (!reply) throw new Error(t("study.voice.replyUnavailable"));
           return reply;
         } catch (error) {
-          if (!signal.aborted)
-            setInput((draft) => (draft ? `${draft}\n${transcript}` : transcript));
+          replyFailed = true;
           throw error;
+        } finally {
+          await activity;
         }
       },
     });
@@ -720,7 +745,7 @@ export function StudyTutor({
     try {
       if ((await session.result) === "idle") toast.info(t("study.voice.idle"));
     } catch (error) {
-      if (!signal.aborted) {
+      if (!signal.aborted && !replyFailed) {
         const failure = error instanceof DOMException ? error.name : undefined;
         let message = error instanceof Error ? error.message : String(error);
         if (failure === "NotAllowedError") message = t("study.voice.permission");
@@ -737,7 +762,8 @@ export function StudyTutor({
 
   async function report(generatedAt: number) {
     if (controller.current) return;
-    setBusy(true);
+    setFailed(undefined);
+    setOperation("report");
     const abort = new AbortController();
     controller.current = abort;
     try {
@@ -763,41 +789,42 @@ export function StudyTutor({
         thread: reportThread,
         signal: abort.signal,
       });
-      if (!abort.signal.aborted && result.report) {
-        const requested = context.corrections && context.corrections !== "off";
-        const hasLanguageEvidence = history.some(
-          (entry) => entry.role === "user" && entry.text.trim().split(/\s+/).length >= 5,
-        );
-        const languageStatus = requested
-          ? hasLanguageEvidence
-            ? "reviewed"
-            : "insufficient"
-          : "not-requested";
-        const reportId = studyId();
-        const saved = await updateStudyReport(thread.id, {
-          kind: "save",
-          practiceLanguage: context.practiceLanguage ?? null,
-          report: {
-            ...result.report,
-            id: reportId,
-            generatedAt,
-            languageStatus,
-            languageFeedback: languageStatus === "reviewed" ? result.report.languageFeedback : [],
-            vocabulary: languageStatus === "reviewed" ? result.report.vocabulary : [],
-          },
-        });
-        if (!saved) throw new Error(t("study.followUps.unavailable"));
-        setSelectedReportId(reportId);
-        setShowReport(true);
-        setVoicePractice(false);
-        saveTemporaryTurns([]);
-      }
+      abort.signal.throwIfAborted();
+      const generated = result.report;
+      if (!generated?.summary.trim()) throw new Error(t("study.recovery.emptyReport"));
+      const requested = context.corrections && context.corrections !== "off";
+      const hasLanguageEvidence = history.some(
+        (entry) => entry.role === "user" && entry.text.trim().split(/\s+/).length >= 5,
+      );
+      const languageStatus = requested
+        ? hasLanguageEvidence
+          ? "reviewed"
+          : "insufficient"
+        : "not-requested";
+      const reportId = studyId();
+      const saved = await updateStudyReport(thread.id, {
+        kind: "save",
+        practiceLanguage: context.practiceLanguage ?? null,
+        report: {
+          ...generated,
+          id: reportId,
+          generatedAt,
+          languageStatus,
+          languageFeedback: languageStatus === "reviewed" ? generated.languageFeedback : [],
+          vocabulary: languageStatus === "reviewed" ? generated.vocabulary : [],
+        },
+      });
+      if (!saved) throw new Error(t("study.followUps.unavailable"));
+      setSelectedReportId(reportId);
+      setShowReport(true);
+      setVoicePractice(false);
+      saveTemporaryTurns([]);
     } catch (error) {
-      if (!abort.signal.aborted)
-        toast.error(error instanceof Error ? error.message : String(error));
+      if (!abort.signal.aborted || abort.signal.reason === stoppedTutorRequest)
+        setFailed({ kind: "report", detail: abort.signal.aborted ? undefined : error instanceof Error ? error.message : String(error) });
     } finally {
       controller.current = null;
-      setBusy(false);
+      setOperation(null);
     }
   }
 
@@ -1141,7 +1168,7 @@ export function StudyTutor({
               size="sm"
               key={prompt}
               disabled={workPending}
-              onClick={() => setInput(prompt)}
+              onClick={() => composer.edit(prompt, null)}
             >
               {prompt}
             </Button>
@@ -1151,7 +1178,8 @@ export function StudyTutor({
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          if (contextReady && !workPending) void send(input, Date.now());
+          if (contextReady && !workPending)
+            void send(input, Date.now(), { draft: composer.draft, spoken: composer.draft.speech === "spoken" });
         }}
         className="grid gap-2 rounded-2xl border bg-card p-3"
       >
@@ -1161,15 +1189,15 @@ export function StudyTutor({
           placeholder="Ask a question or explain what you learned"
           dir="auto"
           value={input}
-          onChange={(event) => setInput(event.target.value)}
+          onChange={(event) => composer.edit(event.target.value)}
           maxLength={12000}
         />
         <div className="flex flex-wrap items-center gap-2">
           <Button type="submit" disabled={!input.trim() || workPending || !model || !contextReady}>
-            {busy ? "Working…" : "Send"}
+            {operation === "answer" ? "Working…" : "Send"}
           </Button>
           {busy && !livePhase ? (
-            <Button type="button" variant="ghost" onClick={() => controller.current?.abort()}>
+            <Button type="button" variant="ghost" onClick={() => controller.current?.abort(stoppedTutorRequest)}>
               Stop
             </Button>
           ) : null}
@@ -1280,6 +1308,45 @@ export function StudyTutor({
             </label>
           ) : null}
         </div>
+        {!livePhase && operation ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            {t(operation === "answer" ? "study.recovery.answerPending" : "study.recovery.reportPending")}
+          </p>
+        ) : null}
+        {!operation && failed ? (
+          <div className="space-y-2 rounded-xl border bg-muted/25 p-3 text-sm">
+            <div role={failed.detail ? "alert" : "status"}>
+              <p className="font-medium">
+                {failed.kind === "answer"
+                  ? t(failed.detail ? "study.recovery.answerFailed" : "study.recovery.answerStopped")
+                  : t(failed.detail ? "study.recovery.reportFailed" : "study.recovery.reportStopped")}
+              </p>
+              {failed.detail ? <p className="mt-1 text-muted-foreground">{failed.detail}</p> : null}
+              {failed.kind === "answer" && failed.delivery.draft?.id !== composer.draft.id ? (
+                <blockquote dir="auto" className="mt-2 line-clamp-3 border-s-2 ps-2 wrap-break-word">
+                  {failed.text}
+                </blockquote>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={workPending || !model || (failed.kind === "answer" && !contextReady)}
+                onClick={() => {
+                  if (failed.kind === "answer") void send(failed.text, Date.now(), failed.delivery);
+                  else void report(Date.now());
+                }}
+              >
+                {common("actions.retry")}
+              </Button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setFailed(undefined)}>
+                {t("study.capture.dismiss")}
+              </Button>
+            </div>
+          </div>
+        ) : null}
         {settings && !model ? (
           <p className="text-sm text-muted-foreground">{t("study.capture.chooseModel")}</p>
         ) : null}

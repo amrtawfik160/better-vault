@@ -258,6 +258,16 @@
       "search": "Search this document",
       "documentUnavailable": "This study document is no longer available."
     },
+    "recovery": {
+      "answerPending": "Tutor is preparing a reply…",
+      "reportPending": "Tutor is preparing the session report…",
+      "answerFailed": "Tutor couldn’t reply.",
+      "answerStopped": "Tutor reply stopped.",
+      "reportFailed": "Tutor couldn’t create the report.",
+      "reportStopped": "Report generation stopped.",
+      "emptyAnswer": "The model returned an empty reply.",
+      "emptyReport": "The model returned an empty report."
+    },
     "voice": {
       "start": "Start voice conversation",
       "end": "End voice conversation",
