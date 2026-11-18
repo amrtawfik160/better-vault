@@ -1,5 +1,4 @@
 import {
-  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -23,6 +22,7 @@ import {
 import { studyHighlightPreview } from "@/lib/study/recall";
 import {
   loadReviewSession,
+  pendingReviewLearning,
   resumeReviewSnapshot,
   reviewQueue,
   reviewReturnState,
@@ -52,6 +52,7 @@ import {
   type StudyRecordOf,
   type StudyThread,
 } from "@/lib/study/records";
+import { useStudyClock } from "./use-study-clock";
 
 type Card = StudyRecordOf<"card">;
 type Highlight = StudyRecordOf<"highlight">;
@@ -59,18 +60,17 @@ type Word = StudyRecordOf<"word">;
 const date = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 const textArea = "min-h-20 w-full rounded-xl border bg-background p-3 text-sm";
 
-function useReviewClock() {
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    const tick = () => setNow(Date.now());
-    const timer = window.setInterval(tick, 30_000);
-    window.addEventListener("focus", tick);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener("focus", tick);
-    };
-  }, []);
-  return now;
+function RetryCountdown({ dueAt }: { dueAt: number }) {
+  const { t, i18n } = useTranslation("home");
+  const now = useStudyClock([], 1000);
+  const seconds = Math.max(0, Math.ceil((dueAt - now) / 1000));
+  const minutes = Math.floor(seconds / 60).toLocaleString(i18n.language);
+  const remainder = (seconds % 60).toLocaleString(i18n.language, { minimumIntegerDigits: 2 });
+  return (
+    <p role="timer" className="font-medium text-foreground tabular-nums">
+      {t("study.recall.learningCountdown", { time: `${minutes}:${remainder}` })}
+    </p>
+  );
 }
 
 export function StudyReview({
@@ -86,7 +86,7 @@ export function StudyReview({
   vaultId,
   libraryHref,
   libraryLabel,
-  ratedInDatabase,
+  history,
   sessionId,
 }: {
   items: (Card | Highlight)[];
@@ -101,11 +101,11 @@ export function StudyReview({
   vaultId: string;
   libraryHref?: string;
   libraryLabel?: string;
-  ratedInDatabase: number;
+  history: StudyRecordOf<"session">[];
   sessionId: string;
 }) {
   const { t } = useTranslation("home");
-  const now = useReviewClock();
+  const now = useStudyClock(items);
   const location = useLocation();
   const path = location.pathname + location.search;
   const destination = useMemo(() => {
@@ -130,12 +130,19 @@ export function StudyReview({
       },
   );
   const { revealed, practiced, position } = session;
-  const rated = Math.max(session.rated, ratedInDatabase);
+  const rated = Math.max(
+    session.rated,
+    history.filter((review) => review.activity === "review" && review.reviewSessionId === sessionId)
+      .length,
+  );
   const [started, setStarted] = useState(Date.now);
   const [busy, setBusy] = useState(false);
-  const [finished, setFinished] = useState<ReviewSnapshot["position"]>();
+  const [finished, setFinished] = useState<
+    NonNullable<ReviewSnapshot["position"]> & { committed: boolean }
+  >();
   const answer = useRef<HTMLDivElement>(null);
   const reveal = useRef<HTMLButtonElement>(null);
+  const status = useRef<HTMLParagraphElement>(null);
   const grading = useRef(false);
   const queue = reviewQueue(items, practiced, now).filter(
     ({ id, schedule }) => practiced || id !== finished?.id || schedule.dueAt !== finished.dueAt,
@@ -146,13 +153,18 @@ export function StudyReview({
       : id === revealed,
   );
   const item = pinned ?? queue[0];
+  const waiting = practiced ? [] : pendingReviewLearning(items, history, sessionId, now);
+  const nextRetry = waiting[0];
+  const awaitingHistory =
+    finished?.committed &&
+    items.some(({ id, schedule }) => id === finished.id && schedule.dueAt === finished.dueAt);
   const remaining = items.toSorted((a, b) => a.schedule.dueAt - b.schedule.dueAt)[0];
   const isRevealed = Boolean(item && revealed === item.id && (!position || pinned));
   const highlightBook =
     item?.kind === "highlight" ? books.find(({ id }) => id === item.bookId) : undefined;
 
   function revealAnswer() {
-    if (item)
+    if (item && !busy)
       setSession((value) => ({
         ...value,
         revealed: item.id,
@@ -170,7 +182,7 @@ export function StudyReview({
         sessionId,
         dueAt,
       });
-      setFinished({ id: item.id, dueAt });
+      setFinished({ id: item.id, dueAt, committed });
       setSession((value) => ({
         ...value,
         revealed: "",
@@ -186,9 +198,12 @@ export function StudyReview({
     }
   }
 
-  const itemId = item?.id;
-  const dueAt = item?.schedule.dueAt;
+  const nextItem = item ?? nextRetry;
+  const activeId = item?.id;
+  const itemId = nextItem?.id;
+  const dueAt = nextItem?.schedule.dueAt;
   useLayoutEffect(() => {
+    if (busy || awaitingHistory) return;
     const snapshot = {
       revealed: isRevealed ? revealed : "",
       rated,
@@ -197,12 +212,16 @@ export function StudyReview({
     };
     saveReviewSession(storageId, snapshot);
     saveReviewCheckpoint(vaultId, destination, snapshot);
-  }, [isRevealed, revealed, rated, practiced, itemId, dueAt, storageId, vaultId, destination]);
+  }, [
+    isRevealed, revealed, rated, practiced, itemId, dueAt, storageId, vaultId, destination,
+    busy, awaitingHistory,
+  ]);
 
   useLayoutEffect(() => {
-    const target = isRevealed ? answer.current : reveal.current;
+    if (busy || awaitingHistory) return;
+    const target = activeId ? isRevealed ? answer.current : reveal.current : status.current;
     target?.focus({ preventScroll: true });
-  }, [isRevealed, item?.id]);
+  }, [isRevealed, activeId, busy, awaitingHistory]);
 
   function keydown(event: KeyboardEvent) {
     if (!item || event.altKey || event.metaKey || event.ctrlKey || event.shiftKey || event.repeat)
@@ -268,7 +287,7 @@ export function StudyReview({
             />
           ) : null}
           {!isRevealed ? (
-            <Button ref={reveal} onClick={revealAnswer}>
+            <Button ref={reveal} disabled={busy} onClick={revealAnswer}>
               Show answer
             </Button>
           ) : (
@@ -355,8 +374,12 @@ export function StudyReview({
         </div>
       ) : (
         <div className="space-y-3 rounded-2xl border bg-muted/25 p-5 text-sm text-muted-foreground">
-          <p>
-            {practiced ? (
+          <p ref={status} role="status" tabIndex={-1} className="outline-none">
+            {busy || awaitingHistory ? (
+              t("study.recall.savingRating")
+            ) : nextRetry ? (
+              t("study.recall.learningWaiting", { count: waiting.length })
+            ) : practiced ? (
               t("study.recall.practiceComplete", { count: practiced.length })
             ) : (
               <>
@@ -367,8 +390,9 @@ export function StudyReview({
               </>
             )}
           </p>
+          {nextRetry ? <RetryCountdown dueAt={nextRetry.schedule.dueAt} /> : null}
           <div className="flex flex-wrap items-center gap-3">
-            {items.length ? (
+            {items.length && !nextRetry && !busy && !awaitingHistory ? (
               <Button
                 variant="outline"
                 onClick={() =>
@@ -383,8 +407,16 @@ export function StudyReview({
                 {t("study.recall.practiceNow")}
               </Button>
             ) : null}
+            {nextRetry ? (
+              <Link
+                to={studyHref("today", { vault: vaultId })}
+                className="underline underline-offset-4"
+              >
+                {t("study.recall.backToToday")}
+              </Link>
+            ) : null}
             <Link
-              to={libraryHref ?? studyHref(useHighlights ? "highlights" : "cards")}
+              to={libraryHref ?? studyHref(useHighlights ? "highlights" : "cards", { vault: vaultId })}
               className="underline underline-offset-4"
             >
               {libraryLabel ?? (useHighlights ? "Open highlights" : "Open flashcards")}
@@ -465,7 +497,7 @@ export function CardLibrary({
   creation: Pick<Card, "notebookId" | "origin" | "tags" | "vaultId"> | false;
 }) {
   const { t } = useTranslation("home");
-  const now = useReviewClock();
+  const now = useStudyClock(cards);
   const [generating, setGenerating] = useState(false);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<Card | null>(null);

@@ -3,6 +3,7 @@ import { routes } from "@/lib/routes";
 import { weakStudyCards } from "./recall";
 import type { StudyBook, StudyRecord, StudyRecordOf } from "./records";
 import { matchesStudyReport } from "./reports";
+import { scheduleState } from "./schedule";
 
 const snapshotSchema = z.object({
   revealed: z.string(),
@@ -116,6 +117,31 @@ export function reviewQueue(items: ReviewItem[], practiced: string[] | null, now
   }
   return items
     .filter(({ schedule }) => schedule.dueAt <= now)
+    .toSorted((a, b) => a.schedule.dueAt - b.schedule.dueAt);
+}
+
+const learningWindow = 30 * 60_000;
+
+export function pendingReviewLearning(
+  items: ReviewItem[],
+  history: StudyRecordOf<"session">[],
+  sessionId: string,
+  now: number,
+) {
+  const latest = new Map<string, StudyRecordOf<"session">>();
+  for (const review of history) {
+    if (review.activity !== "review" || !review.itemId) continue;
+    const previous = latest.get(review.itemId);
+    if (!previous || review.updatedAt > previous.updatedAt) latest.set(review.itemId, review);
+  }
+  return items
+    .filter(({ id, schedule }) => {
+      if (schedule.dueAt <= now || scheduleState(schedule) !== "learning") return false;
+      const review = latest.get(id);
+      return review?.reviewSessionId === sessionId &&
+        schedule.dueAt > review.updatedAt &&
+        schedule.dueAt - review.updatedAt <= learningWindow;
+    })
     .toSorted((a, b) => a.schedule.dueAt - b.schedule.dueAt);
 }
 

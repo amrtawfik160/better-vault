@@ -10,6 +10,7 @@ import { studyHighlightPreview, weakStudyCards } from "@/lib/study/recall";
 import { studyReportKey } from "@/lib/study/reports";
 import {
   directReviewSession,
+  pendingReviewLearning,
   reviewCollection,
   reviewQueue,
   reviewReturnState,
@@ -46,6 +47,7 @@ import { StudyReader } from "./study-reader";
 import { CardLibrary, HighlightsLibrary, StudyReview } from "./study-review";
 import { VocabularyLibrary } from "./study-vocabulary";
 import { StudyTutor, TutorIndex } from "./study-tutor";
+import { useStudyClock } from "./use-study-clock";
 
 const tabs = ["today", "library", "cards", "review", "highlights", "vocabulary", "tutor"] as const;
 type Tab = (typeof tabs)[number];
@@ -79,11 +81,8 @@ function DailyStudy({
 }) {
   const { t } = useTranslation("home");
   const navigate = useNavigate();
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
-    return () => window.clearInterval(timer);
-  }, []);
+  const reviewable = rows.filter((row) => row.kind === "card" || row.kind === "highlight");
+  const now = useStudyClock(reviewable);
   const today = new Date(now);
   today.setHours(0, 0, 0, 0);
   const sessions = rows.filter((item) => item.kind === "session");
@@ -101,17 +100,18 @@ function DailyStudy({
   ).length;
   const weakCards = weakStudyCards(rows);
   const paused = savedReview(vaultId);
-  const resume =
-    paused &&
-    reviewQueue(
-      reviewCollection(
+  const pausedItems = paused
+    ? reviewCollection(
         rows,
         new URLSearchParams(paused.path.split("?", 2)[1]),
         paused.state.studyReviewIds,
-      ),
-      paused.snapshot.practiced,
-      now,
-    ).length
+      )
+    : [];
+  const resume =
+    paused &&
+    (reviewQueue(pausedItems, paused.snapshot.practiced, now).length > 0 ||
+      (!paused.snapshot.practiced &&
+        pendingReviewLearning(pausedItems, sessions, paused.state.studyReviewSession, now).length > 0))
       ? paused
       : undefined;
   const lastRead =
@@ -825,14 +825,7 @@ export default function StudyWorkspace({
           openingPractice={openingPractice}
           initialPractice={weakMode}
           sessionId={reviewSessionId}
-          ratedInDatabase={
-            rows.filter(
-              (row) =>
-                row.kind === "session" &&
-                row.activity === "review" &&
-                row.reviewSessionId === reviewSessionId,
-            ).length
-          }
+          history={rows.filter((row) => row.kind === "session")}
           libraryHref={
             reviewingVocabulary
               ? studyHref("vocabulary", { vault: studyVaultId })
