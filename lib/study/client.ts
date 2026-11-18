@@ -14,7 +14,7 @@ export async function askStudyModel({
 }: {
   action: StudyAction;
   input: string;
-  passages?: Pick<StudyPassage, "title" | "text">[];
+  passages?: Pick<StudyPassage, "title" | "text" | "previousCitations">[];
   thread?: StudyThread;
   signal?: AbortSignal;
   cardCount?: number;
@@ -33,7 +33,11 @@ export async function askStudyModel({
       credentials: credentialsFor(settings, model.provider),
       passages: passages
         .slice(0, 8)
-        .map(({ title, text }) => ({ title: title.slice(0, 500), text: text.slice(0, 12_000) })),
+        .map(({ title, text, previousCitations }) => ({
+          title: title.slice(0, 500),
+          text: text.slice(0, 12_000),
+          previousCitations,
+        })),
       history: thread?.messages
         .slice(-16)
         .map(({ role, text }) => ({ role, text: text.slice(0, 12_000) })),

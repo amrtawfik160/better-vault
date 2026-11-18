@@ -628,8 +628,7 @@ export function StudyTutor({
       const consume = consumedId ? { kind: "consume" as const, id: consumedId } : undefined;
       const sources = await readStudyTutorSources(current, vaultId);
       signal.throwIfAborted();
-      const query = current.followUp ? `${current.followUp.text}\n${text}` : text;
-      const passages = passagesFor(current, sources, query);
+      const passages = passagesFor(current, sources, text);
       if (current.scope !== "general" && !passages.length)
         throw new Error(
           current.scope === "cards"

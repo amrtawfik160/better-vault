@@ -1,15 +1,16 @@
 import type { Chunk, Note, Source } from "@/lib/db/types";
-import { selectPassages } from "@/lib/grounding/passages";
+import { citedNumbers, selectPassages } from "@/lib/grounding/passages";
 import { extractHeadings, sameName } from "@/lib/notes/syntax";
 import { activeStudyCard, recentPracticeCards, selectedStudyCards } from "./recall";
-import { originHref, studyHighlightOrigin } from "./links";
+import { originHref, studyCitationOrigin, studyHighlightOrigin } from "./links";
 import type { StudyBook, StudyOrigin, StudyRecordOf, StudyThread } from "./records";
-import { locateStudyMark, studyTextRevision } from "./text-edits";
+import { locateStudyMark, resolveStudyRange, studyTextRevision } from "./text-edits";
 
 export type StudyPassage = {
   origin: StudyOrigin;
   title: string;
   text: string;
+  previousCitations?: number[];
 };
 
 export type StudyTutorSources = {
@@ -35,6 +36,11 @@ const filler = new Set(
     " ",
   ),
 );
+const followUpTerms = new Set(
+  "again analogy another clarify detail details differently elaborate example examples explain further illustrate more previous rephrase repeat simpler summarize".split(
+    " ",
+  ),
+);
 
 export function tutorBookOrigin(
   thread: StudyThread,
@@ -57,16 +63,110 @@ function topicTerms(text: string) {
     .slice(0, 24);
 }
 
-function studyQuery(input: string, history: StudyThread["messages"]) {
+function studyQuery(input: string, thread: StudyThread, purpose: "chat" | "report") {
   const terms = topicTerms(input);
-  if (terms.length <= 2 || /\b(that|those|this|it|they|them)\b/i.test(input)) {
-    const previous = history.findLast(({ role }) => role === "user");
-    if (previous) return [...new Set([...terms, ...topicTerms(previous.text)])].join(" ");
+  const exerciseTerms = topicTerms(thread.followUp?.text ?? "");
+  const latest = thread.messages.at(-1);
+  const citations =
+    purpose === "chat" && latest?.role === "assistant" ? (latest.citations ?? []) : [];
+  const explicit = citedNumbers(input).flatMap(
+    (number) => citations.find(({ index }) => index === number) ?? [],
+  );
+  const followUp =
+    explicit.length > 0 ||
+    /\b(that|those|this|it|they|them)\b/iu.test(input) ||
+    (terms.length <= 2 && terms.every((term) => followUpTerms.has(term)));
+  if (followUp) {
+    const previous = thread.messages.findLast(({ role }) => role === "user");
+    return {
+      query: [...new Set([...terms, ...exerciseTerms, ...topicTerms(previous?.text ?? "")])].join(
+        " ",
+      ),
+      anchors: (explicit.length ? explicit.slice(0, 4) : citations.slice(0, 2)).map((citation) => ({
+        index: citation.index,
+        origin: studyCitationOrigin(citation),
+      })),
+      explicit: explicit.length > 0,
+    };
   }
-  return terms.join(" ");
+  return {
+    query: [...new Set([...terms, ...exerciseTerms])].join(" "),
+    anchors: [],
+    explicit: false,
+  };
 }
 
-function rankedPassages(passages: SourcePassage[], query: string, coverSources = false) {
+function matchingChunkLength(candidate: StudyOrigin, anchor: StudyOrigin) {
+  if (candidate.kind === "note" && anchor.kind === "note") {
+    return Number(candidate.noteId === anchor.noteId && candidate.heading === anchor.heading);
+  }
+  if (candidate.kind === "source" && anchor.kind === "source") {
+    return Number(
+      candidate.notebookId === anchor.notebookId &&
+        candidate.sourceId === anchor.sourceId &&
+        candidate.chunkId === anchor.chunkId,
+    );
+  }
+  if (
+    candidate.kind !== "book" ||
+    anchor.kind !== "book" ||
+    candidate.bookId !== anchor.bookId ||
+    candidate.section !== anchor.section ||
+    candidate.highlightId !== anchor.highlightId
+  )
+    return 0;
+  if (anchor.highlightId || anchor.offset === undefined || anchor.length === undefined) return 1;
+  if (candidate.offset === undefined || candidate.length === undefined) return 0;
+  return Math.max(
+    0,
+    Math.min(candidate.offset + candidate.length, anchor.offset + anchor.length) -
+      Math.max(candidate.offset, anchor.offset),
+  );
+}
+
+function previousCitationChunks(
+  ranges: ReadonlyMap<string, StudyPassage>,
+  anchors: readonly { index: number; origin: StudyOrigin }[],
+  books: readonly StudyBook[],
+) {
+  const prioritized = new Map<string, number[]>();
+  for (const { index, origin } of anchors) {
+    let anchor = origin;
+    if (
+      origin.kind === "book" &&
+      !origin.highlightId &&
+      origin.offset !== undefined &&
+      origin.length !== undefined
+    ) {
+      const book = books.find(({ id }) => id === origin.bookId);
+      if (!book || origin.section === undefined) continue;
+      const current = resolveStudyRange(book, origin.section, {
+        offset: origin.offset,
+        length: origin.length,
+        revision: origin.revision,
+      });
+      if (!current) continue;
+      anchor = { ...origin, ...current };
+    }
+    let best: string | undefined;
+    let matched = 0;
+    for (const [id, passage] of ranges) {
+      const size = matchingChunkLength(passage.origin, anchor);
+      if (size <= matched) continue;
+      best = id;
+      matched = size;
+    }
+    if (best) prioritized.set(best, [...(prioritized.get(best) ?? []), index]);
+  }
+  return prioritized;
+}
+
+function rankedPassages(
+  passages: SourcePassage[],
+  { query, anchors, explicit }: ReturnType<typeof studyQuery>,
+  books: readonly StudyBook[],
+  coverSources = false,
+) {
   const ranges = new Map<string, StudyPassage>();
   const sources = new Map<string, Pick<Source, "id" | "title" | "kind">>();
   const size = coverSources ? 1_300 : windowSize;
@@ -101,14 +201,21 @@ function rankedPassages(passages: SourcePassage[], query: string, coverSources =
     }
     return chunks;
   });
+  const prioritized = previousCitationChunks(ranges, anchors, books);
   return selectPassages({
     sources: [...sources.values()],
     chunks,
     budget: 10_500,
     maxPassages: 8,
     query,
-    coverSources,
-  }).flatMap(({ chunkId }) => ranges.get(chunkId) ?? []);
+    coverSources: coverSources && (!explicit || !prioritized.size),
+    priorityChunkIds: [...prioritized.keys()],
+  }).flatMap(({ chunkId }) => {
+    const passage = ranges.get(chunkId);
+    if (!passage) return [];
+    const previousCitations = prioritized.get(chunkId);
+    return previousCitations ? { ...passage, previousCitations } : passage;
+  });
 }
 
 function notePassages(note: NonNullable<StudyTutorSources["notes"]>[number]): SourcePassage[] {
@@ -152,13 +259,18 @@ function bookPassages(book: StudyBook): SourcePassage[] {
   }));
 }
 
-function highlightPassages(highlight: StudyRecordOf<"highlight">, book: StudyBook): SourcePassage[] {
+function highlightPassages(
+  highlight: StudyRecordOf<"highlight">,
+  book: StudyBook,
+): SourcePassage[] {
   const offset = locateStudyMark(book, highlight);
   const section = book.sections[highlight.section]?.title;
   const title = section && section !== book.title ? `${book.title} · ${section}` : book.title;
   const origin = {
     ...studyHighlightOrigin(highlight),
-    ...(offset < 0 ? {} : { offset, length: highlight.quote.length, revision: studyTextRevision(book) }),
+    ...(offset < 0
+      ? {}
+      : { offset, length: highlight.quote.length, revision: studyTextRevision(book) }),
   };
   const source = { sourceId: `highlight:${highlight.id}`, title, origin };
   const note = highlight.note.trim().slice(0, 1_050);
@@ -236,7 +348,7 @@ export function passagesFor(
         }
       }
     }
-    return rankedPassages(passages, studyQuery(input, thread.messages), true);
+    return rankedPassages(passages, studyQuery(input, thread, purpose), books, true);
   }
   if (thread.scope === "general" || !book) return [];
   const origin = tutorBookOrigin(thread, book);
@@ -253,6 +365,7 @@ export function passagesFor(
   const sections = bookPassages(book);
   return rankedPassages(
     thread.scope === "chapter" ? [sections[position]] : sections,
-    studyQuery(input, thread.messages),
+    studyQuery(input, thread, purpose),
+    [book],
   );
 }

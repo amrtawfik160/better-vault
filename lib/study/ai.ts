@@ -22,6 +22,7 @@ export const studyAnswerSchema = z.object({
 export const studyPassageSchema = z.object({
   title: z.string().max(500),
   text: z.string().max(12_000),
+  previousCitations: z.array(z.number().int().positive()).max(4).optional(),
 });
 
 export const flashcardMaterialLimit = 12_000;

@@ -4,6 +4,7 @@ import { findStudyExcerpt } from "./locators";
 import { originHref } from "./links";
 import type { StudyBook, StudyRecordOf, StudyThread } from "./records";
 import { freshSchedule } from "./schedule";
+import { studyTextEdit } from "./text-edits";
 
 const sectionText =
   "The system is stable in this discussion. Ordinary membership changes are common.\n\n".repeat(
@@ -134,6 +135,97 @@ describe("Tutor grounding", () => {
     expect(
       passages.every(({ origin }) => origin.kind === "note" && origin.noteId === "reading-note"),
     ).toBe(true);
+  });
+
+  it("keeps the cited evidence through a chain of follow-ups and remaps it after a document edit", () => {
+    const context = { ...thread, scope: "book" } satisfies StudyThread;
+    const first = passagesFor(context, { book }, "Explain the Nyquist encirclements");
+    const evidence = first.find(({ text }) => text.includes("critical point"));
+    if (!evidence) throw new Error("Expected the Nyquist passage");
+    const messages = [
+      { role: "user", text: "Explain the Nyquist encirclements" },
+      { role: "assistant", text: "Check the relationship to the critical point." },
+      { role: "user", text: "Why does that matter?" },
+      {
+        role: "assistant",
+        text: "It connects the contour to stability.",
+        citations: [{ index: 7, title: evidence.title, origin: evidence.origin }],
+      },
+    ] satisfies StudyThread["messages"];
+    const followUp = "Give me an example.";
+    const unanchored = passagesFor(context, { book }, followUp);
+    expect(unanchored.some(({ text }) => text.includes("critical point"))).toBe(false);
+    const edited = "A new introduction to control systems.\n\n" + sectionText;
+    const revised = {
+      ...book,
+      sections: [{ title: "Feedback", text: edited }],
+      textEdits: [studyTextEdit(0, sectionText, edited)],
+    };
+    const continued = passagesFor(
+      {
+        ...context,
+        messages,
+        followUp: {
+          threadId: "original",
+          reportId: "report",
+          index: 0,
+          text: "Build a control loop with stable damping.",
+        },
+      },
+      { book: revised },
+      followUp,
+    );
+    expect(continued.find(({ previousCitations }) => previousCitations?.includes(7))).toMatchObject({
+      text: expect.stringContaining("critical point"),
+      origin: { kind: "book", revision: 1 },
+    });
+    expect(continued.length).toBeLessThanOrEqual(8);
+    expect(continued.reduce((sum, passage) => sum + passage.text.length, 0)).toBeLessThanOrEqual(
+      10_500,
+    );
+  });
+
+  it("maps an explicit earlier citation only inside the current selection and clears it for a new topic", () => {
+    const context = {
+      ...thread,
+      scope: "materials",
+      noteIds: ["selected"],
+      messages: [
+        {
+          role: "assistant",
+          text: "Earlier explanation",
+          citations: [
+            { index: 2, title: "Private notes", origin: { kind: "note", noteId: "private" } },
+            {
+              index: 6,
+              title: "Selected notes",
+              origin: { kind: "note", noteId: "selected", heading: "Nyquist" },
+            },
+          ],
+        },
+      ],
+    } satisfies StudyThread;
+    const sources = {
+      notes: [
+        {
+          id: "selected",
+          title: "Selected notes",
+          body: "Fourier decomposition.\n\n## Nyquist\nThe contour encircles the critical point.",
+        },
+        { id: "private", title: "Private notes", body: "UNSELECTED EVIDENCE" },
+      ],
+    };
+    const followed = passagesFor(context, sources, "Can you expand on [6] and [2]?");
+    expect(followed.filter(({ previousCitations }) => previousCitations)).toEqual([
+      expect.objectContaining({
+        previousCitations: [6],
+        text: expect.stringContaining("critical point"),
+      }),
+    ]);
+    expect(followed.map(({ text }) => text).join("\n")).not.toContain("UNSELECTED EVIDENCE");
+    expect(
+      passagesFor(context, sources, "Fourier").some(({ previousCitations }) => previousCitations),
+    ).toBe(false);
   });
 
   it("prioritizes a matching page when short pages exceed the citation count", () => {

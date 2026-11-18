@@ -20,6 +20,8 @@ interface SelectOptions {
   query?: string;
   maxPassages?: number;
   coverSources?: boolean;
+  /** Earlier citations the current question refers to, in order of importance. */
+  priorityChunkIds?: readonly string[];
 }
 
 /** Takes chunks in order until the budget is spent. */
@@ -70,8 +72,11 @@ function search(
   budget: number,
   limit: number,
   coverSources: boolean,
+  priorityChunkIds: readonly string[],
 ): PassageChunk[] {
-  let ranked: PassageChunk[] = [];
+  const byId = new Map(chunks.map((chunk) => [chunk.id, chunk]));
+  const prioritized = new Set(priorityChunkIds);
+  const ranked = [...prioritized].flatMap((id) => byId.get(id) ?? []);
   if (query.trim()) {
     const index = new MiniSearch<{ id: string; text: string; title: string }>({
       fields: ["text", "title"],
@@ -84,8 +89,11 @@ function search(
         title: title ?? titles.get(sourceId) ?? "",
       })),
     );
-    const byId = new Map(chunks.map((chunk) => [chunk.id, chunk]));
-    ranked = index.search(query).flatMap((result) => byId.get(String(result.id)) ?? []);
+    for (const { id } of index.search(query)) {
+      const key = String(id);
+      const chunk = byId.get(key);
+      if (chunk && !prioritized.has(key)) ranked.push(chunk);
+    }
   }
   const first = new Map<string, PassageChunk>();
   if (coverSources) {
@@ -131,15 +139,24 @@ export function selectPassages({
   query,
   maxPassages = Infinity,
   coverSources = false,
+  priorityChunkIds = [],
 }: SelectOptions): Passage[] {
   const info = new Map(sources.map((source) => [source.id, source]));
   const usable = chunks.filter((chunk) => info.has(chunk.sourceId));
   const total = usable.reduce((sum, chunk) => sum + chunk.text.length, 0);
   let picked: PassageChunk[];
   if (total <= budget && usable.length <= maxPassages) picked = usable;
-  else if (query?.trim() || coverSources) {
+  else if (query?.trim() || coverSources || priorityChunkIds.length) {
     const titles = new Map(sources.map((source) => [source.id, source.title]));
-    picked = search(usable, titles, query ?? "", budget, maxPassages, coverSources);
+    picked = search(
+      usable,
+      titles,
+      query ?? "",
+      budget,
+      maxPassages,
+      coverSources,
+      priorityChunkIds,
+    );
   } else picked = spread(usable, budget, maxPassages);
 
   const order = new Map(usable.map((chunk, at) => [chunk.id, at]));
