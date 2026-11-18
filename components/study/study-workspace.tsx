@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { StudyOriginLink } from "./study-origin-link";
 import { StudyFollowUps } from "./study-follow-ups";
 import { queryIndex, studyHref } from "@/lib/study/links";
-import { weakStudyCards } from "@/lib/study/recall";
+import { studyHighlightPreview, weakStudyCards } from "@/lib/study/recall";
 import { matchesStudyReport, studyReportKey } from "@/lib/study/reports";
 import { reviewReturnState, reviewSelection } from "@/lib/study/review-session";
 import { studyVaultIndex } from "@/lib/study/vault";
@@ -15,7 +15,7 @@ import { Card } from "@/components/panelui/card";
 import { Tabs } from "@/components/panelui/tabs";
 import { SettingsSheet } from "@/components/settings/settings-sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { startBookTutor, startCardTutor, useStudyRecords } from "@/lib/db/study";
+import { startBookTutor, startCardTutor, startHighlightTutor, useStudyRecords } from "@/lib/db/study";
 import { useNotes } from "@/lib/db/notes";
 import { useSourceTitles } from "@/lib/db/sources";
 import { currentVaultId, DEFAULT_VAULT, setCurrentVault } from "@/lib/db/vaults";
@@ -404,6 +404,17 @@ export default function StudyWorkspace({
   const notebookSources = (sourceTitles ?? [])
     .filter(({ notebookId }) => scope.notebookOwner(notebookId) === studyVaultId)
     .map(({ id, title, notebookId }) => ({ id, title, detail: notebookTitles.get(notebookId) }));
+  const bookTitles = new Map(books.map(({ id, title }) => [id, title]));
+  const vaultHighlights = (tab === "tutor" ? highlights : []).flatMap((highlight) => {
+    const detail = bookTitles.get(highlight.bookId);
+    if (detail === undefined || !highlight.quote.trim()) return [];
+    return [{
+      id: highlight.id,
+      title: studyHighlightPreview(highlight.quote),
+      detail,
+      searchText: `${highlight.quote} ${highlight.note} ${highlight.cue ?? ""}`,
+    }];
+  });
   const bookId = params.get("book");
   const book = books.find((entry) => entry.id === bookId);
   const unavailableBook = Boolean(ready && bookId && !book);
@@ -420,7 +431,8 @@ export default function StudyWorkspace({
   const cardId = params.get("card");
   const notebookId = params.get("notebook");
   const requestedReview = selection?.studyReviewIds;
-  const weakMode = tab === "review" && params.get("mode") === "weak";
+  const reviewingHighlights = params.get("kind") === "highlights";
+  const weakMode = tab === "review" && !reviewingHighlights && params.get("mode") === "weak";
   const reviewIds = weakMode
     ? new Set(weakStudyCards(rows).map(({ card }) => card.id))
     : requestedReview
@@ -462,16 +474,22 @@ export default function StudyWorkspace({
   function openThread(what: StudyThread) {
     go("tutor", { thread: what.id });
   }
-  async function openCardPractice(ids: string[], state?: ReturnType<typeof reviewReturnState>) {
+  async function openTutorSelection(
+    kind: "card" | "highlight",
+    ids: string[],
+    state?: ReturnType<typeof reviewReturnState>,
+  ) {
     if (openingPractice) return;
     setOpeningPractice(true);
     try {
-      const thread = await startCardTutor(ids, studyVaultId, t("study.recall.tutorTitle"));
+      const thread = kind === "card"
+        ? await startCardTutor(ids, studyVaultId, t("study.recall.tutorTitle"))
+        : await startHighlightTutor(ids, studyVaultId, t("study.highlights.tutorTitle"));
       if (thread) {
         setParams({ view: "study", tab: "tutor", vault: studyVaultId, thread: thread.id }, {
           state: state ?? reviewReturnState(location.state),
         });
-      } else toast.error(t("study.materials.noCardsSelected"));
+      } else toast.error(t(kind === "card" ? "study.materials.noCardsSelected" : "study.highlights.unavailable"));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     } finally {
@@ -516,7 +534,7 @@ export default function StudyWorkspace({
           teachBack={(item) =>
             void createThread(item, "chapter", item.section, undefined, "teach-back")
           }
-          practice={(ids) => void openCardPractice(ids)}
+          practice={(ids) => void openTutorSelection("card", ids)}
           openingPractice={openingPractice}
         />
       ) : null}
@@ -569,7 +587,7 @@ export default function StudyWorkspace({
         <CardLibrary
           cards={filteredCards}
           vaultId={studyVaultId}
-          practice={(ids) => void openCardPractice(ids)}
+          practice={(ids) => void openTutorSelection("card", ids)}
           openingPractice={openingPractice}
           filter={
             reportCollection ??
@@ -615,19 +633,23 @@ export default function StudyWorkspace({
           key={location.key}
           vaultId={studyVaultId}
           cards={reviewIds ? filteredCards.filter(({ id }) => reviewIds.has(id)) : filteredCards}
-          highlights={filteredHighlights}
-          useHighlights={params.get("kind") === "highlights"}
+          highlights={reviewIds && reviewingHighlights
+            ? filteredHighlights.filter(({ id }) => reviewIds.has(id))
+            : filteredHighlights}
+          useHighlights={reviewingHighlights}
           books={books}
           threads={threads}
-          practice={(id, state) => void openCardPractice([id], state)}
+          practice={(item, state) => void openTutorSelection(item.kind, [item.id], state)}
           openingPractice={openingPractice}
           initialPractice={weakMode}
-          libraryHref={reportFilter ? studyHref("cards", reportFilter) : undefined}
+          libraryHref={reviewingHighlights && book
+            ? studyHref("highlights", { book: book.id })
+            : reportFilter ? studyHref("cards", reportFilter) : undefined}
           collection={
             weakMode
               ? t("study.recall.weakSet")
               : reviewIds
-                ? t("study.recall.cardSelection", { count: reviewIds.size })
+                ? t(reviewingHighlights ? "study.highlights.selection" : "study.recall.cardSelection", { count: reviewIds.size })
                 : (reportCollection ?? book?.title)
           }
         />
@@ -640,7 +662,9 @@ export default function StudyWorkspace({
           locate={(item) =>
             go("library", { book: item.bookId, page: String(item.section), highlight: item.id })
           }
-          review={() => go("review", { kind: "highlights", ...bookFilter })}
+          review={(ids) => go("review", { kind: "highlights", ...bookFilter }, ids)}
+          discuss={(ids) => void openTutorSelection("highlight", ids)}
+          openingTutor={openingPractice}
         />
       ) : null}
       {ready && tab === "vocabulary" ? (
@@ -654,6 +678,7 @@ export default function StudyWorkspace({
             vaultId={studyVaultId}
             vaultNotes={vaultNotes}
             vaultBooks={books}
+            vaultHighlights={vaultHighlights}
             notebookSources={notebookSources}
             book={books.find((item) => item.id === thread.bookId)}
             openReport={params.get("report") === "1"}
@@ -667,12 +692,13 @@ export default function StudyWorkspace({
           <TutorIndex
             books={books}
             notes={vaultNotes}
+            vaultHighlights={vaultHighlights}
             cards={cards}
             notebookSources={notebookSources}
             threads={threads}
             vaultId={studyVaultId}
             open={openThread}
-            practice={(ids) => void openCardPractice(ids)}
+            practice={(ids) => void openTutorSelection("card", ids)}
             openingPractice={openingPractice}
           />
         )

@@ -6,6 +6,11 @@ type WeakStudyCard = {
   reviewedAt: number;
 };
 
+export function studyHighlightPreview(quote: string) {
+  const text = quote.replace(/\s+/g, " ").trim();
+  return text.length <= 140 ? text : `${text.slice(0, 139).trimEnd()}…`;
+}
+
 export function selectedStudyCards(
   ids: readonly string[] | undefined,
   cards: readonly StudyRecordOf<"card">[],

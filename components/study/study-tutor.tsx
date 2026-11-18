@@ -93,6 +93,7 @@ function tutorMaterialOptions(
   books: StudyBook[],
   notes: Note[],
   sources: TutorMaterial[],
+  highlights: TutorMaterial[],
   cards: StudyRecordOf<"card">[],
   selection: TutorMaterialSelection,
 ): TutorMaterialOptions {
@@ -101,11 +102,13 @@ function tutorMaterialOptions(
       bookIds: [],
       sourceIds: [],
       noteIds: [],
+      highlightIds: [],
       cardIds: cards
         .filter(({ front, back }) => front.trim() && back.trim())
         .map(({ id, front, tags }) => ({ id, title: front, detail: tags.join(" · ") || undefined })),
     };
-  if (scope !== "materials") return { bookIds: [], sourceIds: [], noteIds: notes, cardIds: [] };
+  if (scope !== "materials")
+    return { bookIds: [], sourceIds: [], noteIds: notes, highlightIds: [], cardIds: [] };
   const bookSources = new Set(books.map(({ sourceId }) => sourceId));
   const savedSources = new Set(selection.sourceIds);
   const sourcesInUse = new Set(sources.filter(({ id }) => savedSources.has(id)).map(({ id }) => id));
@@ -113,15 +116,16 @@ function tutorMaterialOptions(
     bookIds: books.filter(({ sourceId }) => !sourcesInUse.has(sourceId)),
     sourceIds: sources.filter(({ id }) => !bookSources.has(id) || savedSources.has(id)),
     noteIds: notes,
+    highlightIds: highlights,
     cardIds: [],
   };
 }
 
 function materialChanges(scope: StudyThread["scope"], selection: TutorMaterialSelection) {
-  const { bookIds, noteIds, sourceIds, cardIds } = selection;
+  const { bookIds, noteIds, sourceIds, highlightIds, cardIds } = selection;
   if (scope === "cards") return { cardIds };
   if (scope === "notes") return { noteIds };
-  return { bookIds, noteIds, sourceIds };
+  return { bookIds, noteIds, sourceIds, highlightIds };
 }
 
 export function TutorIndex({
@@ -130,6 +134,7 @@ export function TutorIndex({
   notes,
   cards,
   notebookSources,
+  vaultHighlights,
   vaultId,
   open,
   practice,
@@ -140,6 +145,7 @@ export function TutorIndex({
   notes: Note[];
   cards: StudyRecordOf<"card">[];
   notebookSources: TutorMaterial[];
+  vaultHighlights: TutorMaterial[];
   vaultId: string;
   open: (thread: StudyThread) => void;
   practice: (ids: string[]) => void;
@@ -166,6 +172,7 @@ export function TutorIndex({
     readableBooks,
     readableNotes,
     notebookSources,
+    vaultHighlights,
     cards,
     selection,
   );
@@ -192,6 +199,7 @@ export function TutorIndex({
           const materialTitle = curated
             ? (readableBooks.find(({ id }) => id === selected.bookIds[0])?.title ??
               notebookSources.find(({ id }) => id === selected.sourceIds[0])?.title ??
+              vaultHighlights.find(({ id }) => id === selected.highlightIds[0])?.title ??
               readableNotes.find(({ id }) => id === selected.noteIds[0])?.title)
             : undefined;
           const subject =
@@ -380,6 +388,7 @@ export function StudyTutor({
   vaultId,
   vaultNotes,
   vaultBooks,
+  vaultHighlights,
   notebookSources,
   book,
   openReport,
@@ -393,6 +402,7 @@ export function StudyTutor({
   vaultId: string;
   vaultNotes: Note[];
   vaultBooks: StudyBook[];
+  vaultHighlights: TutorMaterial[];
   notebookSources: TutorMaterial[];
   book?: StudyBook;
   openReport?: boolean;
@@ -440,6 +450,7 @@ export function StudyTutor({
       bookIds: thread.bookIds ?? [],
       sourceIds: thread.sourceIds ?? [],
       noteIds: thread.noteIds ?? [],
+      highlightIds: thread.highlightIds ?? [],
       cardIds: thread.cardIds ?? [],
     }),
   };
@@ -448,6 +459,7 @@ export function StudyTutor({
     readableBooks,
     readableNotes,
     notebookSources,
+    vaultHighlights,
     reportCards,
     selection,
   );
@@ -1102,6 +1114,14 @@ export function StudyTutor({
         </div>
       ) : !cardPractice ? (
         <div className="flex flex-wrap gap-2">
+          {selected.highlightIds.length ? (
+            <Button
+              disabled={workPending || !model}
+              onClick={() => void send(t("study.highlights.summaryPrompt"), Date.now())}
+            >
+              {t("study.highlights.summarize")}
+            </Button>
+          ) : null}
           {thread.goal === "teach-back" ? (
             <Button
               disabled={workPending || !model}

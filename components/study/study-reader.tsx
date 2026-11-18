@@ -609,6 +609,24 @@ export function StudyReader({
             </button>
           </p>
         ) : null}
+        {selectedHighlight && (missingPassage || selectedHighlight.note.trim()) ? (
+          <div className="space-y-3 rounded-xl border bg-muted/25 p-3 text-sm">
+            {missingPassage ? (
+              <div>
+                <p className="font-medium">{t("study.highlights.savedExcerpt")}</p>
+                <blockquote dir="auto" className="mt-1 whitespace-pre-wrap wrap-break-word">
+                  {selectedHighlight.quote}
+                </blockquote>
+              </div>
+            ) : null}
+            {selectedHighlight.note.trim() ? (
+              <div>
+                <p className="font-medium">{t("study.highlights.annotation")}</p>
+                <p dir="auto" className="mt-1 whitespace-pre-wrap wrap-break-word">{selectedHighlight.note}</p>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         <Input
           ref={searchInput}
           type="search"

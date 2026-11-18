@@ -172,6 +172,7 @@ export const studyRecordSchema = z.discriminatedUnion("kind", [
     noteIds: z.array(z.string()).optional(),
     bookIds: z.array(z.string()).optional(),
     sourceIds: z.array(z.string()).optional(),
+    highlightIds: z.array(z.string()).optional(),
     cardIds: z.array(z.string()).optional(),
     practiceCardId: z.string().optional(),
     messages: z.array(

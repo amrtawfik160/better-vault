@@ -15,6 +15,7 @@ import {
   startSourceTutor,
   startBookTutor,
   startCardTutor,
+  startHighlightTutor,
   StudyTextConflict,
   updateStudyBook,
   updateStudyReport,
@@ -826,6 +827,42 @@ describe.each(backends)("%s store", (name, create) => {
         noteIds: thread.noteIds,
         sourceIds: thread.sourceIds,
       });
+    });
+
+    it("loads selected Tutor highlights and excludes highlights whose documents have moved", async () => {
+      const work = await createVault({ name: "Coursework" });
+      const other = await createVault({ name: "Private" });
+      const quote = "An election quorum intersects every previous election quorum.";
+      const createHighlight = async (id: string, vaultId: string) => {
+        const book = await addStudyBook({
+          title: id, format: "text", vaultId, sections: [{ title: "Page", text: quote }],
+        });
+        await putStudyRecords({
+          id, kind: "highlight", bookId: book.id, section: 0, quote, offset: 0,
+          color: "yellow", note: "An annotation", schedule: freshSchedule(0), updatedAt: 0,
+        });
+        return book;
+      };
+      const first = await createHighlight("chosen-mark", work);
+      await createHighlight("unchosen-mark", work);
+      await createHighlight("private-mark", other);
+      const thread = await startHighlightTutor(["chosen-mark", "private-mark", "chosen-mark"], work, "Discuss highlights");
+      if (!thread) throw new Error("Expected a Tutor conversation for the available highlight");
+      expect(thread).toMatchObject({ scope: "materials", highlightIds: ["chosen-mark"] });
+      const selected = await readStudyTutorSources(thread, work);
+      expect(selected.highlights).toMatchObject([{ highlight: { id: "chosen-mark" }, book: { id: first.id } }]);
+      expect(selected.books).toEqual([]);
+      expect((await readStudyTutorSources({ ...thread, highlightIds: ["private-mark"] }, work)).highlights).toEqual([]);
+
+      const backup = JSON.parse(JSON.stringify(await exportBackup()));
+      await deleteAllData();
+      await importBackup(backup);
+      expect((await readStudyThread(thread.id)).highlightIds).toEqual(["chosen-mark"]);
+      expect(await store().getStudy("chosen-mark")).toMatchObject({ schedule: freshSchedule(0) });
+      await updateNotebook(first.notebookId, { vaultId: other });
+      expect((await readStudyTutorSources(thread, work)).highlights).toEqual([]);
+      await deleteStudyBook(first);
+      expect(await startHighlightTutor(["chosen-mark"], work, "Discuss highlights")).toBeNull();
     });
 
     it("keeps a Tutor flashcard set ordered and drops cards that change vaults through their origins", async () => {

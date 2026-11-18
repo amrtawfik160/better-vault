@@ -11,7 +11,8 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { StudyFlashcardGenerator } from "./study-flashcard-generator";
 import { StudyOriginLink } from "./study-origin-link";
-import { originHref, studyCitationOrigin, studyHref } from "@/lib/study/links";
+import { originHref, studyCitationOrigin, studyHighlightOrigin, studyHref } from "@/lib/study/links";
+import { studyHighlightPreview } from "@/lib/study/recall";
 import { loadReviewSession, reviewReturnState, reviewSelection, saveReviewSession } from "@/lib/study/review-session";
 import { toast } from "sonner";
 import { Button } from "@/components/panelui/button";
@@ -73,7 +74,7 @@ export function StudyReview({
   useHighlights: boolean;
   books: StudyBook[];
   threads: StudyThread[];
-  practice: (id: string, state: ReturnType<typeof reviewReturnState>) => void;
+  practice: (item: Card | Highlight, state: ReturnType<typeof reviewReturnState>) => void;
   openingPractice: boolean;
   collection?: string;
   initialPractice?: boolean;
@@ -156,15 +157,7 @@ export function StudyReview({
     }
   }
 
-  const origin =
-    item?.kind === "highlight"
-      ? {
-          kind: "book" as const,
-          bookId: item.bookId,
-          section: item.section,
-          highlightId: item.id,
-        }
-      : item?.origin;
+  const origin = item?.kind === "highlight" ? studyHighlightOrigin(item) : item?.origin;
   const message =
     origin?.kind === "tutor" && origin.message !== undefined
       ? threads.find(({ id }) => id === origin.threadId)?.messages[origin.message]
@@ -256,19 +249,17 @@ export function StudyReview({
                   </div>
                 </div>
               ) : null}
-              {item.kind === "card" ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={busy || openingPractice}
-                  onClick={() => {
-                    rememberReview();
-                    practice(item.id, returnState);
-                  }}
-                >
-                  {t("study.recall.tutorCardAction")}
-                </Button>
-              ) : null}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy || openingPractice}
+                onClick={() => {
+                  rememberReview();
+                  practice(item, returnState);
+                }}
+              >
+                {t(item.kind === "card" ? "study.recall.tutorCardAction" : "study.highlights.discussOne")}
+              </Button>
               {practiced ? (
                 <Button
                   onClick={() => {
@@ -801,25 +792,49 @@ export function HighlightsLibrary({
   clearFilter,
   locate,
   review,
+  discuss,
+  openingTutor,
 }: {
   highlights: Highlight[];
   filter?: string;
   clearFilter: () => void;
   locate: (item: Highlight) => void;
-  review: () => void;
+  review: (ids?: string[]) => void;
+  discuss: (ids: string[]) => void;
+  openingTutor: boolean;
 }) {
   const { t } = useTranslation("home");
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<string[]>([]);
   const [editing, setEditing] = useState<Highlight | null>(null);
   const [deleting, setDeleting] = useState<Highlight | null>(null);
+  const search = query.trim().toLowerCase();
+  const visible = highlights.filter(({ quote, note, cue }) =>
+    `${quote} ${note} ${cue ?? ""}`.toLowerCase().includes(search),
+  );
+  const selectedIds = new Set(selected);
+  const checked = highlights.filter(({ id }) => selectedIds.has(id));
+  const targetIds = (checked.length ? checked : visible).map(({ id }) => id);
+  const narrowed = !!(checked.length || search);
   return (
     <section className="space-y-5">
       <div className="flex flex-wrap justify-between gap-2">
         <h2 className="text-xl font-semibold">Highlights</h2>
-        <Button onClick={review} disabled={!highlights.length}>
-          Review highlights
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => discuss(targetIds)}
+            disabled={!targetIds.length || openingTutor}
+          >
+            {targetIds.length
+              ? t("study.highlights.discuss", { count: targetIds.length })
+              : t("study.highlights.tutorTitle")}
+          </Button>
+          <Button onClick={() => review(narrowed ? targetIds : undefined)} disabled={!targetIds.length}>
+            {narrowed ? t("study.highlights.reviewSelected", { count: targetIds.length }) : t("study.highlights.review")}
+          </Button>
+        </div>
       </div>
       {filter ? <FilterCaption label={filter} clear={clearFilter} /> : null}
       <Input
@@ -830,15 +845,23 @@ export function HighlightsLibrary({
         onChange={(event) => setQuery(event.target.value)}
       />
       <ul className="space-y-3">
-        {highlights
-          .filter((item) =>
-            [item.quote, item.note, item.cue].join(" ").toLowerCase().includes(query.toLowerCase()),
-          )
-          .map((item) => (
+        {visible.map((item) => (
             <li key={item.id} className="space-y-2 rounded-2xl border p-4">
-              <blockquote dir="auto" className="font-medium">
-                {item.quote}
-              </blockquote>
+              <div className="flex items-start gap-2">
+                <input
+                  type="checkbox"
+                  className="mt-1 accent-primary"
+                  aria-label={t("study.highlights.select", { text: studyHighlightPreview(item.quote) })}
+                  checked={selectedIds.has(item.id)}
+                  onChange={(event) => {
+                    const checked = event.target.checked;
+                    setSelected((ids) => checked ? [...ids, item.id] : ids.filter((id) => id !== item.id));
+                  }}
+                />
+                <blockquote dir="auto" className="min-w-0 font-medium wrap-break-word">
+                  {item.quote}
+                </blockquote>
+              </div>
               {editing?.id === item.id ? (
                 <form
                   className="space-y-2"
@@ -904,12 +927,7 @@ export function HighlightsLibrary({
                           title: "Reading highlight",
                           body: [item.quote, item.note].filter(Boolean).join("\n\n"),
                           notebookId: item.notebookId,
-                          origin: {
-                            kind: "book",
-                            bookId: item.bookId,
-                            section: item.section,
-                            highlightId: item.id,
-                          },
+                          origin: studyHighlightOrigin(item),
                         })
                           .then((note) =>
                             toast.success("Saved to Notes", {
@@ -937,9 +955,9 @@ export function HighlightsLibrary({
             </li>
           ))}
       </ul>
-      {!highlights.length ? (
+      {!visible.length ? (
         <p className="text-sm text-muted-foreground">
-          Select text in a document to save a highlight.
+          {t(highlights.length ? "study.highlights.noMatches" : "study.highlights.empty")}
         </p>
       ) : null}
       <ConfirmDialog

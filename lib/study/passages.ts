@@ -2,6 +2,7 @@ import type { Chunk, Note, Source } from "@/lib/db/types";
 import { selectPassages } from "@/lib/grounding/passages";
 import { extractHeadings, sameName } from "@/lib/notes/syntax";
 import { activeStudyCard, recentPracticeCards, selectedStudyCards } from "./recall";
+import { studyHighlightOrigin } from "./links";
 import type { StudyBook, StudyOrigin, StudyRecordOf, StudyThread } from "./records";
 import { locateStudyMark, studyTextRevision } from "./text-edits";
 
@@ -19,6 +20,7 @@ export type StudyTutorSources = {
     chunks: readonly Pick<Chunk, "id" | "text">[];
   })[];
   cards?: readonly StudyRecordOf<"card">[];
+  highlights?: readonly { highlight: StudyRecordOf<"highlight">; book: StudyBook }[];
 };
 
 type SourcePassage = StudyPassage & { sourceId: string };
@@ -85,7 +87,7 @@ function rankedPassages(passages: SourcePassage[], query: string, coverSources =
       if (text) {
         const offset = start + part.length - part.trimStart().length;
         const origin =
-          passage.origin.kind === "book"
+          passage.origin.kind === "book" && !passage.origin.highlightId
             ? { ...passage.origin, offset, length: text.length }
             : passage.origin;
         chunks.push({ id, sourceId, text, title });
@@ -147,9 +149,25 @@ function bookPassages(book: StudyBook): SourcePassage[] {
   }));
 }
 
+function highlightPassages(highlight: StudyRecordOf<"highlight">, book: StudyBook): SourcePassage[] {
+  const offset = locateStudyMark(book, highlight);
+  const section = book.sections[highlight.section]?.title;
+  const title = section && section !== book.title ? `${book.title} · ${section}` : book.title;
+  const origin = {
+    ...studyHighlightOrigin(highlight),
+    ...(offset < 0 ? {} : { offset, length: highlight.quote.length, revision: studyTextRevision(book) }),
+  };
+  const source = { sourceId: `highlight:${highlight.id}`, title, origin };
+  const note = highlight.note.trim().slice(0, 1_050);
+  return [
+    { ...source, text: highlight.quote },
+    ...(note ? [{ ...source, text: `Learner annotation:\n${note}` }] : []),
+  ];
+}
+
 export function passagesFor(
   thread: StudyThread,
-  { book, books = [], notes = [], notebookSources = [], cards = [] }: StudyTutorSources,
+  { book, books = [], notes = [], notebookSources = [], cards = [], highlights = [] }: StudyTutorSources,
   input: string,
   purpose: "chat" | "report" = "chat",
 ): StudyPassage[] {
@@ -179,6 +197,10 @@ export function passagesFor(
       const originBooks = new Set(thread.bookIds);
       const chosenBooks = books.filter(({ id }) => originBooks.has(id));
       passages.push(...chosenBooks.flatMap(bookPassages));
+      const marked = new Set(thread.highlightIds);
+      for (const { highlight, book: sourceBook } of highlights) {
+        if (marked.has(highlight.id)) passages.push(...highlightPassages(highlight, sourceBook));
+      }
       const bookSources = new Set(chosenBooks.map(({ sourceId }) => sourceId));
       const chosenSources = new Set(thread.sourceIds);
       for (const { id, notebookId, title, chunks } of notebookSources) {

@@ -34,6 +34,30 @@ const thread = {
 } satisfies StudyThread;
 
 describe("Tutor grounding", () => {
+  it("cites selected highlights at their saved mark and keeps notes separate from source text", () => {
+    const quote = "A quorum decides what a majority accepts.";
+    const prefix = "This paragraph was added later.\n\n";
+    const highlightedBook: StudyBook = { ...book, sections: [{ title: "Elections", text: prefix + quote }] };
+    const highlight: StudyRecordOf<"highlight"> = {
+      id: "quorum", kind: "highlight", bookId: book.id, section: 0, offset: 0, quote,
+      color: "yellow", note: "Connect this to the acceptance rule.", schedule: freshSchedule(0), updatedAt: 0,
+    };
+    const context: StudyThread = { ...thread, scope: "materials", highlightIds: [highlight.id] };
+    const passages = passagesFor(context, { highlights: [
+      { highlight, book: highlightedBook },
+      { highlight: { ...highlight, id: "unselected", note: "UNSELECTED" }, book: highlightedBook },
+    ] }, "Explain the connection to the acceptance rule");
+    expect(passages.map(({ text }) => text)).toEqual([quote, "Learner annotation:\nConnect this to the acceptance rule."]);
+    expect(passages.map(({ origin }) => origin)).toEqual(Array.from({ length: 2 }, () => ({
+      kind: "book", bookId: book.id, section: 0, highlightId: highlight.id,
+      offset: prefix.length, length: quote.length, revision: 0,
+    })));
+    const stale = passagesFor(context, { highlights: [
+      { highlight, book: { ...highlightedBook, sections: [{ title: "Elections", text: "Replacement" }] } },
+    ] }, "Summarize");
+    expect(stale[0].origin).toEqual({ kind: "book", bookId: book.id, section: 0, highlightId: highlight.id });
+  });
+
   it("sends just the active card for practice and only discussed cards for reports", () => {
     const cards = ["first", "second", "third", "outside"].map((id): StudyRecordOf<"card"> => ({
       id, kind: "card", front: `Question ${id}`, back: `Answer ${id}`, tags: [],

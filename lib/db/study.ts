@@ -50,7 +50,7 @@ export async function readStudyThread(id: string): Promise<StudyThread> {
   return thread;
 }
 
-async function readStudyCardsInVault(ids: string[], vaultId: string, thread?: StudyThread) {
+async function readStudyRowsInVault(ids: string[], vaultId: string, thread?: StudyThread) {
   const backend = store();
   const rows = new Map<string, StudyRecord>();
   const visited = new Set<string>();
@@ -80,10 +80,24 @@ async function readStudyCardsInVault(ids: string[], vaultId: string, thread?: St
     defaultVaultId: DEFAULT_VAULT,
   });
   if (thread && scope.owner(thread) !== vaultId) return [];
-  const cards = [...rows.values()].filter((row) => row.kind === "card");
-  return selectedStudyCards(ids, cards).filter(
-    (card) => scope.owner(card) === vaultId && card.front.trim() && card.back.trim(),
+  return [...rows.values()].filter((row) => scope.owner(row) === vaultId);
+}
+
+async function readStudyCardsInVault(ids: string[], vaultId: string, thread?: StudyThread) {
+  const rows = await readStudyRowsInVault(ids, vaultId, thread);
+  return selectedStudyCards(ids, rows.filter((row) => row.kind === "card")).filter(
+    ({ front, back }) => front.trim() && back.trim(),
   );
+}
+
+function highlightSources(rows: StudyRecord[], ids: string[]) {
+  const records = new Map(rows.map((row) => [row.id, row]));
+  return ids.flatMap((id) => {
+    const highlight = records.get(id);
+    if (highlight?.kind !== "highlight" || !highlight.quote.trim()) return [];
+    const book = records.get(highlight.bookId);
+    return book?.kind === "book" ? [{ highlight, book }] : [];
+  });
 }
 
 export async function readStudyTutorSources(
@@ -115,17 +129,24 @@ export async function readStudyTutorSources(
     thread.scope === "materials" || thread.scope === "notes" ? thread.noteIds : [],
   );
   const sourceIds = thread.scope === "materials" ? [...new Set(thread.sourceIds)] : [];
-  const [records, savedNotes, savedSources, notebooks, vaults] = await Promise.all([
+  const highlightIds = thread.scope === "materials" ? [...new Set(thread.highlightIds)] : [];
+  const [records, savedNotes, savedSources, savedHighlights, notebooks, vaults] = await Promise.all([
     Promise.all([...bookIds].map((id) => backend.getStudy(id))),
     Promise.all([...noteIds].map((id) => backend.getNote(id))),
     sourceIds.length ? backend.getSources(sourceIds) : [],
+    Promise.all(highlightIds.map((id) => backend.getStudy(id))),
     backend.listNotebooks(),
     listVaults(),
   ]);
-  const books = records.filter((row) => row?.kind === "book");
+  const highlights = savedHighlights.filter((row) => row?.kind === "highlight");
+  const extraBookIds = [...new Set(highlights.map(({ bookId }) => bookId))].filter(
+    (id) => !bookIds.has(id),
+  );
+  const relatedBooks = await Promise.all(extraBookIds.map((id) => backend.getStudy(id)));
+  const books = [...records, ...relatedBooks].filter((row) => row?.kind === "book");
   const notes = savedNotes.filter((note) => note !== undefined);
   const scope = studyVaultIndex({
-    rows: [thread, ...books],
+    rows: [thread, ...books, ...highlights],
     notebooks,
     notes,
     vaults,
@@ -147,8 +168,12 @@ export async function readStudyTutorSources(
   }
   return {
     book: visible.find(({ id }) => id === thread.bookId),
-    books: visible,
+    books: visible.filter(({ id }) => bookIds.has(id)),
     notes: notes.filter(({ id }) => scope.noteOwner(id) === vaultId),
+    highlights: highlightSources(
+      [...visible, ...highlights.filter((row) => scope.owner(row) === vaultId)],
+      highlightIds,
+    ),
     notebookSources: notebookSources.map(({ id, notebookId, title }) => ({
       id,
       notebookId,
@@ -415,6 +440,25 @@ export async function startCardTutor(ids: string[], vaultId: string, title: stri
     scope: "cards",
     cardIds: cards.map(({ id }) => id),
     practiceCardId: cards[0].id,
+    vaultId,
+    messages: [],
+    updatedAt: Date.now(),
+  };
+  await putStudyRecords(thread);
+  return thread;
+}
+
+export async function startHighlightTutor(ids: string[], vaultId: string, title: string) {
+  const highlights = highlightSources(await readStudyRowsInVault(ids, vaultId), [...new Set(ids)]);
+  if (!highlights.length) return null;
+  const thread: StudyThread = {
+    ...(await studyConversationDefaults("book")),
+    id: studyId(),
+    kind: "thread",
+    title,
+    goal: "book",
+    scope: "materials",
+    highlightIds: highlights.map(({ highlight }) => highlight.id),
     vaultId,
     messages: [],
     updatedAt: Date.now(),

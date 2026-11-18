@@ -9,16 +9,18 @@ const groups = [
   ["bookIds", "study.materials.documents"],
   ["sourceIds", "study.materials.sources"],
   ["noteIds", "study.materials.notes"],
+  ["highlightIds", "study.materials.highlights"],
   ["cardIds", "study.materials.cards"],
 ] as const;
 type Group = (typeof groups)[number][0];
-export type TutorMaterial = { id: string; title: string; detail?: string };
+export type TutorMaterial = { id: string; title: string; detail?: string; searchText?: string };
 export type TutorMaterialOptions = Record<Group, readonly TutorMaterial[]>;
 export type TutorMaterialSelection = Record<Group, string[]>;
 export const emptyTutorSelection: TutorMaterialSelection = {
   bookIds: [],
   sourceIds: [],
   noteIds: [],
+  highlightIds: [],
   cardIds: [],
 };
 
@@ -42,6 +44,7 @@ export function availableTutorSelection(
     bookIds: available("bookIds"),
     sourceIds: available("sourceIds"),
     noteIds: available("noteIds"),
+    highlightIds: available("highlightIds"),
     cardIds: available("cardIds"),
   };
 }
@@ -118,8 +121,8 @@ function MaterialDialog({
   const matches = groups.map(([key, label]) => ({
     key,
     label,
-    items: options[key].filter(({ title, detail }) =>
-      `${title} ${detail ?? ""}`.toLowerCase().includes(search),
+    items: options[key].filter(({ title, detail, searchText }) =>
+      !search || `${title} ${detail ?? ""} ${searchText ?? ""}`.toLowerCase().includes(search),
     ),
   }));
 
