@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { StudySessionReport } from "./study-session-report";
 import { StudyFollowUpButton } from "./study-follow-ups";
+import { StudyCardChoices } from "./study-card-choices";
 import { StudyCardImage } from "./study-card-image";
 import { StudyOriginLink } from "./study-origin-link";
 import { useStudyTutorDraft, type TutorComposeDraft } from "./study-tutor-draft";
@@ -1253,6 +1254,7 @@ export function StudyTutor({
               {t("study.recall.tutorNextCard")}
             </Button>
           ) : null}
+          <StudyCardChoices choices={practiceCard.quizChoices} className="min-w-0 basis-full" />
           {practiceImages.question || practiceImages.answer ? (
             <div className="min-w-0 basis-full space-y-2">
               {practiceImages.question ? (

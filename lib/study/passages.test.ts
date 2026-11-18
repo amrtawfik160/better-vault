@@ -77,6 +77,13 @@ describe("Tutor grounding", () => {
       origin: { kind: "card", cardId: "second" }, title: "Question second",
       text: "Question: Question second\n\nAnswer: Answer second",
     }]);
+    const quizCard = { ...cards[1], quizChoices: ["A stale epoch", "A shared replica"] };
+    expect(passagesFor(practice, { cards: [cards[0], quizCard] }, "Begin practice")[0].text).toEqual(
+      "Question: Question second\n\nAnswer choices:\nA. A stale epoch\nB. A shared replica\n\nAnswer: Answer second",
+    );
+    const codeOption = "```ts\n" + "advanceTerm();\n".repeat(130) + "return record;\n```";
+    const codeQuiz = { ...quizCard, quizChoices: ["A stale epoch", codeOption, "A shared replica"] };
+    expect(passagesFor(practice, { cards: [codeQuiz] }, "Begin practice")[0].text).toContain(codeOption);
     expect(new URL(originHref(evidence[0].origin), "https://deeple.test").searchParams.get("card")).toBe("second");
     expect(passagesFor(practice, { cards }, "Review", "report").map(({ title }) => title)).toEqual(["Question first"]);
     expect(passagesFor(practice, { cards: [cards[2], cards[0]] }, "Continue").map(({ title }) => title)).toEqual(["Question first"]);

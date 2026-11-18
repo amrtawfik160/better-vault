@@ -240,6 +240,8 @@
       "tutorCard": "Practice card",
       "tutorNextCard": "Next card",
       "tutorAsk": "Ask a practice question",
+      "answerChoices": "Answer choices",
+      "removeAnswerChoices": "Remove answer choices",
       "tutorReportEmpty": "Practice a selected flashcard before generating a report.",
       "tutorPrompt": "Quiz me on this flashcard. Ask me to explain the idea before showing the answer.",
       "notebookCards": "Notebook flashcards",

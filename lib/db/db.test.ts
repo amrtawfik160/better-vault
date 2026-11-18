@@ -851,10 +851,31 @@ describe.each(backends)("%s store", (name, create) => {
       expect(card).toMatchObject({
         front: "Second?",
         back: "B\n\nBecause B.",
+        quizChoices: ["A", "B"],
         origin: { kind: "studio", notebookId, outputId: "quiz" },
       });
       expect(await addQuizMissesToStudy(output, [1])).toEqual({ added: 0, cardIds: ["quiz-quiz-1"] });
       expect(await store().getStudy("quiz-quiz-1")).toEqual(card);
+
+      if (card?.kind !== "card") throw new Error("Missing quiz review card");
+      const backup = JSON.parse(JSON.stringify(await exportBackup()));
+      await deleteAllData();
+      await importBackup(backup);
+      expect(await store().getStudy(card.id)).toEqual(card);
+
+      await store().addOutput(output);
+      const legacy = { ...card, quizChoices: undefined };
+      await putStudyRecords(legacy);
+      const tutor = await startCardTutor([card.id], DEFAULT_VAULT, "Quiz practice");
+      if (!tutor) throw new Error("Missing flashcard practice conversation");
+      const readCard = async () => (await readStudyTutorSources(tutor, DEFAULT_VAULT)).cards?.[0];
+      expect(await readCard()).toMatchObject({ quizChoices: ["A", "B"], schedule: card.schedule });
+      expect(await store().getStudy(card.id)).toEqual(legacy);
+
+      await putStudyRecords({ ...legacy, front: "Which choice shares a replica?" });
+      expect((await readCard())?.quizChoices).toBeUndefined();
+      await putStudyRecords({ ...legacy, quizChoices: [] });
+      expect((await readCard())?.quizChoices).toEqual([]);
     });
     it("keeps uploaded originals with notebook sources through a backup", async () => {
       const notebookId = await createNotebook("Engineering");

@@ -16,6 +16,7 @@ import { cardEvidenceLimit, type StudyPassage, type StudyTutorSources } from "@/
 import { locateCitedChunk } from "@/lib/study/locators";
 import { vocabularyOrigin } from "@/lib/study/vocabulary";
 import { recentPracticeCards, selectedStudyCards, studyHighlightPreview } from "@/lib/study/recall";
+import { legacyQuizCardSource, quizCardContent } from "@/lib/study/quiz-cards";
 import { studyFollowUpId, studyReportKey, studyReports } from "@/lib/study/reports";
 import { studyTutorContextSchema } from "@/lib/study/records";
 import { studyOriginRecordId, studyVaultIndex } from "@/lib/study/vault";
@@ -52,8 +53,35 @@ import { getSettings } from "./settings";
 
 export { freshSchedule } from "@/lib/study/schedule";
 
+async function withQuizChoices<Row extends StudyRecord>(rows: Row[]): Promise<Row[]> {
+  const backend = store();
+  async function readQuiz(outputId: string) {
+    const output = await backend.getOutput(outputId);
+    if (output?.toolId !== "quiz" || output.status !== "ready") return;
+    const parsed = quizData.safeParse(output.data);
+    if (parsed.success) return { notebookId: output.notebookId, questions: parsed.data.questions };
+  }
+  const outputs = new Map<string, ReturnType<typeof readQuiz>>();
+  return Promise.all(rows.map(async (row) => {
+    if (row.kind !== "card") return row;
+    const source = legacyQuizCardSource(row);
+    if (!source) return row;
+    let pending = outputs.get(source.outputId);
+    if (!pending) {
+      pending = readQuiz(source.outputId);
+      outputs.set(source.outputId, pending);
+    }
+    const output = await pending;
+    if (output?.notebookId !== source.notebookId) return row;
+    const original = quizCardContent(output.questions[source.position]);
+    return original && original.front === row.front && original.back === row.back
+      ? { ...row, quizChoices: original.quizChoices }
+      : row;
+  }));
+}
+
 export function useStudyRecords() {
-  return useStoreQuery(() => store().listStudy(), [], ["study"]);
+  return useStoreQuery(async () => withQuizChoices(await store().listStudy()), [], ["study", "outputs"]);
 }
 
 export function useSavedStudyBookForSource(notebookId: string, sourceId: string, enabled: boolean) {
@@ -113,9 +141,10 @@ async function readStudyRowsInVault(ids: string[], vaultId: string, thread?: Stu
 
 async function readStudyCardsInVault(ids: string[], vaultId: string, thread?: StudyThread) {
   const rows = await readStudyRowsInVault(ids, vaultId, thread);
-  return selectedStudyCards(ids, rows.filter((row) => row.kind === "card")).filter(
+  const cards = selectedStudyCards(ids, rows.filter((row) => row.kind === "card")).filter(
     ({ front, back }) => front.trim() && back.trim(),
   );
+  return withQuizChoices(cards);
 }
 
 function highlightSources(rows: StudyRecord[], ids: string[]) {
@@ -530,7 +559,7 @@ export async function deleteStudyBook(book: StudyBook) {
 export type StudyCard = StudyRecordOf<"card">;
 type CardContent = Pick<
   StudyCard,
-  "front" | "back" | "image" | "backImage" | "tags" | "notebookId" | "origin" | "vaultId" | "citations"
+  "front" | "back" | "quizChoices" | "image" | "backImage" | "tags" | "notebookId" | "origin" | "vaultId" | "citations"
 >;
 
 export function newStudyCard(content: CardContent, id = studyId()): StudyCard {
@@ -632,16 +661,15 @@ export async function addQuizMissesToStudy(output: StudioOutput, missed: readonl
   const { questions } = quizData.parse(output.data);
   const cards = [...new Set(missed)].flatMap((position) => {
     const question = questions[position];
-    const answer = question?.options[question.answer]?.trim();
-    if (!question?.question.trim() || !answer) return [];
+    const content = quizCardContent(question);
+    if (!content) return [];
     return [
       newStudyCard(
         {
           notebookId: output.notebookId,
           origin: { kind: "studio", notebookId: output.notebookId, outputId: output.id },
           citations: studioCardCitations(output.notebookId, question.sources),
-          front: question.question.trim(),
-          back: [answer, question.explanation.trim()].filter(Boolean).join("\n\n"),
+          ...content,
           tags: [output.title],
         },
         `quiz-${output.id}-${position}`,

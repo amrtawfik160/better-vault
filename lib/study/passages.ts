@@ -4,6 +4,7 @@ import { extractHeadings, sameName } from "@/lib/notes/syntax";
 import { activeStudyCard, recentPracticeCards, selectedStudyCards } from "./recall";
 import { originHref, studyCitationOrigin, studyHighlightOrigin } from "./links";
 import type { StudyBook, StudyOrigin, StudyRecordOf, StudyThread } from "./records";
+import { quizChoicesText } from "./quiz-cards";
 import { locateStudyMark, resolveStudyRange, studyTextRevision } from "./text-edits";
 
 export type StudyPassage = {
@@ -312,12 +313,16 @@ export function passagesFor(
       purpose === "report"
         ? 1_300
         : 10_500 - sources.reduce((total, passage) => total + passage.text.length, 0);
-    const exercises = material.map(({ id, front, back }): StudyPassage => {
+    const exercises = material.map(({ id, front, back, quizChoices }): StudyPassage => {
       const question = front.trim().slice(0, Math.floor(limit / 3));
+      const choicesHeading = "\n\nAnswer choices:\n";
+      const choices = quizChoices?.length
+        ? choicesHeading + quizChoicesText(quizChoices, Math.floor(limit / 3) - choicesHeading.length)
+        : "";
       return {
         origin: { kind: "card", cardId: id },
         title: question.slice(0, 500),
-        text: `Question: ${question}\n\nAnswer: ${back.trim().slice(0, limit - question.length - 20)}`,
+        text: `Question: ${question}${choices}\n\nAnswer: ${back.trim().slice(0, limit - question.length - choices.length - 20)}`,
       };
     });
     return [...exercises, ...sources];

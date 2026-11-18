@@ -204,6 +204,7 @@ export const studyRecordSchema = z.discriminatedUnion("kind", [
     kind: z.literal("card"),
     front: z.string(),
     back: z.string(),
+    quizChoices: z.array(z.string()).optional(),
     image: z.string().optional(),
     backImage: z.string().optional(),
     origin: studyOriginSchema.optional(),
@@ -343,7 +344,10 @@ export type StudyReviewWrite = {
   schedule: StudySchedule;
   activity: StudyRecordOf<"session">;
 };
-export type StudyCardEdit = Pick<StudyRecordOf<"card">, "front" | "back" | "image" | "backImage" | "tags">;
+export type StudyCardEdit = Pick<
+  StudyRecordOf<"card">,
+  "front" | "back" | "quizChoices" | "image" | "backImage" | "tags"
+>;
 export type StudyHighlightEdit = Pick<StudyRecordOf<"highlight">, "note" | "cue" | "color">;
 export type StudyReviewItemWrite = {
   id: string;

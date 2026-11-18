@@ -11,6 +11,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { DirectionalText } from "@/components/common/directional-text";
 import { textDirection } from "@/lib/text/direction";
+import { StudyCardChoices } from "./study-card-choices";
 import { StudyCardImage } from "./study-card-image";
 import { StudyFlashcardGenerator } from "./study-flashcard-generator";
 import { StudyOriginLink } from "./study-origin-link";
@@ -23,6 +24,7 @@ import {
   studyHref,
 } from "@/lib/study/links";
 import { difficultStudyItems, studyHighlightPreview } from "@/lib/study/recall";
+import { quizChoicesText } from "@/lib/study/quiz-cards";
 import {
   loadReviewSession,
   pendingReviewLearning,
@@ -317,6 +319,7 @@ export function StudyReview({
               className="text-xl font-medium wrap-break-word"
             />
           )}
+          {item.kind === "card" ? <StudyCardChoices choices={item.quizChoices} /> : null}
           {item.kind === "card" && item.image ? (
             <StudyCardImage
               side="question"
@@ -560,7 +563,7 @@ export function CardLibrary({
   const selectedCards = cards.filter((card) => selected.includes(card.id));
   const cardsShown = cards
     .filter((card) => {
-      const matched = [card.front, card.back, ...card.tags]
+      const matched = [card.front, card.back, ...(card.quizChoices ?? []), ...card.tags]
         .join(" ")
         .toLowerCase()
         .includes(query.trim().toLowerCase());
@@ -599,6 +602,7 @@ export function CardLibrary({
       front: editing.front.trim(),
       back: editing.back.trim(),
       tags: [...new Set(editing.tags.map((tag) => tag.trim()).filter(Boolean))],
+      quizChoices: editing.quizChoices,
       image: editing.image,
       backImage: editing.backImage,
     };
@@ -638,7 +642,10 @@ export function CardLibrary({
                 variant="outline"
                 onClick={() => {
                   const text = selectedCards
-                    .map((card) => `Q: ${card.front}\nA: ${card.back}`)
+                    .map((card) => {
+                      const choices = card.quizChoices?.length ? `\n${quizChoicesText(card.quizChoices)}` : "";
+                      return `Q: ${card.front}${choices}\nA: ${card.back}`;
+                    })
                     .join("\n\n");
                   void navigator.clipboard
                     .writeText(text)
@@ -727,6 +734,19 @@ export function CardLibrary({
             onChange={(event) => setEditing({ ...editing, back: event.target.value })}
             onPaste={(event) => pasteImage(event, "backImage")}
           />
+          {editing.quizChoices?.length ? (
+            <div className="space-y-2 rounded-lg border p-3">
+              <StudyCardChoices choices={editing.quizChoices} />
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setEditing({ ...editing, quizChoices: [] })}
+              >
+                {t("study.recall.removeAnswerChoices")}
+              </Button>
+            </div>
+          ) : null}
           <Input
             aria-label="Tags"
             placeholder="Tags, separated by commas"
@@ -860,6 +880,14 @@ export function CardLibrary({
             />
             <div className="min-w-0 flex-1">
               <StudyText text={card.front} className="font-medium wrap-break-word" />
+              {card.quizChoices?.length ? (
+                <details className="my-1 text-sm">
+                  <summary className="w-fit cursor-pointer rounded-sm text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    {t("study.recall.answerChoices")}
+                  </summary>
+                  <StudyCardChoices choices={card.quizChoices} showLabel={false} className="mt-2" />
+                </details>
+              ) : null}
               {card.image ? (
                 <img
                   className="my-2 max-h-20 rounded object-contain"
