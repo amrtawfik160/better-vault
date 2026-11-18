@@ -8,9 +8,25 @@ export function locateStudyQuote(text: string, quote: string, previousOffset = 0
   return previousOffset - before <= after - previousOffset ? before : after;
 }
 
+const compact = (text: string) => text.trim().replace(/\s+/g, " ");
+
+export function locateCitedChunk<T extends { id: string; text: string }>(
+  chunks: T[],
+  id: string | undefined,
+  excerpt: string | undefined,
+): T | undefined {
+  const original = chunks.find((chunk) => chunk.id === id);
+  if (!excerpt) return original;
+  const query = compact(excerpt);
+  if (!query) return original;
+  if (original && compact(original.text).includes(query)) return original;
+  const matches = chunks.filter(({ text }) => compact(text).includes(query));
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
 /** Finds an imported excerpt even when the notebook normalized its whitespace. */
 export function findStudyExcerpt(sections: { text: string }[], excerpt: string) {
-  const query = excerpt.trim().replace(/\s+/g, " ");
+  const query = compact(excerpt);
   if (!query) return;
   let found: { section: number; offset: number; length: number } | undefined;
   for (const [section, { text }] of sections.entries()) {

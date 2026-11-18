@@ -34,6 +34,7 @@ export function originHref(origin: StudyOrigin) {
         highlight: origin.highlightId,
         at: origin.offset,
         length: origin.length,
+        rev: origin.revision,
       });
     case "note":
       return withQuery(routes.home, { view: "notes", note: origin.noteId });

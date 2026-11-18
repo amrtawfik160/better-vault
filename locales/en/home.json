@@ -175,6 +175,12 @@
       "notebookCards": "Notebook flashcards",
       "cue": "Recall question"
     },
+    "reader": {
+      "editConflict": "This document changed while you were editing it. Copy your draft, then reopen the editor to see the latest text.",
+      "passageChanged": "This link no longer points to an exact passage.",
+      "search": "Search this document",
+      "documentUnavailable": "This study document is no longer available."
+    },
     "capture": {
       "draftCards": "Draft flashcards",
       "cardsFromSection": "Draft cards from this section",

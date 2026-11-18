@@ -20,6 +20,8 @@
   "menu": "Options for {{title}}",
   "read": "Read",
   "openStudy": "Read in Study",
+  "citationChanged": "This citation points to a passage that has changed or moved.",
+  "unavailable": "This source is no longer available",
   "openPage": "Open page",
   "rename": {
     "title": "Rename source",

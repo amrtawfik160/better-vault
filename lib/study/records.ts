@@ -17,6 +17,10 @@ const schedule = z.object({
   lapses: z.number().int().nonnegative().optional(),
 });
 const index = z.number().int().nonnegative();
+const textEdit = z.object({
+  section: index,
+  ranges: z.array(z.object({ before: index, after: index, length: z.number().int().positive() })),
+});
 export const studyOriginSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("book"),
@@ -25,6 +29,7 @@ export const studyOriginSchema = z.discriminatedUnion("kind", [
     highlightId: z.string().optional(),
     offset: index.optional(),
     length: index.optional(),
+    revision: index.optional(),
   }),
   z.object({ kind: z.literal("note"), noteId: z.string() }),
   z.object({ kind: z.literal("tutor"), threadId: z.string(), message: index.optional() }),
@@ -84,6 +89,7 @@ export const studyRecordSchema = z.discriminatedUnion("kind", [
     sections: z.array(section).min(1),
     section: z.number().int().nonnegative(),
     bookmarks: z.array(index),
+    textEdits: z.array(textEdit).optional(),
     bookmarkPlaces: z
       .array(
         z.object({
@@ -91,6 +97,7 @@ export const studyRecordSchema = z.discriminatedUnion("kind", [
           section: index,
           offset: index,
           quote: z.string(),
+          revision: index.optional(),
         }),
       )
       .optional(),
@@ -113,6 +120,7 @@ export const studyRecordSchema = z.discriminatedUnion("kind", [
     section: z.number().int().nonnegative(),
     quote: z.string(),
     offset: z.number().int().nonnegative(),
+    revision: index.optional(),
     color: z.enum(["yellow", "green", "blue", "pink"]),
     note: z.string(),
     cue: z.string().optional(),
@@ -149,6 +157,7 @@ export const studyRecordSchema = z.discriminatedUnion("kind", [
     section: z.number().int().nonnegative().optional(),
     quote: z.string().optional(),
     offset: index.optional(),
+    revision: index.optional(),
     noteIds: z.array(z.string()).optional(),
     messages: z.array(
       z.object({
@@ -168,6 +177,21 @@ export type StudyCitation = z.infer<typeof citation>;
 export type StudyRecord = z.infer<typeof studyRecordSchema>;
 export type StudyRecordOf<K extends StudyRecord["kind"]> = Extract<StudyRecord, { kind: K }>;
 export type StudyBook = StudyRecordOf<"book">;
+export type StudyTextEdit = z.infer<typeof textEdit>;
+export type StudyBookWrite = {
+  id: string;
+  change: Partial<Pick<StudyBook, "title" | "section" | "bookmarks" | "bookmarkPlaces">>;
+  updatedAt: number;
+};
+export type StudyBookTextWrite = {
+  id: string;
+  sourceId: string;
+  revision: number;
+  previousText: string;
+  text: string;
+  edit: StudyTextEdit;
+  updatedAt: number;
+};
 export type StudyThread = StudyRecordOf<"thread">;
 export type StudyThreadChange = Partial<
   Omit<StudyThread, "id" | "kind" | "messages" | "updatedAt">

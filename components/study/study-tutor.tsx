@@ -30,7 +30,7 @@ import {
   updateStudyThread,
 } from "@/lib/db/study";
 import { askStudyModel } from "@/lib/study/client";
-import { passagesFor } from "@/lib/study/passages";
+import { passagesFor, tutorBookOrigin } from "@/lib/study/passages";
 import { Markdown } from "@/components/chat/markdown";
 import { recordStudyVoice, transcribeStudyVoice } from "@/lib/study/voice";
 import {
@@ -566,9 +566,7 @@ export function StudyTutor({
           </h2>
         )}
         <div className="flex flex-wrap gap-2">
-          {book && (
-            <StudyOriginLink origin={{ kind: "book", bookId: book.id, section: thread.section }} />
-          )}
+          {book && <StudyOriginLink origin={tutorBookOrigin(thread, book)} />}
           <Button variant="ghost" size="sm" disabled={busy} onClick={() => setRenaming(!renaming)}>
             Rename
           </Button>

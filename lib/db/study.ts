@@ -2,11 +2,13 @@ import { generateId } from "ai";
 import { freshSchedule, nextStudySchedule } from "@/lib/study/schedule";
 import { originHref } from "@/lib/study/links";
 import { studyPdfSections } from "@/lib/study/read-file";
+import { studyTextEdit, studyTextRevision } from "@/lib/study/text-edits";
 import { flashcardsData } from "@/studio/tools/flashcards/definition";
 import { quizData } from "@/studio/tools/quiz/definition";
-import { chunkText, normaliseText } from "@/lib/grounding/chunk";
+import { normaliseText } from "@/lib/grounding/chunk";
 import type {
   StudyBook,
+  StudyBookWrite,
   StudyOrigin,
   StudyThread,
   StudyThreadChange,
@@ -19,7 +21,7 @@ import { createNote } from "./notes";
 import type { Note, Source, StudioOutput } from "./types";
 import { useStoreQuery } from "./live";
 import { createNotebook, deleteNotebook, renameNotebook } from "./notebooks";
-import { addSource, renameSource } from "./sources";
+import { addSource, chunksForSource, renameSource } from "./sources";
 import { store } from "./store";
 import { currentVaultId, vaultOf } from "./vaults";
 import { getSettings } from "./settings";
@@ -74,9 +76,10 @@ export async function addStudyBook(input: {
   const title = input.title.trim() || "Untitled";
   const notebookId = await createNotebook(title, { vaultId: input.vaultId ?? currentVaultId() });
   try {
-    const text = input.sections
-      .map((section) => `${section.title}\n\n${section.text}`)
-      .join("\n\n");
+    const text =
+      input.format === "text" && input.sections.length === 1
+        ? input.sections[0].text
+        : input.sections.map(({ title, text }) => `${title}\n\n${text}`).join("\n\n");
     const source = await addSource({
       notebookId,
       title,
@@ -253,7 +256,7 @@ export async function startNoteTutor(note: Pick<Note, "id" | "vaultId" | "notebo
 
 export async function startBookTutor(
   book: StudyBook,
-  focus: Pick<StudyThread, "scope" | "section" | "quote" | "offset" | "goal">,
+  focus: Pick<StudyThread, "scope" | "section" | "quote" | "offset" | "goal" | "revision">,
 ) {
   const thread: StudyThread = {
     ...focus,
@@ -302,22 +305,11 @@ export async function renameStudyBook(book: StudyBook, title: string) {
     await renameNotebook(current.notebookId, next);
     await renameSource(current.sourceId, next);
   }
-  await putStudyRecords({ ...current, title: next, updatedAt: Date.now() });
+  await store().patchStudyBook({ id: current.id, change: { title: next }, updatedAt: Date.now() });
 }
 
-export async function updateStudyBook(
-  bookId: string,
-  patch: Pick<Partial<StudyBook>, "section" | "bookmarks" | "bookmarkPlaces">,
-) {
-  const book = await store().getStudy(bookId);
-  if (book?.kind !== "book") return;
-  const now = Date.now();
-  await putStudyRecords({
-    ...book,
-    ...patch,
-    updatedAt: now,
-    lastReadAt: patch.section === undefined ? book.lastReadAt : now,
-  });
+export function updateStudyBook(id: string, change: Omit<StudyBookWrite["change"], "title">) {
+  return store().patchStudyBook({ id, change, updatedAt: Date.now() });
 }
 
 export async function rateStudyItem(id: string, rating: StudyRating, seconds: number) {
@@ -368,27 +360,64 @@ export async function recordStudyActivity(
   });
 }
 
-export async function saveStudyText(bookId: string, text: string) {
+export class StudyTextConflict extends Error {
+  constructor() {
+    super("This document was changed or removed while you were editing it.");
+  }
+}
+
+export async function saveStudyText(
+  bookId: string,
+  text: string,
+  draft?: { section: number; original: string },
+) {
   const backend = store();
   const book = await backend.getStudy(bookId);
   if (book?.kind !== "book" || book.format !== "text" || book.attachedToNotebook)
     throw new Error("Choose a text document created in Study.");
-  const source = await backend.getSource(book.sourceId);
-  if (!source) throw new Error("The notebook source was deleted.");
-  const body = normaliseText(text);
-  if (!body || body.length > 2_000_000)
-    throw new Error("The document needs between 1 and 2,000,000 characters.");
-  const revised = { ...source, text: body, charCount: body.length };
-  const chapters = [{ ...book.sections[0], text: body }];
-  await backend.replaceStudyText(
-    { ...book, sections: chapters, updatedAt: Date.now() },
-    revised,
-    chunkText(body).map((part, index) => ({
-      id: `${source.id}:${index}`,
-      notebookId: source.notebookId,
-      sourceId: source.id,
-      index,
-      text: part,
-    })),
+  const section = draft?.section ?? 0;
+  const previousText = book.sections[section]?.text;
+  if (previousText === undefined || (draft && draft.original !== previousText))
+    throw new StudyTextConflict();
+  const body = text.replace(/\r\n?/g, "\n");
+  const total = book.sections.reduce(
+    (length, entry) => length + entry.text.length,
+    body.length - previousText.length,
   );
+  if (!body.trim() || total > 2_000_000)
+    throw new Error("The document needs between 1 and 2,000,000 characters.");
+  if (previousText === body) return;
+  const source = await backend.getSource(book.sourceId);
+  if (!source) throw new StudyTextConflict();
+  const keepLegacyHeading =
+    book.sections.length === 1 &&
+    source.text === normaliseText(`${book.sections[0].title}\n\n${previousText}`);
+  const sourceText = normaliseText(
+    book.sections.length === 1 && !keepLegacyHeading
+      ? body
+      : book.sections
+          .map((chapter, index) => `${chapter.title}\n\n${index === section ? body : chapter.text}`)
+          .join("\n\n"),
+  );
+  if (!sourceText) throw new Error("The document needs readable text.");
+  const revision = studyTextRevision(book);
+  const saved = await backend.replaceStudyText(
+    {
+      id: book.id,
+      sourceId: book.sourceId,
+      revision,
+      previousText,
+      text: body,
+      edit: studyTextEdit(section, previousText, body),
+      updatedAt: Date.now(),
+    },
+    sourceText,
+    chunksForSource({
+      id: book.sourceId,
+      notebookId: book.notebookId,
+      text: sourceText,
+      studyRevision: revision + 1,
+    }),
+  );
+  if (!saved) throw new StudyTextConflict();
 }

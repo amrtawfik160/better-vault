@@ -1,4 +1,5 @@
 import type { StudyRecord } from "@/lib/study/records";
+import { patchedStudyBook, revisedStudyBook } from "@/lib/study/text-edits";
 import type { Backend, StoreContent, TableName } from "../backend";
 import type {
   Chunk,
@@ -525,6 +526,11 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
         }
         return count;
       }),
+    patchStudyBook: (write) =>
+      transaction(db, () => {
+        const book = get<StudyRecord>("study", write.id);
+        if (book?.kind === "book") put("study", patchedStudyBook(book, write));
+      }),
     patchStudyThread: ({ id, change, append, updatedAt }) =>
       transaction(db, () => {
         const thread = get<StudyRecord>("study", id);
@@ -549,20 +555,22 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
         add("study", activity);
         return true;
       }),
-    replaceStudyText: (book, source, chunks) =>
+    replaceStudyText: (write, sourceText, chunks) =>
       transaction(db, () => {
-        if (
-          !get<StudyRecord>("study", book.id) ||
-          !get<Notebook>("notebooks", book.notebookId) ||
-          !get<Source>("sources", source.id)
-        ) {
-          throw new Error("The document or its source was deleted.");
-        }
+        const book = revisedStudyBook(get<StudyRecord>("study", write.id), write);
+        const source = get<Source>("sources", write.sourceId);
+        if (!book || !source || !get<Notebook>("notebooks", book.notebookId)) return false;
         put("study", book);
-        put("sources", source);
+        put("sources", {
+          ...source,
+          text: sourceText,
+          charCount: sourceText.length,
+          studyRevision: write.revision + 1,
+        });
         deleteWhere("chunks", "source_id", source.id);
         for (const chunk of chunks) put("chunks", chunk);
         touch(book.notebookId, book.updatedAt);
+        return true;
       }),
     deleteStudy: (id) =>
       transaction(db, () => {

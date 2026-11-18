@@ -43,15 +43,21 @@ export async function addSource(input: NewSource): Promise<Source> {
     selected: true,
     createdAt: now,
   };
-  const chunks: Chunk[] = chunkText(text).map((piece, index) => ({
-    id: `${source.id}:${index}`,
+  await store().addSource(source, chunksForSource(source), now, original);
+  return source;
+}
+
+export function chunksForSource(
+  source: Pick<Source, "id" | "notebookId" | "text" | "studyRevision">,
+): Chunk[] {
+  const prefix = source.studyRevision ? `${source.id}:${source.studyRevision}` : source.id;
+  return chunkText(source.text).map((piece, index) => ({
+    id: `${prefix}:${index}`,
     notebookId: source.notebookId,
     sourceId: source.id,
     index,
     text: piece,
   }));
-  await store().addSource(source, chunks, now, original);
-  return source;
 }
 
 export interface NewSourceImage {

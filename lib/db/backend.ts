@@ -1,5 +1,6 @@
 import type {
-  StudyBook,
+  StudyBookTextWrite,
+  StudyBookWrite,
   StudyRecord,
   StudyReviewWrite,
   StudyThreadWrite,
@@ -136,9 +137,14 @@ export interface Backend {
   getStudy(id: string): Promise<StudyRecord | undefined>;
   putStudy(rows: StudyRecord[]): Promise<void>;
   insertStudy(rows: StudyRecord[]): Promise<number>;
+  patchStudyBook(write: StudyBookWrite): Promise<void>;
   patchStudyThread(write: StudyThreadWrite): Promise<boolean>;
   applyStudyReview(write: StudyReviewWrite): Promise<boolean>;
-  replaceStudyText(book: StudyBook, source: Source, chunks: Chunk[]): Promise<void>;
+  replaceStudyText(
+    write: StudyBookTextWrite,
+    sourceText: string,
+    chunks: Chunk[],
+  ): Promise<boolean>;
   deleteStudy(id: string): Promise<void>;
 
   getSetting(key: string): Promise<unknown>;
@@ -241,6 +247,7 @@ export const writes = {
   putBlob: ["blobs"],
   putStudy: ["study"],
   insertStudy: ["study"],
+  patchStudyBook: ["study"],
   patchStudyThread: ["study"],
   applyStudyReview: ["study"],
   replaceStudyText: ["study", "sources", "chunks", "notebooks"],
@@ -344,6 +351,7 @@ export const backendMethods = [
   "getStudy",
   "putStudy",
   "insertStudy",
+  "patchStudyBook",
   "patchStudyThread",
   "applyStudyReview",
   "replaceStudyText",

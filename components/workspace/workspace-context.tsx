@@ -53,8 +53,8 @@ interface WorkspaceState {
   requestOutputAction: (action: OutputAction) => void;
   clearOutputAction: () => void;
   /** The source shown in the reader, and the passage to scroll to. */
-  reading: { sourceId: string; passage?: string } | null;
-  readSource: (sourceId: string, passage?: string) => void;
+  reading: { sourceId: string; passage?: string; snippet?: string } | null;
+  readSource: (sourceId: string, passage?: string, snippet?: string) => void;
   closeReader: () => void;
 }
 
@@ -160,7 +160,7 @@ export function WorkspaceProvider({
       },
       clearOutputAction: () => setOutputAction(null),
       reading,
-      readSource: (sourceId, passage) => setReading({ sourceId, passage }),
+      readSource: (sourceId, passage, snippet) => setReading({ sourceId, passage, snippet }),
       closeReader: () => setReading(null),
     }),
     [

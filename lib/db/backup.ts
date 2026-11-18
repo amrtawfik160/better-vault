@@ -1,10 +1,9 @@
 import { studyRecordSchema, type StudyRecord } from "@/lib/study/records";
 import { z } from "zod";
-import { chunkText } from "@/lib/grounding/chunk";
 import { conversationTitle } from "@/lib/chat/title";
 import { store } from "./store";
+import { chunksForSource } from "./sources";
 import type {
-  Chunk,
   Conversation,
   Folder,
   Notebook,
@@ -86,7 +85,16 @@ const backupSchema = z.object({
   vaults: z.array(z.object({ id: z.string(), name: z.string() }).loose()).optional(),
   folders: z.array(z.object({ id: z.string(), name: z.string() }).loose()).optional(),
   notebooks: z.array(z.object({ id: z.string(), title: z.string() }).loose()),
-  sources: z.array(z.object({ id: z.string(), notebookId: z.string(), text: z.string() }).loose()),
+  sources: z.array(
+    z
+      .object({
+        id: z.string(),
+        notebookId: z.string(),
+        text: z.string(),
+        studyRevision: z.number().int().nonnegative().optional(),
+      })
+      .loose(),
+  ),
   conversations: z.array(z.object({ id: z.string(), notebookId: z.string() }).loose()).optional(),
   messages: z.array(z.object({ id: z.string(), notebookId: z.string() }).loose()),
   outputs: z.array(z.object({ id: z.string(), notebookId: z.string() }).loose()),
@@ -115,15 +123,7 @@ export async function importBackup(raw: unknown): Promise<number> {
   const parsed = backupSchema.safeParse(raw);
   if (!parsed.success) throw new Error("invalid-backup");
   const backup = upgradeBackup(parsed.data as unknown as OldBackup);
-  const chunks: Chunk[] = backup.sources.flatMap((source) =>
-    chunkText(source.text).map((text, index) => ({
-      id: `${source.id}:${index}`,
-      notebookId: source.notebookId,
-      sourceId: source.id,
-      index,
-      text,
-    })),
-  );
+  const chunks = backup.sources.flatMap(chunksForSource);
   await store().importAll(
     {
       study: backup.study,

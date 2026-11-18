@@ -5,8 +5,9 @@ import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/panelui/button";
 import { studyBookForSource } from "@/lib/db/study";
-import { studyHref } from "@/lib/study/links";
-import { findStudyExcerpt } from "@/lib/study/locators";
+import { originHref } from "@/lib/study/links";
+import { findStudyExcerpt, locateCitedChunk } from "@/lib/study/locators";
+import { studyTextRevision } from "@/lib/study/text-edits";
 import { Icon } from "@/components/icon";
 import { Markdown } from "@/components/chat/markdown";
 import { Dialog } from "@/components/panelui/dialog";
@@ -21,7 +22,7 @@ import { reflow } from "@/lib/sources/reflow";
 import { cn } from "@/lib/utils";
 
 interface SourceReaderProps {
-  reading: { sourceId: string; passage?: string } | null;
+  reading: { sourceId: string; passage?: string; snippet?: string } | null;
   onClose: () => void;
 }
 
@@ -35,13 +36,13 @@ export function SourceReader({ reading, onClose }: SourceReaderProps) {
         className="w-[min(36rem,calc(100vw-2*var(--sheet-gap)))]"
       >
         <ReviewReturn className="px-3 pt-3" />
-        {reading ? <ReaderBody sourceId={reading.sourceId} passage={reading.passage} /> : null}
+        {reading ? <ReaderBody {...reading} /> : null}
       </Sheet.Content>
     </Sheet>
   );
 }
 
-function ReaderBody({ sourceId, passage }: { sourceId: string; passage?: string }) {
+function ReaderBody({ sourceId, passage, snippet }: NonNullable<SourceReaderProps["reading"]>) {
   const { t, i18n } = useTranslation("sources");
   const read = useSourceWithChunks(sourceId);
   const navigate = useNavigate();
@@ -49,6 +50,11 @@ function ReaderBody({ sourceId, passage }: { sourceId: string; passage?: string 
   const [opening, setOpening] = useState(false);
   const source = read?.source;
   const chunks = read?.chunks;
+  const excerpt = snippet?.replace(/…$/u, "").trim();
+  const cited = useMemo(
+    () => locateCitedChunk(chunks ?? [], passage, excerpt),
+    [chunks, passage, excerpt],
+  );
   const highlighted = useRef<HTMLDivElement>(null);
   const placed = useMemo(
     () => (source && chunks ? imagesByChunk(source, chunks) : new Map<string, PlacedImage[]>()),
@@ -56,11 +62,11 @@ function ReaderBody({ sourceId, passage }: { sourceId: string; passage?: string 
   );
 
   useEffect(() => {
-    if (chunks && passage)
-      highlighted.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [chunks, passage]);
+    if (cited) highlighted.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [cited]);
 
-  if (!source) return null;
+  if (!read) return null;
+  if (!source) return <Sheet.Header title={t("unavailable")} />;
   const words = countWords(source.text);
 
   return (
@@ -78,14 +84,13 @@ function ReaderBody({ sourceId, passage }: { sourceId: string; passage?: string 
             setOpening(true);
             void studyBookForSource(source.id)
               .then((book) => {
-                const chunk = chunks?.find(({ id }) => id === passage);
-                const anchor = chunk ? findStudyExcerpt(book.sections, chunk.text) : undefined;
+                const text = excerpt || cited?.text;
+                const anchor = text ? findStudyExcerpt(book.sections, text) : undefined;
                 navigate(
-                  studyHref("library", {
-                    book: book.id,
-                    ...(anchor
-                      ? { page: anchor.section, at: anchor.offset, length: anchor.length }
-                      : {}),
+                  originHref({
+                    kind: "book",
+                    bookId: book.id,
+                    ...(anchor ? { ...anchor, revision: studyTextRevision(book) } : {}),
                   }),
                   { state: returnState },
                 );
@@ -111,13 +116,24 @@ function ReaderBody({ sourceId, passage }: { sourceId: string; passage?: string 
         ) : null}
       </Sheet.Header>
       <Sheet.Body>
+        {passage && !cited ? (
+          <div role="status" className="mb-4 rounded-xl border p-3 text-sm text-muted-foreground">
+            {t("citationChanged")}
+            {snippet ? (
+              <blockquote dir="auto" className="mt-2 border-s-2 ps-3">
+                {snippet}
+              </blockquote>
+            ) : null}
+          </div>
+        ) : null}
         <div className="flex flex-col gap-3 pb-6 text-[0.9375rem] leading-7">
           {chunks?.map((chunk) => {
-            const active = chunk.id === passage;
+            const active = chunk.id === cited?.id;
             return (
               <Fragment key={chunk.id}>
                 <div
                   ref={active ? highlighted : undefined}
+                  data-cited-passage={active || undefined}
                   className={cn(
                     "flex flex-col gap-3 rounded-xl transition-colors",
                     active && "-mx-3 bg-info/10 px-3 py-2 ring-1 ring-info/30",

@@ -1,4 +1,5 @@
 import type { StudyRecord } from "@/lib/study/records";
+import { patchedStudyBook, revisedStudyBook } from "@/lib/study/text-edits";
 import type { Backend } from "./backend";
 import { BetterVaultDatabase } from "./database";
 import type { Source, StudioOutput } from "./types";
@@ -244,6 +245,11 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
         await db.study.bulkAdd(pending);
         return pending.length;
       }),
+    patchStudyBook: (write) =>
+      db.transaction("rw", db.study, async () => {
+        const book = await db.study.get(write.id);
+        if (book?.kind === "book") await db.study.put(patchedStudyBook(book, write));
+      }),
     patchStudyThread: ({ id, change, append, updatedAt }) =>
       db.transaction("rw", db.study, async () => {
         const thread = await db.study.get(id);
@@ -270,20 +276,22 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
         await db.study.add(activity);
         return true;
       }),
-    replaceStudyText: (book, source, chunks) =>
+    replaceStudyText: (write, sourceText, chunks) =>
       db.transaction("rw", [db.study, db.sources, db.chunks, db.notebooks], async () => {
-        if (
-          !(await db.study.get(book.id)) ||
-          !(await db.notebooks.get(book.notebookId)) ||
-          !(await db.sources.get(source.id))
-        ) {
-          throw new Error("The document or its source was deleted.");
-        }
+        const book = revisedStudyBook(await db.study.get(write.id), write);
+        const source = await db.sources.get(write.sourceId);
+        if (!book || !source || !(await db.notebooks.get(book.notebookId))) return false;
         await db.study.put(book);
-        await db.sources.put(source);
+        await db.sources.put({
+          ...source,
+          text: sourceText,
+          charCount: sourceText.length,
+          studyRevision: write.revision + 1,
+        });
         await db.chunks.where("sourceId").equals(source.id).delete();
         await db.chunks.bulkPut(chunks);
         await db.notebooks.update(book.notebookId, { updatedAt: book.updatedAt });
+        return true;
       }),
     deleteStudy: (id) =>
       db.transaction("rw", db.study, async () => {

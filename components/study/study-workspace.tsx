@@ -7,6 +7,7 @@ import { queryIndex, studyHref } from "@/lib/study/links";
 import { weakStudyCards } from "@/lib/study/recall";
 import { reviewReturnState, reviewSelection } from "@/lib/study/review-session";
 import { studyVaultIndex } from "@/lib/study/vault";
+import { studyTextRevision } from "@/lib/study/text-edits";
 import { Button } from "@/components/panelui/button";
 import { Card } from "@/components/panelui/card";
 import { Tabs } from "@/components/panelui/tabs";
@@ -361,12 +362,15 @@ export default function StudyWorkspace({
   const highlights = rows.filter((row) => row.kind === "highlight");
   const threads = rows.filter((row) => row.kind === "thread");
   const words = rows.filter((row) => row.kind === "word");
-  const book = books.find((entry) => entry.id === params.get("book"));
+  const bookId = params.get("book");
+  const book = books.find((entry) => entry.id === bookId);
+  const unavailableBook = Boolean(ready && bookId && !book);
   const thread = threads.find((entry) => entry.id === params.get("thread"));
   const page = queryIndex(params.get("page"));
   const at = queryIndex(params.get("at"));
   const length = queryIndex(params.get("length"));
-  const focusedRange = at !== undefined && length ? { offset: at, length } : undefined;
+  const revision = queryIndex(params.get("rev"));
+  const focusedRange = at !== undefined && length ? { offset: at, length, revision } : undefined;
   const output = params.get("output");
   const cardId = params.get("card");
   const notebookId = params.get("notebook");
@@ -416,7 +420,7 @@ export default function StudyWorkspace({
     what: StudyBook,
     scope: StudyThread["scope"],
     section: number,
-    selection?: { text: string; offset: number },
+    selection?: { text: string; offset: number; revision: number },
     goal: StudyThread["goal"] = "book",
   ) {
     try {
@@ -426,6 +430,7 @@ export default function StudyWorkspace({
         section,
         quote: selection?.text,
         offset: selection?.offset,
+        revision: selection?.revision,
       });
       openThread(created);
     } catch (error) {
@@ -451,7 +456,17 @@ export default function StudyWorkspace({
           }
         />
       ) : null}
-      {ready && tab === "library" ? (
+      {unavailableBook ? (
+        <section className="space-y-3">
+          <p role="status" className="text-sm text-muted-foreground">
+            {t("study.reader.documentUnavailable")}
+          </p>
+          <Button variant="outline" size="sm" onClick={() => go("library", libraryScope)}>
+            {t("study.tabs.library")}
+          </Button>
+        </section>
+      ) : null}
+      {ready && !unavailableBook && tab === "library" ? (
         book ? (
           <StudyReader
             key={book.id}
@@ -469,6 +484,7 @@ export default function StudyWorkspace({
                 page: String(section),
                 at: String(range.offset),
                 length: String(range.length),
+                rev: String(studyTextRevision(book)),
               })
             }
             startChat={(scope, section, selection, goal) =>
@@ -484,7 +500,7 @@ export default function StudyWorkspace({
           />
         )
       ) : null}
-      {ready && tab === "cards" ? (
+      {ready && !unavailableBook && tab === "cards" ? (
         <CardLibrary
           cards={filteredCards}
           filter={
@@ -524,7 +540,7 @@ export default function StudyWorkspace({
           }
         />
       ) : null}
-      {ready && tab === "review" ? (
+      {ready && !unavailableBook && tab === "review" ? (
         <StudyReview
           key={location.key}
           vaultId={studyVaultId}
@@ -542,7 +558,7 @@ export default function StudyWorkspace({
           }
         />
       ) : null}
-      {ready && tab === "highlights" ? (
+      {ready && !unavailableBook && tab === "highlights" ? (
         <HighlightsLibrary
           highlights={filteredHighlights}
           filter={book?.title}

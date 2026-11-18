@@ -207,6 +207,7 @@ export interface Source {
   originalFileId?: string;
   /** The source as plain text. */
   text: string;
+  studyRevision?: number;
   /**
    * Pictures taken from a PDF, in reading order, kept as files (`blobs`).
    * Each sits after the character `at` of `text`: the end of its page.

@@ -63,7 +63,9 @@ export function ChatView() {
               streaming={chat.status === "streaming" && at === chat.messages.length - 1}
               isLast={at === chat.messages.length - 1}
               onRetry={retry}
-              onOpenPassage={(passage) => readSource(passage.sourceId, passage.chunkId)}
+              onOpenPassage={(passage) =>
+                readSource(passage.sourceId, passage.chunkId, passage.snippet)
+              }
             />
           ),
         )}

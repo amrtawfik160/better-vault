@@ -292,7 +292,9 @@ export function OutputViewer({ id }: { id: string }) {
               title={output.title}
               data={parsed.data}
               scrollRef={scrollRef}
-              onOpenPassage={(passage) => readSource(passage.sourceId, passage.chunkId)}
+              onOpenPassage={(passage) =>
+                readSource(passage.sourceId, passage.chunkId, passage.snippet)
+              }
             />
           )}
         </div>

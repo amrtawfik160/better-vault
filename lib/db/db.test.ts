@@ -9,6 +9,8 @@ import {
   putStudyRecords,
   rateStudyItem,
   saveStudyText,
+  StudyTextConflict,
+  updateStudyBook,
   updateStudyThread,
 } from "./study";
 import { DatabaseSync } from "node:sqlite";
@@ -24,6 +26,7 @@ import { asBackend, createSqliteStore, schemaVersion } from "./sqlite/store";
 import { setStoreForTests, store } from "./store";
 import { conversationTitle } from "@/lib/chat/title";
 import { studyVaultIndex } from "@/lib/study/vault";
+import { resolveStudyRange } from "@/lib/study/text-edits";
 import {
   deleteConversation,
   latestConversation,
@@ -718,6 +721,47 @@ describe.each(backends)("%s store", (name, create) => {
         updatedAt: 0,
       });
       expect(await store().getStudy("standalone")).toMatchObject({ front: "Question" });
+    });
+
+    it("saves passage positions and notebook chunks atomically with a text edit", async () => {
+      const quote = "Overlap through a shared replica.";
+      const original = `Proof\n\n${quote}\n\n    function quorum() { return true; }`;
+      const updated = `Expanded introduction\n\n${original}`;
+      const book = await addStudyBook({
+        title: "Proof",
+        format: "text",
+        sections: [{ title: "Section", text: original }],
+      });
+      const initial = await getChunks([book.sourceId]);
+      const draft = { section: 0, original };
+      const [save, competing] = await Promise.allSettled([
+        saveStudyText(book.id, updated, draft),
+        saveStudyText(book.id, `${original}\n\nOther revision`, draft),
+        updateStudyBook(book.id, { bookmarks: [0], section: 0 }),
+      ]);
+      expect([save.status, competing.status].sort()).toEqual(["fulfilled", "rejected"]);
+      const blocked = save.status === "rejected" ? save : competing;
+      expect(blocked.status === "rejected" && blocked.reason).toBeInstanceOf(StudyTextConflict);
+      const expected = save.status === "fulfilled" ? updated : `${original}\n\nOther revision`;
+      const saved = await store().getStudy(book.id);
+      expect(saved).toMatchObject({
+        bookmarks: [0],
+        sections: [{ text: expected }],
+        textEdits: [{ section: 0 }],
+      });
+      expect((await store().getSource(book.sourceId))?.studyRevision).toBe(1);
+      const editedChunkIds = (await getChunks([book.sourceId])).map(({ id }) => id);
+      expect(editedChunkIds).not.toContain(initial[0].id);
+
+      const backup = JSON.parse(JSON.stringify(await exportBackup()));
+      await deleteAllData();
+      await importBackup(backup);
+      const restored = await store().getStudy(book.id);
+      if (restored?.kind !== "book") throw new Error("The book was not restored");
+      expect(
+        resolveStudyRange(restored, 0, { offset: original.indexOf(quote), length: quote.length }),
+      ).toEqual({ offset: expected.indexOf(quote), length: quote.length });
+      expect((await getChunks([book.sourceId])).map(({ id }) => id)).toEqual(editedChunkIds);
     });
 
     it("keeps study documents, reading material and spaced reviews in both backends and backups", async () => {

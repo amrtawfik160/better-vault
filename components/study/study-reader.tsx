@@ -21,13 +21,14 @@ import {
   saveStudyNote,
   saveStudyText,
   studyId,
+  StudyTextConflict,
   updateStudyBook,
 } from "@/lib/db/study";
 import { routes } from "@/lib/routes";
 import { askStudyModel } from "@/lib/study/client";
-import { locateStudyQuote } from "@/lib/study/locators";
 import { originHref, studyHref, studyNotesHref } from "@/lib/study/links";
 import type { StudyBook, StudyOrigin, StudyRecordOf } from "@/lib/study/records";
+import { locateStudyMark, resolveStudyRange, studyTextRevision } from "@/lib/study/text-edits";
 
 const colors = {
   yellow: "bg-yellow-200 text-yellow-950 dark:bg-yellow-900 dark:text-yellow-100",
@@ -36,7 +37,7 @@ const colors = {
   pink: "bg-pink-200 text-pink-950 dark:bg-pink-900 dark:text-pink-100",
 };
 
-type Selection = { text: string; offset: number };
+type Selection = { text: string; offset: number; revision: number };
 type AssistResult = {
   action: "explain" | "translate";
   text: string;
@@ -51,18 +52,10 @@ function highlighted(
 ) {
   const nodes: ReactNode[] = [];
   let at = 0;
-  const ranges = highlights
-    .map((highlight) => ({
-      ...highlight,
-      offset: locateStudyQuote(text, highlight.quote, highlight.offset),
-    }))
-    .filter(
-      (highlight) =>
-        highlight.offset >= 0 &&
-        (!focus ||
-          highlight.offset >= focus.offset + focus.length ||
-          highlight.offset + highlight.quote.length <= focus.offset),
-    );
+  const ranges = highlights.filter(
+    ({ offset, quote }) =>
+      !focus || offset >= focus.offset + focus.length || offset + quote.length <= focus.offset,
+  );
   for (const highlight of ranges.toSorted((a, b) => a.offset - b.offset)) {
     if (focus && at <= focus.offset && highlight.offset >= focus.offset + focus.length) {
       nodes.push(
@@ -110,7 +103,7 @@ export function StudyReader({
   book: StudyBook;
   requestedPage?: number;
   focusedHighlight?: string;
-  focusedRange?: { offset: number; length: number };
+  focusedRange?: { offset: number; length: number; revision?: number };
   highlights: StudyRecordOf<"highlight">[];
   openPage: (section: number) => void;
   openPassage: (section: number, range: { offset: number; length: number }) => void;
@@ -124,6 +117,7 @@ export function StudyReader({
 }) {
   const index = Math.min(Math.max(0, requestedPage ?? book.section), book.sections.length - 1);
   const section = book.sections[index];
+  const revision = studyTextRevision(book);
   const navigate = useNavigate();
   const returnState = reviewReturnState(useLocation().state);
   const { t } = useTranslation("home");
@@ -131,21 +125,18 @@ export function StudyReader({
   const fileId = source === null ? undefined : book.fileId;
   const selectedHighlight = highlights.find((item) => item.id === focusedHighlight);
   const anchor =
-    selectedHighlight?.section === index
-      ? locateStudyQuote(section.text, selectedHighlight.quote, selectedHighlight.offset)
-      : -1;
+    selectedHighlight?.section === index ? locateStudyMark(book, selectedHighlight) : -1;
   const focus =
     anchor >= 0 && selectedHighlight
       ? { offset: anchor, length: selectedHighlight.quote.length }
-      : focusedRange &&
-          focusedRange.length > 0 &&
-          focusedRange.offset + focusedRange.length <= section.text.length
-        ? focusedRange
-        : undefined;
+      : focusedRange && resolveStudyRange(book, requestedPage ?? index, focusedRange);
   const focusStart = focus?.offset;
   const focusLength = focus?.length;
+  const missingPassage = Boolean((focusedRange || focusedHighlight) && !focus);
   const textBody = useRef<HTMLElement>(null);
   const readerTop = useRef<HTMLElement>(null);
+  const passageNotice = useRef<HTMLParagraphElement>(null);
+  const searchInput = useRef<HTMLInputElement>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [cardFront, setCardFront] = useState<string | null>(null);
   const [cardBack, setCardBack] = useState("");
@@ -155,7 +146,8 @@ export function StudyReader({
   const [translating, setTranslating] = useState(false);
   const [color, setColor] = useState<keyof typeof colors>("yellow");
   const [search, setSearch] = useState("");
-  const [edit, setEdit] = useState<string | null>(null);
+  const [edit, setEdit] = useState<{ original: string; text: string } | null>(null);
+  const [savingText, setSavingText] = useState(false);
   const [font, setFont] = useState(18);
   const [zoom, setZoom] = useState(100);
   const [epubTheme, setEpubTheme] = useState<StudyEpubTheme>("system");
@@ -167,7 +159,11 @@ export function StudyReader({
   const pendingAssist = useRef<AbortController | null>(null);
   const started = useRef(0);
   const latestInteraction = useRef(0);
-  const pageHighlights = highlights.filter((item) => item.section === index);
+  const pageHighlights = highlights.flatMap((item) => {
+    if (item.section !== index) return [];
+    const offset = locateStudyMark(book, item);
+    return offset < 0 ? [] : [{ ...item, offset }];
+  });
   const bookmarkPlaces = book.bookmarkPlaces ?? [];
 
   useEffect(() => {
@@ -226,9 +222,10 @@ export function StudyReader({
   }, [fileId]);
 
   useEffect(() => {
-    const target = focusStart === undefined ? focusedHighlight : "focused-passage";
-    if (target) document.getElementById(target)?.scrollIntoView({ block: "center" });
-  }, [focusedHighlight, index, highlights.length, focusStart, focusLength]);
+    if (focusStart !== undefined)
+      document.getElementById("focused-passage")?.scrollIntoView({ block: "center" });
+    else if (missingPassage) passageNotice.current?.scrollIntoView({ block: "nearest" });
+  }, [index, focusStart, focusLength, missingPassage]);
 
   function clearSelection() {
     setSelection(null);
@@ -264,6 +261,7 @@ export function StudyReader({
     setSelection({
       text: raw.trim().slice(0, 3000),
       offset: prefix.toString().length + raw.length - raw.trimStart().length,
+      revision,
     });
   }
 
@@ -278,7 +276,7 @@ export function StudyReader({
     setCardFront(null);
     setResult(null);
     pendingAssist.current?.abort();
-    setSelection(selected);
+    setSelection({ ...selected, revision });
   }
 
   function sourceOf(selected?: Selection | null): StudyOrigin {
@@ -289,6 +287,7 @@ export function StudyReader({
           section: index,
           offset: selected.offset,
           length: selected.text.length,
+          revision: selected.revision,
         }
       : { kind: "book", bookId: book.id, section: index };
   }
@@ -356,7 +355,7 @@ export function StudyReader({
       bookmarkPlaces.some(
         (place) =>
           place.section === index &&
-          place.offset === selected.offset &&
+          locateStudyMark(book, place) === selected.offset &&
           place.quote === selected.text,
       )
     ) {
@@ -371,6 +370,7 @@ export function StudyReader({
           section: index,
           offset: selected.offset,
           quote: selected.text,
+          revision: selected.revision,
         },
       ],
     })
@@ -410,20 +410,22 @@ export function StudyReader({
       .catch((error: Error) => toast.error(error.message));
   }
 
-  const query = search.trim().toLowerCase();
-  const searchResults = query
+  const query = search.trim();
+  const pattern = query ? new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "iu") : null;
+  const searchResults = pattern
     ? book.sections
         .flatMap((chapter, page) => {
-          const offset = chapter.text.toLowerCase().indexOf(query);
-          return offset < 0
+          const match = pattern.exec(chapter.text);
+          return !match
             ? []
             : [
                 {
                   page,
-                  offset,
+                  offset: match.index,
+                  length: match[0].length,
                   title: chapter.title,
                   teaser: chapter.text
-                    .slice(Math.max(0, offset - 32), offset + query.length + 64)
+                    .slice(Math.max(0, match.index - 32), match.index + match[0].length + 64)
                     .trim(),
                 },
               ];
@@ -557,8 +559,9 @@ export function StudyReader({
                 {book.sections[at]?.title ?? at + 1}
               </button>
             ))}
-            {bookmarkPlaces.map(({ id, section, quote, offset }) => {
-              const at = locateStudyQuote(book.sections[section]?.text ?? "", quote, offset);
+            {bookmarkPlaces.map((place) => {
+              const { id, section, quote, offset } = place;
+              const at = locateStudyMark(book, place);
               return (
                 <div key={id} className="flex items-center gap-1 rounded-md bg-muted ps-2">
                   <Link
@@ -567,7 +570,9 @@ export function StudyReader({
                       kind: "book",
                       bookId: book.id,
                       section,
-                      ...(at === -1 ? {} : { offset: at, length: quote.length }),
+                      offset: at < 0 ? offset : at,
+                      length: quote.length,
+                      revision: at < 0 ? place.revision : revision,
                     })}
                     state={returnState}
                   >
@@ -590,17 +595,30 @@ export function StudyReader({
             })}
           </div>
         ) : null}
+        {missingPassage ? (
+          <p role="status" ref={passageNotice} className="text-sm text-muted-foreground">
+            {t("study.reader.passageChanged")}{" "}
+            <button
+              type="button"
+              className="cursor-pointer underline underline-offset-4"
+              onClick={() => searchInput.current?.focus()}
+            >
+              {t("study.reader.search")}
+            </button>
+          </p>
+        ) : null}
         <Input
+          ref={searchInput}
           type="search"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search this document"
-          aria-label="Search this document"
+          placeholder={t("study.reader.search")}
+          aria-label={t("study.reader.search")}
         />
         {query ? (
           searchResults.length ? (
             <ul className="max-h-44 space-y-1 overflow-auto text-sm">
-              {searchResults.map(({ page, offset, title, teaser }) => (
+              {searchResults.map(({ page, offset, length, title, teaser }) => (
                 <li key={page}>
                   <button
                     type="button"
@@ -609,7 +627,7 @@ export function StudyReader({
                       clearSelection();
                       setEdit(null);
                       setSearch("");
-                      openPassage(page, { offset, length: query.length });
+                      openPassage(page, { offset, length });
                     }}
                   >
                     <span className="block font-medium">{title}</span>
@@ -643,7 +661,11 @@ export function StudyReader({
       </div>
       {book.format === "text" && !book.attachedToNotebook ? (
         edit === null ? (
-          <Button variant="outline" size="sm" onClick={() => setEdit(section.text)}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setEdit({ original: section.text, text: section.text })}
+          >
             Edit text
           </Button>
         ) : (
@@ -651,23 +673,41 @@ export function StudyReader({
             className="space-y-2"
             onSubmit={(event) => {
               event.preventDefault();
-              void saveStudyText(book.id, edit)
-                .then(() => setEdit(null))
-                .catch((error: Error) => toast.error(error.message));
+              if (!edit.text.trim() || savingText) return;
+              setSavingText(true);
+              void saveStudyText(book.id, edit.text, { section: index, original: edit.original })
+                .then(() => {
+                  clearSelection();
+                  setEdit(null);
+                })
+                .catch((error: Error) =>
+                  toast.error(
+                    error instanceof StudyTextConflict
+                      ? t("study.reader.editConflict")
+                      : error.message,
+                  ),
+                )
+                .finally(() => setSavingText(false));
             }}
           >
             <textarea
               aria-label="Edit document text"
               className="min-h-40 w-full rounded-xl border bg-background p-3"
               dir="auto"
-              value={edit}
-              onChange={(event) => setEdit(event.target.value)}
+              disabled={savingText}
+              value={edit.text}
+              onChange={(event) => setEdit({ ...edit, text: event.target.value })}
             />
             <div className="flex gap-2">
-              <Button type="submit" disabled={!edit.trim()}>
+              <Button type="submit" disabled={!edit.text.trim() || savingText}>
                 Save changes
               </Button>
-              <Button variant="ghost" onClick={() => setEdit(null)}>
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={savingText}
+                onClick={() => setEdit(null)}
+              >
                 Cancel
               </Button>
             </div>
@@ -773,6 +813,7 @@ export function StudyReader({
                   section: index,
                   quote: selection.text,
                   offset: selection.offset,
+                  revision: selection.revision,
                   color,
                   note: "",
                   updatedAt: Date.now(),

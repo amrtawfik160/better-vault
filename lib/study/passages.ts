@@ -1,7 +1,7 @@
 import type { Note, Source } from "@/lib/db/types";
 import { selectPassages } from "@/lib/grounding/passages";
-import { locateStudyQuote } from "./locators";
 import type { StudyBook, StudyOrigin, StudyThread } from "./records";
+import { locateStudyMark, studyTextRevision } from "./text-edits";
 
 export type StudyPassage = {
   origin: StudyOrigin;
@@ -16,6 +16,21 @@ const filler = new Set(
     " ",
   ),
 );
+
+export function tutorBookOrigin(
+  thread: StudyThread,
+  book: StudyBook,
+): Extract<StudyOrigin, { kind: "book" }> & { section: number } {
+  const section = Math.min(thread.section ?? book.section, book.sections.length - 1);
+  const origin = { kind: "book" as const, bookId: book.id, section };
+  if (thread.scope !== "passage" || !thread.quote) return origin;
+  const length = thread.quote.length;
+  if (thread.offset !== undefined)
+    return { ...origin, offset: thread.offset, length, revision: thread.revision };
+  const revision = studyTextRevision(book);
+  const offset = locateStudyMark(book, { section, quote: thread.quote, offset: 0, revision });
+  return offset < 0 ? origin : { ...origin, offset, length, revision };
+}
 
 function topicTerms(text: string) {
   return [...new Set(text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [])]
@@ -88,25 +103,19 @@ export function passagesFor(
     );
   }
   if (thread.scope === "general" || !book) return [];
-  const position = Math.min(thread.section ?? book.section, book.sections.length - 1);
+  const origin = tutorBookOrigin(thread, book);
+  const { section: position } = origin;
   if (thread.scope === "passage" && thread.quote) {
-    const section = book.sections[position];
-    const offset = locateStudyQuote(section.text, thread.quote, thread.offset);
     return [
       {
-        origin: {
-          kind: "book",
-          bookId: book.id,
-          section: position,
-          ...(offset >= 0 ? { offset, length: thread.quote.length } : {}),
-        },
-        title: section.title,
+        origin,
+        title: book.sections[position].title,
         text: thread.quote,
       },
     ];
   }
   const sections = book.sections.map((section, index): StudyPassage => ({
-    origin: { kind: "book", bookId: book.id, section: index },
+    origin: { kind: "book", bookId: book.id, section: index, revision: studyTextRevision(book) },
     title: section.title,
     text: section.text,
   }));
