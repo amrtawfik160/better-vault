@@ -13,6 +13,11 @@ export function studyHref(tab: string, params: Record<string, string | number | 
   return withQuery(routes.home, { view: "study", tab, ...params });
 }
 
+export function isFocusedStudyReader(params: URLSearchParams) {
+  return params.get("view") === "study" && params.get("tab") === "library" &&
+    Boolean(params.get("book")) && params.get("readerFocus") === "1";
+}
+
 export function isStudyHref(href: string) {
   const [path, query] = href.split("#")[0].split("?", 2);
   return (
@@ -34,9 +39,12 @@ export function studyHighlightOrigin({ id, bookId, section }: StudyRecordOf<"hig
   return { kind: "book" as const, bookId, section, highlightId: id };
 }
 
-export function originHref(origin: StudyOrigin) {
+export function originHref(origin: StudyOrigin, reader?: URLSearchParams) {
   switch (origin.kind) {
-    case "book":
+    case "book": {
+      const sameReader = reader?.get("view") === "study" && reader.get("tab") === "library" &&
+        reader.get("book") === origin.bookId;
+      const readerTutor = sameReader ? (reader.get("readerTutor") ?? undefined) : undefined;
       return studyHref("library", {
         book: origin.bookId,
         page: origin.section,
@@ -47,7 +55,13 @@ export function originHref(origin: StudyOrigin) {
         figure: origin.visual?.kind === "epub" ? origin.visual.figure : undefined,
         pageTop: origin.visual?.kind === "pdf" ? origin.visual.top : undefined,
         reference: origin.section === undefined ? undefined : "1",
+        readerFocus: sameReader && isFocusedStudyReader(reader) ? "1" : undefined,
+        readerTutor,
+        readerView: readerTutor ? "book" : undefined,
+        notebook: sameReader ? (reader.get("notebook") ?? undefined) : undefined,
+        vault: sameReader ? (reader.get("vault") ?? undefined) : undefined,
       });
+    }
     case "note":
       return withQuery(routes.home, {
         view: "notes",

@@ -4,13 +4,14 @@ import type { StudyBook, StudyReadingPlace } from "@/lib/study/records";
 import { locateStudyMark } from "@/lib/study/text-edits";
 import { canonicalRenderedRange, renderedStudyRange } from "./study-rendered-text";
 
-function readingInset(view: HTMLElement) {
+function readingInset(view: HTMLElement, aligning = false) {
   const inset = Math.min(48, view.clientHeight / 8);
-  const search = view.querySelector("[data-study-document-search]")?.getBoundingClientRect();
-  if (!search) return inset;
+  const toolbar = view.querySelector("[data-study-reader-toolbar]")?.getBoundingClientRect();
+  if (!toolbar) return inset;
+  if (aligning) return Math.max(inset, toolbar.height + 8);
   const top = view.getBoundingClientRect().top;
-  return search.top <= top + inset && search.bottom > top + inset
-    ? search.bottom - top + 8
+  return toolbar.top <= top + inset && toolbar.bottom > top + inset
+    ? toolbar.bottom - top + 8
     : inset;
 }
 
@@ -119,7 +120,7 @@ function restorePlace(
   const bounds = root.getBoundingClientRect();
   const top = line?.top ?? bounds.top + bounds.height * place.progress;
   viewport.scrollBy({
-    top: top - viewport.getBoundingClientRect().top - readingInset(viewport),
+    top: top - viewport.getBoundingClientRect().top - readingInset(viewport, true),
     behavior: "instant",
   });
 }

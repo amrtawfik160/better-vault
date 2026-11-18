@@ -339,6 +339,12 @@
       }
     },
     "reader": {
+      "controls": "Reading controls",
+      "previous": "Previous",
+      "next": "Next",
+      "position": "Reading position",
+      "fullscreen": "Full-screen reader",
+      "exitFullscreen": "Exit full-screen reader",
       "resume": "Resume reading",
       "editConflict": "This document changed while you were editing it. Copy your draft, then reopen the editor to see the latest text.",
       "passageChanged": "This link no longer points to an exact passage.",

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { ArrowLeft01Icon, ArrowRight01Icon, FullScreenIcon, MinimizeScreenIcon } from "@hugeicons/core-free-icons";
 import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -9,6 +10,7 @@ import { highlightColors } from "./study-highlight-colors";
 import { flashcardMaterialLimit, flashcardPassageSize } from "@/lib/study/ai";
 import { flashcardDraftRanges } from "@/lib/study/flashcard-material";
 import { directionalInline, DirectionalText } from "@/components/common/directional-text";
+import { Icon } from "@/components/icon";
 import { Button } from "@/components/panelui/button";
 import { StudyEpubChapter, type StudyEpubTheme } from "./study-epub-chapter";
 import { StudyPdfPage } from "./study-pdf-page";
@@ -136,6 +138,8 @@ export function StudyReader({
   startImageChat,
   openingTutor,
   layoutCheckpoint,
+  focused,
+  toggleFocus,
   back,
 }: {
   book: StudyBook;
@@ -160,6 +164,8 @@ export function StudyReader({
   startImageChat: (section: number, capture: StudyImageCapture) => void;
   openingTutor: boolean;
   layoutCheckpoint: RefObject<(() => void) | null>;
+  focused: boolean;
+  toggleFocus: () => void;
   back: () => void;
 }) {
   const [openedSection] = useState(book.section);
@@ -177,8 +183,10 @@ export function StudyReader({
   const navigate = useNavigate();
   const location = useLocation();
   const returnState = studyReturnState(location.state);
+  const readerParams = new URLSearchParams(location.search);
   const visitingPassage = reference || !!(focusedHighlight || focusedRange || focusedVisual);
   const { t } = useTranslation("home");
+  const focusLabel = t(focused ? "study.reader.exitFullscreen" : "study.reader.fullscreen");
   const source = useSource(book.sourceId);
   const fileId = source === null ? undefined : book.fileId;
   const hasPageText = Boolean(section.text.trim());
@@ -720,14 +728,28 @@ export function StudyReader({
       {source === null ? (
         <p className="text-sm text-muted-foreground">{t("study.capture.sourceRemoved")}</p>
       ) : null}
-      <div className="grid gap-3 rounded-2xl border p-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <Button size="sm" variant="outline" disabled={index === 0} onClick={() => go(index - 1)}>
-            Previous
+      <div
+        data-study-reader-toolbar
+        data-window-bar={focused ? "" : undefined}
+        className="sticky top-0 z-20 space-y-1.5 rounded-2xl border bg-card p-2"
+        role="region"
+        aria-label={t("study.reader.controls")}
+      >
+        {focused ? <p className="truncate px-2 text-sm font-medium" dir="auto">{book.title}</p> : null}
+        <div className="flex items-center gap-1.5">
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label={t("study.reader.previous")}
+            title={t("study.reader.previous")}
+            disabled={index === 0}
+            onClick={() => go(index - 1)}
+          >
+            <Icon icon={ArrowLeft01Icon} size={16} className="rtl:rotate-180" />
           </Button>
           <select
-            className="min-w-0 flex-1 rounded-lg border bg-background p-2 text-sm"
-            aria-label="Reading position"
+            className="h-8 min-w-0 flex-1 rounded-lg border bg-background px-2 text-sm sm:max-w-md"
+            aria-label={t("study.reader.position")}
             value={index}
             onChange={(event) => go(Number(event.target.value))}
           >
@@ -738,13 +760,39 @@ export function StudyReader({
             ))}
           </select>
           <Button
-            size="sm"
-            variant="outline"
+            size="icon-sm"
+            variant="ghost"
+            aria-label={t("study.reader.next")}
+            title={t("study.reader.next")}
             disabled={index === book.sections.length - 1}
             onClick={() => go(index + 1)}
           >
-            Next
+            <Icon icon={ArrowRight01Icon} size={16} className="rtl:rotate-180" />
           </Button>
+          <Button size="icon-sm" variant="ghost" aria-label={focusLabel} title={focusLabel} onClick={toggleFocus} className="ms-auto">
+            <Icon icon={focused ? MinimizeScreenIcon : FullScreenIcon} size={17} />
+          </Button>
+        </div>
+        {hasBookText ? (
+          <StudyDocumentSearch
+            input={searchInput}
+            sections={book.sections}
+            active={focus && { section: index, ...focus }}
+            open={({ section, offset, length }) => {
+              clearSelection();
+              setVisualCard(undefined);
+              setEditingSection(undefined);
+              setResult(null);
+              openPassage(section, { offset, length });
+            }}
+            study={({ offset, length }) => {
+              selectPassage({ text: section.text.slice(offset, offset + length), offset });
+            }}
+          />
+        ) : null}
+      </div>
+      <div className="grid gap-3 rounded-2xl border p-4">
+        <div className="flex flex-wrap items-center gap-2">
           <Button
             size="sm"
             variant="outline"
@@ -796,7 +844,7 @@ export function StudyReader({
                       offset: at < 0 ? offset : at,
                       length: quote.length,
                       revision: at < 0 ? place.revision : revision,
-                    })}
+                    }, readerParams)}
                     state={returnState}
                   >
                     {quote}
@@ -854,23 +902,6 @@ export function StudyReader({
           </div>
         ) : null}
       </div>
-      {hasBookText ? (
-        <StudyDocumentSearch
-          input={searchInput}
-          sections={book.sections}
-          active={focus && { section: index, ...focus }}
-          open={({ section, offset, length }) => {
-            clearSelection();
-            setVisualCard(undefined);
-            setEditingSection(undefined);
-            setResult(null);
-            openPassage(section, { offset, length });
-          }}
-          study={({ offset, length }) => {
-            selectPassage({ text: section.text.slice(offset, offset + length), offset });
-          }}
-        />
-      ) : null}
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="outline" disabled={openingTutor || !hasPageText} onClick={() => startChat("chapter", index)}>
           Discuss this {book.format === "pdf" ? "page" : "chapter"}

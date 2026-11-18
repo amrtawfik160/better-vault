@@ -21,11 +21,8 @@ export function StudyOriginLink({
   const location = useLocation();
   const params = new URLSearchParams(location.search);
   const readerTutor = params.get("readerTutor");
-  const href = originHref(origin);
+  const href = originHref(origin, params);
   const sameReader = readerTutor && origin.kind === "book" && origin.bookId === params.get("book");
-  const destination = sameReader
-    ? `${href}&${new URLSearchParams({ readerTutor, readerView: "book" })}`
-    : href;
   const current = state ?? location.state;
   const returnState =
     tutorFocus && !sameReader
@@ -39,7 +36,7 @@ export function StudyOriginLink({
         : returnState;
   return (
     <Link
-      to={destination}
+      to={href}
       state={sourceState}
       onClick={onClick}
       className="inline-flex rounded-lg px-2 py-1 text-sm text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring"

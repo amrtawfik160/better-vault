@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { StudyOriginLink } from "./study-origin-link";
 import { StudyFollowUps } from "./study-follow-ups";
 import { StudyActivity } from "./study-activity";
-import { originHref, queryIndex, studyHighlightOrigin, studyHref } from "@/lib/study/links";
+import { isFocusedStudyReader, originHref, queryIndex, studyHighlightOrigin, studyHref } from "@/lib/study/links";
 import { tutorBookOrigin } from "@/lib/study/passages";
 import { captureStudyImage, type StudyImageCapture } from "@/lib/study/visual-card";
 import { difficultStudyItems, studyHighlightPreview } from "@/lib/study/recall";
@@ -24,6 +24,7 @@ import {
 import { studyReturnState } from "@/lib/study/return-links";
 import { studyVaultIndex } from "@/lib/study/vault";
 import { studyTextRevision } from "@/lib/study/text-edits";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/panelui/button";
 import { Card } from "@/components/panelui/card";
 import { Tabs } from "@/components/panelui/tabs";
@@ -55,6 +56,7 @@ import { CardLibrary, HighlightsLibrary, StudyReview } from "./study-review";
 import { VocabularyLibrary } from "./study-vocabulary";
 import { StudyTutor, TutorIndex } from "./study-tutor";
 import { useStudyClock } from "./use-study-clock";
+import { useStudyReaderFullscreen } from "./use-study-reader-fullscreen";
 
 const tabs = ["today", "library", "cards", "review", "highlights", "vocabulary", "tutor"] as const;
 type Tab = (typeof tabs)[number];
@@ -423,6 +425,8 @@ export default function StudyWorkspace({
   const location = useLocation();
   const [readerViewport, setReaderViewport] = useState<HTMLDivElement | null>(null);
   const [params, setParams] = useSearchParams();
+  const focusedReader = isFocusedStudyReader(params);
+  const enterFullscreen = useStudyReaderFullscreen(focusedReader, () => changeReaderFocus(false));
   const [settings, setSettings] = useState(false);
   const [openingPractice, setOpeningPractice] = useState(false);
   const [openingReaderTutor, setOpeningReaderTutor] = useState(false);
@@ -553,13 +557,14 @@ export default function StudyWorkspace({
     : highlights;
   const bookFilter = book ? { book: book.id } : undefined;
   const libraryScope = notebookId ? { notebook: notebookId } : undefined;
-  const readerScope = readerThreadId
-    ? {
-        ...libraryScope,
-        readerTutor: readerThreadId,
-        ...(readingWithoutPane ? { readerView: "book" } : {}),
-      }
-    : libraryScope;
+  const readerScope = {
+    ...libraryScope,
+    ...(readerThreadId ? {
+      readerTutor: readerThreadId,
+      ...(readingWithoutPane ? { readerView: "book" } : {}),
+    } : {}),
+    ...(focusedReader ? { readerFocus: "1" } : {}),
+  };
   const locate = (bookId: string, section: number) =>
     go("library", { ...readerScope, book: bookId, page: String(section) });
 
@@ -586,6 +591,17 @@ export default function StudyWorkspace({
             : studyReturnState(location.state),
       },
     );
+  }
+  function changeReaderFocus(next: boolean) {
+    if (next === focusedReader) return;
+    readerCheckpoint.current?.();
+    setParams((current) => {
+      const query = new URLSearchParams(current);
+      if (next) query.set("readerFocus", "1");
+      else query.delete("readerFocus");
+      return query;
+    }, { replace: true, state: studyReturnState(location.state) });
+    if (next) enterFullscreen();
   }
   function read(what: StudyBook) {
     go("library", { ...libraryScope, book: what.id });
@@ -813,6 +829,8 @@ export default function StudyWorkspace({
             startImageChat={(section, capture) => void discussImage(book, section, capture)}
             openingTutor={openingReaderTutor}
             layoutCheckpoint={readerCheckpoint}
+            focused={focusedReader}
+            toggleFocus={() => changeReaderFocus(!focusedReader)}
           />
         ) : (
           <StudyLibrary
@@ -969,9 +987,20 @@ export default function StudyWorkspace({
         if (selected) go(selected);
       }}
       variant="underline"
-      className="h-full min-h-0 gap-0 overflow-hidden rounded-3xl bg-card ring-1 ring-border"
+      onKeyDown={(event) => {
+        if (focusedReader && event.key === "Escape" && !event.defaultPrevented &&
+            event.target instanceof HTMLElement && event.currentTarget.contains(event.target) &&
+            !event.target.closest("input, select, textarea, [contenteditable]")) {
+          event.preventDefault();
+          changeReaderFocus(false);
+        }
+      }}
+      className={cn(
+        "h-full min-h-0 gap-0 overflow-hidden bg-card",
+        !focusedReader && "rounded-3xl ring-1 ring-border",
+      )}
     >
-      <Tabs.List aria-label={t("study.sections")} className="shrink-0 px-2 sm:px-4">
+      <Tabs.List aria-label={t("study.sections")} className={cn("shrink-0 px-2 sm:px-4", focusedReader && !unavailableBook && "hidden")}>
         {tabs.map((entry) => (
           <Tabs.Trigger key={entry} value={entry}>
             {t(`study.tabs.${entry}`)}
@@ -983,7 +1012,7 @@ export default function StudyWorkspace({
           {entry === tab ? (
             <div className="relative flex min-h-0 flex-1">
               <div
-                className="flex min-h-0 min-w-0 flex-1 flex-col"
+                className="isolate flex min-h-0 min-w-0 flex-1 flex-col"
                 inert={tutorVisible && !sideBySide}
               >
                 {readerThread && !tutorVisible ? (
@@ -1010,7 +1039,7 @@ export default function StudyWorkspace({
                   ref={tutorPane}
                   tabIndex={-1}
                   aria-label={t("study.reader.tutorPane")}
-                  className={`absolute inset-0 min-h-0 min-w-0 flex-col bg-card outline-none lg:relative lg:inset-auto lg:w-[min(46%,36rem)] lg:shrink-0 lg:border-s ${tutorVisible ? "flex" : "hidden"}`}
+                  className={`absolute inset-0 z-10 min-h-0 min-w-0 flex-col bg-card outline-none lg:relative lg:inset-auto lg:w-[min(46%,36rem)] lg:shrink-0 lg:border-s ${tutorVisible ? "flex" : "hidden"}`}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
                     <Button

@@ -52,7 +52,7 @@ export function StudyDocumentSearch({
   }
 
   return (
-    <div data-study-document-search className="sticky top-0 z-20 rounded-2xl border bg-card p-2">
+    <div className="relative">
       <div className="flex flex-wrap items-center gap-1.5">
         <Input
           ref={input}

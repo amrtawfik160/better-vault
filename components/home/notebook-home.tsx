@@ -56,6 +56,7 @@ import { shortcutKeys } from "@/lib/platform";
 import { routes } from "@/lib/routes";
 import { ACCEPTED_FILES, IngestError, ingestFile } from "@/lib/sources/ingest";
 import { sourceHasText } from "@/lib/db/source-text";
+import { isFocusedStudyReader } from "@/lib/study/links";
 import { cn } from "@/lib/utils";
 import { FolderDialog } from "./folder-dialogs";
 import {
@@ -146,6 +147,7 @@ export function NotebookHome() {
       ? viewParam
       : "all";
   const studying = section === "study";
+  const focusedReader = isFocusedStudyReader(params);
   // The calendar, bot, notes and skills supply their own desktop toolbar.
   const fullPage =
     section === "calendar" || section === "bot" || section === "notes" || section === "skills";
@@ -323,7 +325,7 @@ export function NotebookHome() {
         if (files.length > 0) setCreating({ files });
       }}
     >
-      {vaults && vault ? (
+      {!focusedReader && vaults && vault ? (
         <VaultSidebar
           vaults={vaults}
           vault={vault}
@@ -342,6 +344,7 @@ export function NotebookHome() {
           className={cn(
             "flex h-16 shrink-0 items-center gap-3 px-4 sm:px-6",
             fullPage && "md:hidden",
+            focusedReader && "hidden",
           )}
         >
           <div className="flex items-center gap-2 md:hidden">
@@ -474,7 +477,7 @@ export function NotebookHome() {
         <StudyReturnLinks className="shrink-0 px-3 sm:px-5" />
 
         {panelPage ? (
-          <main className="min-h-0 flex-1 px-2 pb-2 md:p-2 md:ps-2">
+          <main className={cn("min-h-0 flex-1", !focusedReader && "px-2 pb-2 md:p-2 md:ps-2")}>
             <Suspense
               fallback={
                 <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
