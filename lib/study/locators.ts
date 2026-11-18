@@ -8,6 +8,26 @@ export function locateStudyQuote(text: string, quote: string, previousOffset = 0
   return previousOffset - before <= after - previousOffset ? before : after;
 }
 
+export type StudySearchMatch = { section: number; offset: number; length: number };
+
+/** Searches the reader's canonical text while keeping offsets into the unmodified section. */
+export function searchStudyDocument(
+  sections: readonly { text: string }[],
+  query: string,
+): StudySearchMatch[] {
+  const phrase = query.trim();
+  if (!phrase) return [];
+  const literal = phrase.split(/\s+/).map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const pattern = new RegExp(literal.join("\\s+"), "giu");
+  return sections.flatMap(({ text }, section) =>
+    Array.from(text.matchAll(pattern), (match) => ({
+      section,
+      offset: match.index,
+      length: match[0].length,
+    })),
+  );
+}
+
 const compact = (text: string) => text.trim().replace(/\s+/g, " ");
 
 export function locateCitedChunk<T extends { id: string; text: string }>(

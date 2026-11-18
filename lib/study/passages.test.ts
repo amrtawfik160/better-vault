@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { passagesFor } from "./passages";
-import { findStudyExcerpt } from "./locators";
+import { findStudyExcerpt, searchStudyDocument } from "./locators";
 import { originHref } from "./links";
 import type { StudyBook, StudyRecordOf, StudyThread } from "./records";
 import { freshSchedule } from "./schedule";
@@ -379,6 +379,24 @@ describe("Tutor grounding", () => {
     expect(url?.searchParams.get("source")).toBe("method");
     expect(url?.searchParams.get("passage")).toBe("method:17");
     expect(passages.some(({ text }) => /ALREADY IN STUDY|NOT SELECTED/.test(text))).toBe(false);
+  });
+});
+
+describe("search inside a study document", () => {
+  it("returns every occurrence in reading order with exact offsets across whitespace", () => {
+    const sections = [
+      { text: "Before: C++   fold. C++\r\nFOLD. After." },
+      { text: "This C++ fold is another example. C fold is different." },
+    ];
+    const matches = searchStudyDocument(sections, "  c++ fold  ");
+    expect(matches).toEqual([
+      { section: 0, offset: 8, length: 10 },
+      { section: 0, offset: 20, length: 9 },
+      { section: 1, offset: 5, length: 8 },
+    ]);
+    expect(matches.map(({ section, offset, length }) => sections[section].text.slice(offset, offset + length)))
+      .toEqual(["C++   fold", "C++\r\nFOLD", "C++ fold"]);
+    expect(searchStudyDocument(sections, "   ")).toEqual([]);
   });
 });
 

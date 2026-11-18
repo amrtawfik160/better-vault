@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { StudyMarkdown, StudyText } from "./study-text";
 import { StudyDocumentEdits } from "./study-document-edits";
+import { StudyDocumentSearch } from "./study-document-search";
 import { highlightColors } from "./study-highlight-colors";
 import { flashcardMaterialLimit, flashcardPassageSize } from "@/lib/study/ai";
 import { flashcardDraftRanges } from "@/lib/study/flashcard-material";
@@ -205,7 +206,6 @@ export function StudyReader({
   const [language, setLanguage] = useState("");
   const [translating, setTranslating] = useState(false);
   const [color, setColor] = useState<StudyHighlightColor>("yellow");
-  const [search, setSearch] = useState("");
   const [editingSection, setEditingSection] = useState<number>();
   const [font, setFont] = useState(18);
   const [zoom, setZoom] = useState(100);
@@ -406,7 +406,6 @@ export function StudyReader({
     setVisualCard(undefined);
     setEditingSection(undefined);
     setResult(null);
-    setSearch("");
     openPage(page);
   }
 
@@ -447,6 +446,14 @@ export function StudyReader({
     }
   }
 
+  function selectPassage(selected: Omit<Selection, "revision">) {
+    latestInteraction.current = Date.now();
+    setCardFront(null);
+    setResult(null);
+    pendingAssist.current?.abort();
+    setSelection({ ...selected, revision });
+  }
+
   function capture() {
     if (waitingMath || !hasPageText) return;
     latestInteraction.current = Date.now();
@@ -463,13 +470,9 @@ export function StudyReader({
     prefix.setEnd(range.startContainer, range.startOffset);
     const raw = range.toString();
     if (!raw.trim()) return;
-    setCardFront(null);
-    setResult(null);
-    pendingAssist.current?.abort();
-    setSelection({
+    selectPassage({
       text: raw.trim().slice(0, 3000),
       offset: prefix.toString().length + raw.length - raw.trimStart().length,
-      revision,
     });
   }
 
@@ -481,11 +484,7 @@ export function StudyReader({
       toast.error("Select this passage in the extracted text below to use it in Study.");
       return;
     }
-    latestInteraction.current = Date.now();
-    setCardFront(null);
-    setResult(null);
-    pendingAssist.current?.abort();
-    setSelection({ ...selected, revision });
+    selectPassage(selected);
   }
 
   function sourceOf(selected?: Selection | null): Extract<StudyOrigin, { kind: "book" }> {
@@ -637,31 +636,23 @@ export function StudyReader({
       .catch((error: Error) => toast.error(error.message));
   }
 
-  const query = search.trim();
-  const pattern = query ? new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "iu") : null;
-  const searchResults = pattern
-    ? book.sections
-        .flatMap((chapter, page) => {
-          const match = pattern.exec(chapter.text);
-          return !match
-            ? []
-            : [
-                {
-                  page,
-                  offset: match.index,
-                  length: match[0].length,
-                  title: chapter.title,
-                  teaser: chapter.text
-                    .slice(Math.max(0, match.index - 32), match.index + match[0].length + 64)
-                    .trim(),
-                },
-              ];
-        })
-        .slice(0, 15)
-    : [];
-
   return (
-    <section className="space-y-5">
+    <section
+      className="space-y-5"
+      onKeyDown={(event) => {
+        if (
+          searchInput.current &&
+          event.key.toLowerCase() === "f" &&
+          (event.metaKey || event.ctrlKey) &&
+          !event.altKey && !event.shiftKey &&
+          event.target instanceof Node && event.currentTarget.contains(event.target)
+        ) {
+          event.preventDefault();
+          searchInput.current.select();
+          searchInput.current.focus();
+        }
+      }}
+    >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <Button size="sm" variant="ghost" onClick={back}>
@@ -862,47 +853,24 @@ export function StudyReader({
             ) : null}
           </div>
         ) : null}
-        {hasBookText ? (
-          <Input
-            ref={searchInput}
-            type="search"
-            value={search}
-            dir={textDirection(search)}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder={t("study.reader.search")}
-            aria-label={t("study.reader.search")}
-          />
-        ) : null}
-        {query && hasBookText ? (
-          searchResults.length ? (
-            <ul className="max-h-44 space-y-1 overflow-auto text-sm">
-              {searchResults.map(({ page, offset, length, title, teaser }) => (
-                <li key={page}>
-                  <button
-                    type="button"
-                    className="w-full cursor-pointer rounded-lg p-2 text-start hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
-                    onClick={() => {
-                      clearSelection();
-                      setEditingSection(undefined);
-                      setSearch("");
-                      openPassage(page, { offset, length });
-                    }}
-                  >
-                    <span className="block font-medium">{title}</span>
-                    <DirectionalText
-                      as="span"
-                      text={teaser}
-                      className="line-clamp-2 text-muted-foreground"
-                    />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-muted-foreground">{t("study.capture.noMatches")}</p>
-          )
-        ) : null}
       </div>
+      {hasBookText ? (
+        <StudyDocumentSearch
+          input={searchInput}
+          sections={book.sections}
+          active={focus && { section: index, ...focus }}
+          open={({ section, offset, length }) => {
+            clearSelection();
+            setVisualCard(undefined);
+            setEditingSection(undefined);
+            setResult(null);
+            openPassage(section, { offset, length });
+          }}
+          study={({ offset, length }) => {
+            selectPassage({ text: section.text.slice(offset, offset + length), offset });
+          }}
+        />
+      ) : null}
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" variant="outline" disabled={openingTutor || !hasPageText} onClick={() => startChat("chapter", index)}>
           Discuss this {book.format === "pdf" ? "page" : "chapter"}

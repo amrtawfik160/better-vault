@@ -4,7 +4,15 @@ import type { StudyBook, StudyReadingPlace } from "@/lib/study/records";
 import { locateStudyMark } from "@/lib/study/text-edits";
 import { canonicalRenderedRange, renderedStudyRange } from "./study-rendered-text";
 
-const readingInset = (view: HTMLElement) => Math.min(48, view.clientHeight / 8);
+function readingInset(view: HTMLElement) {
+  const inset = Math.min(48, view.clientHeight / 8);
+  const search = view.querySelector("[data-study-document-search]")?.getBoundingClientRect();
+  if (!search) return inset;
+  const top = view.getBoundingClientRect().top;
+  return search.top <= top + inset && search.bottom > top + inset
+    ? search.bottom - top + 8
+    : inset;
+}
 
 function visibleText(root: HTMLElement, y: number) {
   const bounds = root.getBoundingClientRect();
