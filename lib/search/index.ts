@@ -2,16 +2,16 @@ import MiniSearch, { type SearchResult } from "minisearch";
 import { store } from "@/lib/db/store";
 import { listVaults } from "@/lib/db/vaults";
 import type { Folder, Notebook, Source, StudioOutput, Vault } from "@/lib/db/types";
+import { studySearchEntries, type StudySearchLink } from "./study";
 
 /**
  * One search index over everything in the app: vaults, folders, notebooks,
  * sources (by title), every passage of every source (the full text, PDFs
- * included) and Studio outputs (title and text). It lives in memory, is built
- * the first time the command palette opens and then follows changes: when
- * sources come and go only their passages are added or removed.
+ * included), Studio outputs, and saved Study material. It lives in memory
+ * and follows changes while the command palette is open.
  */
 
-export type HitKind = "vault" | "folder" | "notebook" | "source" | "passage" | "output";
+export type HitKind = "vault" | "folder" | "notebook" | "source" | "passage" | "output" | "study";
 
 interface Doc {
   id: string;
@@ -24,22 +24,26 @@ interface Doc {
   vaultId?: string;
   folderId?: string;
   outputId?: string;
+  study?: StudySearchLink;
 }
 
 export interface Hit extends Omit<Doc, "text"> {
   score: number;
-  /** Around the first match, for passages and outputs. */
+  /** Around the first match in the indexed body. */
   snippet?: string;
   /** The words that matched, to mark in the snippet. */
   terms: string[];
 }
 
+type CatalogueSource = Pick<Source, "id" | "notebookId" | "title" | "studyRevision">;
+
 export interface Catalogue {
   vaults: Vault[];
   folders: Folder[];
   notebooks: Notebook[];
-  sources: Pick<Source, "id" | "notebookId" | "title" | "kind">[];
+  sources: CatalogueSource[];
   outputs: StudioOutput[];
+  study: ReturnType<typeof studySearchEntries>;
 }
 
 const options = {
@@ -54,6 +58,7 @@ const options = {
     "vaultId",
     "folderId",
     "outputId",
+    "study",
   ],
   searchOptions: {
     boost: { title: 3 },
@@ -92,13 +97,18 @@ function snippetOf(text: string, terms: string[], size = 160): string {
 
 class SearchIndex {
   private mini = new MiniSearch<Doc>(options);
-  /** The ids of the documents that are not passages, replaced on every sync. */
-  private others = new Set<string>();
-  /** Each indexed source's passage ids. */
-  private passages = new Map<string, string[]>();
+  private others = new Map<string, Doc>();
+  private passages = new Map<
+    string,
+    { ids: string[]; title: string; revision?: number; vaultId?: string }
+  >();
   private queue: Promise<void> = Promise.resolve();
   private listeners = new Set<() => void>();
-  ready = false;
+  private current?: Catalogue;
+
+  isCurrent(catalogue: Catalogue | null | undefined) {
+    return !!catalogue && this.current === catalogue;
+  }
 
   /** Brings the index in line with what is stored. Calls are queued, so they never overlap. */
   sync(catalogue: Catalogue): Promise<void> {
@@ -111,8 +121,7 @@ class SearchIndex {
   }
 
   private async apply(catalogue: Catalogue) {
-    for (const id of this.others) if (this.mini.has(id)) this.mini.discard(id);
-    this.others.clear();
+    this.current = undefined;
     const notebookVault = new Map(
       catalogue.notebooks.map((notebook) => [notebook.id, notebook.vaultId]),
     );
@@ -160,15 +169,37 @@ class SearchIndex {
           outputId: output.id,
           vaultId: notebookVault.get(output.notebookId),
         })),
+      ...catalogue.study,
     ];
-    this.mini.addAll(docs);
-    for (const doc of docs) this.others.add(doc.id);
+    const nextDocs = new Map(docs.map((doc) => [doc.id, doc]));
+    for (const id of this.others.keys()) {
+      if (!nextDocs.has(id)) this.mini.discard(id);
+    }
+    const changed = docs.filter((doc) => {
+      const previous = this.others.get(doc.id);
+      return (
+        previous?.title !== doc.title ||
+        previous.text !== doc.text ||
+        previous.vaultId !== doc.vaultId ||
+        previous.notebookId !== doc.notebookId ||
+        previous.study?.context !== doc.study?.context
+      );
+    });
+    for (const { id } of changed) if (this.mini.has(id)) this.mini.discard(id);
+    await this.mini.addAllAsync(changed);
+    this.others = nextDocs;
 
-    // Passages: only the sources that came or went.
-    const now = new Set(catalogue.sources.map((source) => source.id));
-    for (const [sourceId, ids] of this.passages) {
-      if (now.has(sourceId)) continue;
-      for (const id of ids) if (this.mini.has(id)) this.mini.discard(id);
+    const sources = new Map(catalogue.sources.map((source) => [source.id, source]));
+    for (const [sourceId, indexed] of this.passages) {
+      const source = sources.get(sourceId);
+      if (
+        source &&
+        source.title === indexed.title &&
+        source.studyRevision === indexed.revision &&
+        notebookVault.get(source.notebookId) === indexed.vaultId
+      )
+        continue;
+      for (const id of indexed.ids) if (this.mini.has(id)) this.mini.discard(id);
       this.passages.delete(sourceId);
     }
     const added = catalogue.sources.filter((source) => !this.passages.has(source.id));
@@ -187,13 +218,16 @@ class SearchIndex {
         vaultId: notebookVault.get(chunk.notebookId),
       }));
       await this.mini.addAllAsync(passageDocs, { chunkSize: 200 });
-      for (const source of batch)
-        this.passages.set(
-          source.id,
-          passageDocs.filter((doc) => doc.sourceId === source.id).map((doc) => doc.id),
-        );
+      for (const source of batch) {
+        this.passages.set(source.id, {
+          ids: passageDocs.filter((doc) => doc.sourceId === source.id).map((doc) => doc.id),
+          title: source.title,
+          revision: source.studyRevision,
+          vaultId: notebookVault.get(source.notebookId),
+        });
+      }
     }
-    this.ready = true;
+    this.current = catalogue;
     for (const listener of this.listeners) listener();
   }
 
@@ -211,10 +245,15 @@ class SearchIndex {
       hits.push({
         ...doc,
         id: result.id as string,
+        title:
+          result.kind === "study" && result.title.length > 160
+            ? snippetOf(result.title, result.terms)
+            : result.title,
         score: result.score,
         terms: result.terms,
         snippet:
-          result.kind === "passage" || (result.kind === "output" && text)
+          result.kind === "passage" ||
+          ((result.kind === "output" || result.kind === "study") && text.trim())
             ? snippetOf(text, result.terms)
             : undefined,
       });
@@ -235,18 +274,26 @@ export const searchIndex = new SearchIndex();
 
 /** What the index is built from, read fresh. Source texts are left out: passages carry them. */
 export async function readCatalogue(): Promise<Catalogue> {
-  const [vaults, folders, notebooks, sources, outputs] = await Promise.all([
+  const [vaults, folders, notebooks, sources, outputs, rows, notes] = await Promise.all([
     listVaults(),
     store().listFolders(),
     store().listNotebooks(),
     store().listAllSources(),
     store().listAllOutputs(),
+    store().listStudy(),
+    store().listNotes(),
   ]);
   return {
     vaults,
     folders,
     notebooks,
-    sources: sources.map(({ id, notebookId, title, kind }) => ({ id, notebookId, title, kind })),
+    sources: sources.map(({ id, notebookId, title, studyRevision }) => ({
+      id,
+      notebookId,
+      title,
+      studyRevision,
+    })),
     outputs,
+    study: studySearchEntries({ rows, notebooks, notes, vaults }),
   };
 }

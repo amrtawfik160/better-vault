@@ -59,11 +59,11 @@
   },
   "command": {
     "label": "Command menu",
-    "placeholder": "Search notebooks, sources, PDFs and settings…",
+    "placeholder": "Search notebooks, sources, Study, and settings…",
     "lead": "to open anywhere",
     "open": "Open",
     "empty": "Nothing matches “{{query}}”.",
-    "indexing": "Indexing your notebooks…",
+    "indexing": "Indexing your library…",
     "home": "Go to notebooks",
     "addSource": "Add a source to this notebook",
     "chat": "Open the chat",
@@ -71,6 +71,15 @@
     "studio": "Open the Studio",
     "theme": "Theme: {{theme}}",
     "vault": "Switch to {{name}}",
+    "study": {
+      "book": "Study document",
+      "card": "Flashcard",
+      "highlight": "Highlight",
+      "word": "Vocabulary",
+      "thread": "Tutor conversation",
+      "message": "Tutor message",
+      "report": "Session report"
+    },
     "groups": {
       "recent": "Recent notebooks",
       "actions": "Actions",

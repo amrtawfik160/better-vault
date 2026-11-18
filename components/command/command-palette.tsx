@@ -3,6 +3,7 @@ import {
   AiBrain02Icon,
   Book02Icon,
   BubbleChatIcon,
+  Cards01Icon,
   Calendar03Icon,
   CloudIcon,
   ComputerIcon,
@@ -76,7 +77,7 @@ function Marked({ text, terms }: { text: string; terms: string[] }) {
 
 /**
  * The command palette (⌘K, or Ctrl K on Windows and Linux): search every
- * notebook, source and output, including the text inside PDFs, and run
+ * notebook, source, Studio output, and saved Study item, and run
  * actions or open a settings page. Mounted once, around every page.
  */
 export function CommandPalette() {
@@ -87,30 +88,28 @@ export function CommandPalette() {
   const inNotebook = useMatch(routes.notebook(":id"));
   const notebookId = inNotebook?.params.id;
   const { setTheme } = useTheme();
-  const [open, setOpen] = useState(false);
-  const [started, setStarted] = useState(false);
+  const [opening, setOpening] = useState<symbol | null>(null);
   const [search, setSearch] = useState("");
   const [settingsPage, setSettingsPage] = useState<SettingsPage | null>(null);
   const [, setVersion] = useState(0);
   const keys = shortcutKeys("k");
 
-  /** Opens or closes it; the first opening starts the index, and closing clears the search. */
   const changeOpen = (next: boolean) => {
-    setOpen(next);
-    if (next) setStarted(true);
-    else setSearch("");
+    setOpening((current) => (next ? (current ?? Symbol()) : null));
+    if (!next) setSearch("");
   };
   useEffect(() => onOpenCommandPalette(() => changeOpen(true)), []);
   useEffect(() => searchIndex.subscribe(() => setVersion((n) => n + 1)), []);
 
-  const catalogue = useStoreQuery<Catalogue | null>(
-    async () => (started ? readCatalogue() : null),
-    [started],
-    ["vaults", "folders", "notebooks", "sources", "outputs"],
+  const result = useStoreQuery<{ opening: symbol; catalogue: Catalogue } | null>(
+    async () => (opening ? { opening, catalogue: await readCatalogue() } : null),
+    [opening],
+    ["vaults", "folders", "notebooks", "sources", "outputs", "study", "notes"],
   );
-  // The index is built on first opening and follows every change after.
+  // A live query can still hold results from the previous opening while it refreshes.
+  const catalogue = result && result.opening === opening ? result.catalogue : null;
   useEffect(() => {
-    if (catalogue) void searchIndex.sync(catalogue);
+    if (catalogue && !searchIndex.isCurrent(catalogue)) void searchIndex.sync(catalogue);
   }, [catalogue]);
   const notebookTitle = new Map(catalogue?.notebooks.map((nb) => [nb.id, nb.title]) ?? []);
   const vaultName = (id: string) => {
@@ -267,7 +266,8 @@ export function CommandPalette() {
   }));
 
   const query = search.trim();
-  const hits = query ? searchIndex.search(query) : [];
+  const ready = searchIndex.isCurrent(catalogue);
+  const hits = query && ready ? searchIndex.search(query) : [];
   const recent = [...(catalogue?.notebooks ?? [])]
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, 5);
@@ -284,6 +284,9 @@ export function CommandPalette() {
         );
       case "output":
         return go(`${routes.notebook(hit.notebookId!)}?output=${hit.outputId}`);
+      case "study":
+        if (hit.study) return go(hit.study.href);
+        return;
       case "folder":
         setCurrentVault(hit.vaultId ?? DEFAULT_VAULT);
         return go(`${routes.home}?folder=${hit.folderId}`);
@@ -309,11 +312,42 @@ export function CommandPalette() {
   const groups: { kind: Hit["kind"]; heading: string }[] = [
     { kind: "notebook", heading: t("command.groups.notebooks") },
     { kind: "source", heading: t("command.groups.sources") },
+    { kind: "study", heading: tHome("vaults.study") },
     { kind: "passage", heading: t("command.groups.passages") },
     { kind: "output", heading: t("command.groups.outputs") },
     { kind: "folder", heading: t("command.groups.folders") },
     { kind: "vault", heading: t("command.groups.vaults") },
   ];
+
+  const studyIcons = {
+    book: Book02Icon,
+    card: Cards01Icon,
+    highlight: QuoteDownIcon,
+    word: LanguageSkillIcon,
+    thread: BubbleChatIcon,
+    message: BubbleChatIcon,
+    report: Notebook01Icon,
+  };
+  const renderStudyHit = (hit: Hit, study: NonNullable<Hit["study"]>) => {
+    const kind = t(`command.study.${study.type}`);
+    const snippet = hit.snippet && <Marked text={hit.snippet} terms={hit.terms} />;
+    const location = [study.context, vaultName(hit.vaultId ?? DEFAULT_VAULT)]
+      .filter(Boolean)
+      .join(" · ");
+    return (
+      <Command.Item
+        key={hit.id}
+        value={hit.id}
+        icon={<Icon icon={studyIcons[study.type]} size={18} />}
+        subtitle={hit.title && snippet ? snippet : location}
+        kind={kind}
+        textValue={hit.title || hit.snippet || kind}
+        onSelect={() => openHit(hit)}
+      >
+        {hit.title ? <Marked text={hit.title} terms={hit.terms} /> : snippet || kind}
+      </Command.Item>
+    );
+  };
 
   const renderAction = (action: Action) => (
     <Command.Item
@@ -342,7 +376,7 @@ export function CommandPalette() {
   return (
     <>
       <Command.Dialog
-        open={open}
+        open={opening !== null}
         onOpenChange={changeOpen}
         hotkey="mod+k"
         label={t("command.label")}
@@ -356,35 +390,39 @@ export function CommandPalette() {
                 if (items.length === 0) return null;
                 return (
                   <Command.Group key={kind} heading={heading}>
-                    {items.map((hit) => (
-                      <Command.Item
-                        key={hit.id}
-                        value={hit.id}
-                        icon={<Icon icon={hitIcon(hit)} size={18} />}
-                        subtitle={
-                          hit.kind === "passage" || hit.kind === "vault"
-                            ? undefined
-                            : hit.snippet
-                              ? hit.snippet && <Marked text={hit.snippet} terms={hit.terms} />
-                              : hit.kind !== "notebook" && hit.notebookId
-                                ? notebookTitle.get(hit.notebookId)
-                                : vaultName(hit.vaultId ?? DEFAULT_VAULT)
-                        }
-                        kind={hit.kind === "passage" ? hit.title : undefined}
-                        textValue={hit.title}
-                        onSelect={() => openHit(hit)}
-                      >
-                        {hit.kind === "passage" && hit.snippet ? (
-                          <span className="font-normal">
-                            <Marked text={hit.snippet} terms={hit.terms} />
-                          </span>
-                        ) : hit.kind === "vault" ? (
-                          vaultName(hit.vaultId ?? DEFAULT_VAULT)
-                        ) : (
-                          hit.title
-                        )}
-                      </Command.Item>
-                    ))}
+                    {items.map((hit) =>
+                      hit.study ? (
+                        renderStudyHit(hit, hit.study)
+                      ) : (
+                        <Command.Item
+                          key={hit.id}
+                          value={hit.id}
+                          icon={<Icon icon={hitIcon(hit)} size={18} />}
+                          subtitle={
+                            hit.kind === "passage" || hit.kind === "vault"
+                              ? undefined
+                              : hit.snippet
+                                ? hit.snippet && <Marked text={hit.snippet} terms={hit.terms} />
+                                : hit.kind !== "notebook" && hit.notebookId
+                                  ? notebookTitle.get(hit.notebookId)
+                                  : vaultName(hit.vaultId ?? DEFAULT_VAULT)
+                          }
+                          kind={hit.kind === "passage" ? hit.title : undefined}
+                          textValue={hit.title}
+                          onSelect={() => openHit(hit)}
+                        >
+                          {hit.kind === "passage" && hit.snippet ? (
+                            <span className="font-normal">
+                              <Marked text={hit.snippet} terms={hit.terms} />
+                            </span>
+                          ) : hit.kind === "vault" ? (
+                            vaultName(hit.vaultId ?? DEFAULT_VAULT)
+                          ) : (
+                            hit.title
+                          )}
+                        </Command.Item>
+                      ),
+                    )}
                   </Command.Group>
                 );
               })
@@ -420,7 +458,7 @@ export function CommandPalette() {
             ) : null}
             {nothing ? (
               <Command.Empty>
-                {searchIndex.ready ? t("command.empty", { query }) : t("command.indexing")}
+                {ready ? t("command.empty", { query }) : t("command.indexing")}
               </Command.Empty>
             ) : null}
           </Command.List>
