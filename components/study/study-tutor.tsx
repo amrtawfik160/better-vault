@@ -410,6 +410,7 @@ export function StudyTutor({
   reportCards,
   focusMessage,
   back,
+  openBesideReader,
   setup,
 }: {
   thread: StudyThread;
@@ -424,7 +425,8 @@ export function StudyTutor({
   requestedReportId?: string;
   reportCards: StudyRecordOf<"card">[];
   focusMessage?: number;
-  back: () => void;
+  back?: () => void;
+  openBesideReader?: () => void;
   setup: () => void;
 }) {
   const { t, i18n } = useTranslation("home");
@@ -911,9 +913,7 @@ export function StudyTutor({
 
   return (
     <section className="max-w-4xl space-y-4">
-      <Button variant="ghost" size="sm" onClick={back}>
-        ← Conversations
-      </Button>
+      {back ? <Button variant="ghost" size="sm" onClick={back}>← Conversations</Button> : null}
       <div className="flex flex-wrap items-center justify-between gap-3">
         {renaming ? (
           <form
@@ -942,6 +942,11 @@ export function StudyTutor({
         )}
         <div className="flex flex-wrap gap-2">
           {book && <StudyOriginLink origin={tutorBookOrigin(thread, book)} />}
+          {openBesideReader ? (
+            <Button variant="outline" size="sm" onClick={openBesideReader}>
+              {t("study.reader.besideReader")}
+            </Button>
+          ) : null}
           {hasSavedAnswer ? (
             <Button
               variant="outline"

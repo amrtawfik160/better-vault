@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { StudyOriginLink } from "./study-origin-link";
 import { StudyFollowUps } from "./study-follow-ups";
-import { queryIndex, studyHref } from "@/lib/study/links";
+import { originHref, queryIndex, studyHref } from "@/lib/study/links";
+import { tutorBookOrigin } from "@/lib/study/passages";
 import { studyHighlightPreview, weakStudyCards } from "@/lib/study/recall";
 import { studyReportKey } from "@/lib/study/reports";
 import {
@@ -48,6 +49,14 @@ import { StudyTutor, TutorIndex } from "./study-tutor";
 
 const tabs = ["today", "library", "cards", "review", "highlights", "vocabulary", "tutor"] as const;
 type Tab = (typeof tabs)[number];
+
+const wideReaderQuery = "(min-width: 64rem)";
+const wideReader = () => window.matchMedia(wideReaderQuery).matches;
+function subscribeReaderWidth(listener: () => void) {
+  const query = window.matchMedia(wideReaderQuery);
+  query.addEventListener("change", listener);
+  return () => query.removeEventListener("change", listener);
+}
 
 function DailyStudy({
   rows,
@@ -402,9 +411,18 @@ export default function StudyWorkspace({
   const [params, setParams] = useSearchParams();
   const [settings, setSettings] = useState(false);
   const [openingPractice, setOpeningPractice] = useState(false);
+  const [openingReaderTutor, setOpeningReaderTutor] = useState(false);
+  const readerRequest = useRef<AbortController | null>(null);
+  const readerCheckpoint = useRef<(() => void) | null>(null);
+  const readerTrigger = useRef<HTMLElement | null>(null);
+  const tutorPane = useRef<HTMLElement>(null);
+  const wasShowingTutor = useRef(false);
+  const sideBySide = useSyncExternalStore(subscribeReaderWidth, wideReader, () => false);
   const saved = useStudyRecords();
   const notes = useNotes();
   const tab: Tab = tabs.find((entry) => entry === params.get("tab")) ?? "today";
+  const requestedReaderTutor = tab === "library" ? params.get("readerTutor") : null;
+  const tutoring = tab === "tutor" || Boolean(requestedReaderTutor);
   const [directReviewId] = useState(() => {
     const id = studyId();
     return tab === "review" && location.key === "default"
@@ -412,7 +430,7 @@ export default function StudyWorkspace({
       : id;
   });
   const ready = saved !== undefined && notes !== undefined;
-  const sourceTitles = useSourceTitles(tab === "tutor");
+  const sourceTitles = useSourceTitles(tutoring);
   const selection = tab === "review" ? reviewSelection(location.state) : undefined;
   const scope = useMemo(
     () =>
@@ -449,7 +467,7 @@ export default function StudyWorkspace({
     .filter(({ notebookId }) => scope.notebookOwner(notebookId) === studyVaultId)
     .map(({ id, title, notebookId }) => ({ id, title, detail: notebookTitles.get(notebookId) }));
   const bookTitles = new Map(books.map(({ id, title }) => [id, title]));
-  const vaultHighlights = (tab === "tutor" ? highlights : []).flatMap((highlight) => {
+  const vaultHighlights = (tutoring ? highlights : []).flatMap((highlight) => {
     const detail = bookTitles.get(highlight.bookId);
     if (detail === undefined || !highlight.quote.trim()) return [];
     return [{
@@ -461,6 +479,11 @@ export default function StudyWorkspace({
   });
   const bookId = params.get("book");
   const book = books.find((entry) => entry.id === bookId);
+  const readerThread =
+    book && threads.find(({ id, bookId }) => id === requestedReaderTutor && bookId === book.id);
+  const readerThreadId = readerThread?.id;
+  const readingWithoutPane = params.get("readerView") === "book";
+  const tutorVisible = Boolean(readerThreadId && (sideBySide || !readingWithoutPane));
   const unavailableBook = Boolean(ready && bookId && !book);
   const thread = threads.find((entry) => entry.id === params.get("thread"));
   const fromReport = params.get("fromReport");
@@ -486,8 +509,28 @@ export default function StudyWorkspace({
     : highlights;
   const bookFilter = book ? { book: book.id } : undefined;
   const libraryScope = notebookId ? { notebook: notebookId } : undefined;
+  const readerScope = readerThreadId
+    ? {
+        ...libraryScope,
+        readerTutor: readerThreadId,
+        ...(readingWithoutPane ? { readerView: "book" } : {}),
+      }
+    : libraryScope;
   const locate = (bookId: string, section: number) =>
-    go("library", { ...libraryScope, book: bookId, page: String(section) });
+    go("library", { ...readerScope, book: bookId, page: String(section) });
+
+  useEffect(() => () => readerRequest.current?.abort(), [bookId, tab]);
+
+  useEffect(() => {
+    if (tutorVisible) tutorPane.current?.focus({ preventScroll: true });
+    else if (wasShowingTutor.current) {
+      const trigger = readerTrigger.current;
+      const destination = trigger?.isConnected ? trigger : readerViewport?.querySelector("article");
+      destination?.focus({ preventScroll: true });
+      readerTrigger.current = null;
+    }
+    wasShowingTutor.current = tutorVisible;
+  }, [readerThreadId, readerViewport, tutorVisible]);
 
   function go(next: Tab, extra?: Record<string, string>, review?: string[]) {
     setParams(
@@ -505,6 +548,109 @@ export default function StudyWorkspace({
   }
   function openThread(what: StudyThread) {
     go("tutor", { thread: what.id });
+  }
+  function showReaderTutor(id?: string, showBook = false) {
+    readerCheckpoint.current?.();
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        if (id) next.set("readerTutor", id);
+        else next.delete("readerTutor");
+        if (id && showBook) next.set("readerView", "book");
+        else next.delete("readerView");
+        return next;
+      },
+      { replace: Boolean(requestedReaderTutor), state: reviewReturnState(location.state) },
+    );
+  }
+
+  async function discussWhileReading(
+    document: StudyBook,
+    scope: "passage" | "chapter" | "book",
+    section: number,
+    selection?: { text: string; offset: number; revision: number },
+    goal: StudyThread["goal"] = "book",
+    initial?: StudyThread["messages"],
+  ) {
+    if (readerRequest.current) return;
+    const active = window.document.activeElement;
+    if (!readerThreadId && active instanceof HTMLElement && active !== window.document.body)
+      readerTrigger.current = active;
+    const existing =
+      !initial &&
+      threads.find(
+        (candidate) =>
+          candidate.bookId === document.id &&
+          candidate.goal === goal &&
+          candidate.scope === scope &&
+          (scope === "book" || candidate.section === section) &&
+          (scope !== "passage" ||
+            (candidate.quote === selection?.text &&
+              candidate.offset === selection?.offset &&
+              candidate.revision === selection?.revision)),
+      );
+    if (existing) {
+      showReaderTutor(existing.id);
+      return;
+    }
+    const request = new AbortController();
+    readerRequest.current = request;
+    setOpeningReaderTutor(true);
+    try {
+      const created = await startBookTutor(
+        document,
+        {
+          goal,
+          scope,
+          section,
+          quote: selection?.text,
+          offset: selection?.offset,
+          revision: selection?.revision,
+        },
+        initial,
+      );
+      if (!request.signal.aborted) showReaderTutor(created.id);
+    } catch (error) {
+      if (!request.signal.aborted)
+        toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      readerRequest.current = null;
+      setOpeningReaderTutor(false);
+    }
+  }
+
+  function openReadingPanel(what: StudyThread, document: StudyBook) {
+    const target = new URLSearchParams(
+      originHref(tutorBookOrigin(what, document)).split("?", 2)[1],
+    );
+    target.set("readerTutor", what.id);
+    setParams(target, { state: reviewReturnState(location.state) });
+  }
+
+  function conversation(what: StudyThread, inReader = false) {
+    const document = books.find((entry) => entry.id === what.bookId);
+    return (
+      <StudyTutor
+        key={`${what.id}:${params.get("report") ?? ""}:${params.get("reportId") ?? ""}`}
+        thread={what}
+        vaultThreads={threads}
+        vaultId={studyVaultId}
+        vaultNotes={vaultNotes}
+        vaultBooks={books}
+        vaultHighlights={vaultHighlights}
+        notebookSources={notebookSources}
+        book={document}
+        openReport={params.get("report") === "1"}
+        requestedReportId={params.get("reportId") ?? undefined}
+        reportCards={cards}
+        focusMessage={queryIndex(params.get("message"))}
+        back={inReader ? undefined : () => go("tutor")}
+        openBesideReader={
+          !inReader && document ? () => openReadingPanel(what, document) : undefined
+        }
+        setup={() => setSettings(true)}
+      />
+    );
   }
   async function openTutorSelection(
     kind: "card" | "highlight",
@@ -598,7 +744,7 @@ export default function StudyWorkspace({
             resume={() => locate(book.id, book.section)}
             openPassage={(section, range) =>
               go("library", {
-                ...libraryScope,
+                ...readerScope,
                 book: book.id,
                 page: String(section),
                 at: String(range.offset),
@@ -606,9 +752,11 @@ export default function StudyWorkspace({
                 rev: String(studyTextRevision(book)),
               })
             }
-            startChat={(scope, section, selection, goal) =>
-              void createThread(book, scope, section, selection, goal)
+            startChat={(scope, section, selection, goal, initial) =>
+              void discussWhileReading(book, scope, section, selection, goal, initial)
             }
+            openingTutor={openingReaderTutor}
+            layoutCheckpoint={readerCheckpoint}
           />
         ) : (
           <StudyLibrary
@@ -736,23 +884,7 @@ export default function StudyWorkspace({
       ) : null}
       {ready && tab === "tutor" ? (
         thread ? (
-          <StudyTutor
-            key={`${thread.id}:${params.get("report") ?? ""}:${params.get("reportId") ?? ""}`}
-            thread={thread}
-            vaultThreads={threads}
-            vaultId={studyVaultId}
-            vaultNotes={vaultNotes}
-            vaultBooks={books}
-            vaultHighlights={vaultHighlights}
-            notebookSources={notebookSources}
-            book={books.find((item) => item.id === thread.bookId)}
-            openReport={params.get("report") === "1"}
-            requestedReportId={params.get("reportId") ?? undefined}
-            reportCards={cards}
-            focusMessage={queryIndex(params.get("message"))}
-            back={() => go("tutor")}
-            setup={() => setSettings(true)}
-          />
+          conversation(thread)
         ) : (
           <TutorIndex
             books={books}
@@ -791,13 +923,57 @@ export default function StudyWorkspace({
       {tabs.map((entry) => (
         <Tabs.Content key={entry} value={entry} className="flex min-h-0 flex-col">
           {entry === tab ? (
-            <ScrollArea
-              key={`${studyVaultId}:${book?.id ?? ""}:${thread?.id ?? ""}`}
-              className="min-h-0 flex-1"
-              viewportRef={entry === "library" && book ? setReaderViewport : undefined}
-            >
-              <div className="mx-auto max-w-6xl px-4 pt-5 pb-8 sm:px-6">{content}</div>
-            </ScrollArea>
+            <div className="relative flex min-h-0 flex-1">
+              <div
+                className="flex min-h-0 min-w-0 flex-1 flex-col"
+                inert={tutorVisible && !sideBySide}
+              >
+                {readerThread && !tutorVisible ? (
+                  <div className="border-b px-3 py-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => showReaderTutor(readerThread.id)}
+                    >
+                      {t("study.reader.backToTutor")}
+                    </Button>
+                  </div>
+                ) : null}
+                <ScrollArea
+                  key={`${studyVaultId}:${book?.id ?? ""}:${thread?.id ?? ""}`}
+                  className="min-h-0 min-w-0 flex-1"
+                  viewportRef={entry === "library" && book ? setReaderViewport : undefined}
+                >
+                  <div className="mx-auto max-w-6xl px-4 pt-5 pb-8 sm:px-6">{content}</div>
+                </ScrollArea>
+              </div>
+              {readerThread ? (
+                <aside
+                  ref={tutorPane}
+                  tabIndex={-1}
+                  aria-label={t("study.reader.tutorPane")}
+                  className={`absolute inset-0 min-h-0 min-w-0 flex-col bg-card outline-none lg:relative lg:inset-auto lg:w-[min(46%,36rem)] lg:shrink-0 lg:border-s ${tutorVisible ? "flex" : "hidden"}`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() =>
+                        sideBySide ? showReaderTutor() : showReaderTutor(readerThread.id, true)
+                      }
+                    >
+                      {t(sideBySide ? "study.reader.closeTutor" : "study.reader.backToReading")}
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => openThread(readerThread)}>
+                      {t("study.reader.fullTutor")}
+                    </Button>
+                  </div>
+                  <ScrollArea className="min-h-0 flex-1">
+                    <div className="p-3 sm:p-4">{conversation(readerThread, true)}</div>
+                  </ScrollArea>
+                </aside>
+              ) : null}
+            </div>
           ) : null}
         </Tabs.Content>
       ))}

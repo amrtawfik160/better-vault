@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -29,7 +29,7 @@ import {
 import { routes } from "@/lib/routes";
 import { askStudyModel } from "@/lib/study/client";
 import { originHref, studyHref, studyNotesHref } from "@/lib/study/links";
-import type { StudyBook, StudyOrigin, StudyRecordOf } from "@/lib/study/records";
+import type { StudyBook, StudyOrigin, StudyRecordOf, StudyThread } from "@/lib/study/records";
 import { locateStudyMark, resolveStudyRange, studyTextRevision } from "@/lib/study/text-edits";
 
 const colors = {
@@ -104,6 +104,8 @@ export function StudyReader({
   resume,
   openPassage,
   startChat,
+  openingTutor,
+  layoutCheckpoint,
   back,
 }: {
   book: StudyBook;
@@ -122,7 +124,10 @@ export function StudyReader({
     section: number,
     selection?: Selection,
     goal?: "teach-back",
+    initial?: StudyThread["messages"],
   ) => void;
+  openingTutor: boolean;
+  layoutCheckpoint: RefObject<(() => void) | null>;
   back: () => void;
 }) {
   const [openedSection] = useState(book.section);
@@ -177,7 +182,7 @@ export function StudyReader({
   const pendingAssist = useRef<AbortController | null>(null);
   const started = useRef(0);
   const latestInteraction = useRef(0);
-  useStudyReadingPlace({
+  const restoredLayout = useStudyReadingPlace({
     book,
     section: index,
     revision,
@@ -188,6 +193,7 @@ export function StudyReader({
     loadingLayout: Boolean(showLayout && fileId && layout === undefined),
     enabled: !visitingPassage && !edit,
     activity: latestInteraction,
+    layoutCheckpoint,
   });
   const pageHighlights = highlights.flatMap((item) => {
     if (item.section !== index) return [];
@@ -255,10 +261,11 @@ export function StudyReader({
   }, [fileId]);
 
   useEffect(() => {
+    if (restoredLayout.current === location.key) return;
     if (focusStart !== undefined)
       document.getElementById("focused-passage")?.scrollIntoView({ block: "center" });
     else if (missingPassage) passageNotice.current?.scrollIntoView({ block: "nearest" });
-  }, [index, focusStart, focusLength, missingPassage]);
+  }, [index, focusStart, focusLength, location.key, missingPassage, restoredLayout]);
 
   function clearSelection() {
     setSelection(null);
@@ -704,10 +711,10 @@ export function StudyReader({
         ) : null}
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="outline" onClick={() => startChat("chapter", index)}>
+        <Button size="sm" variant="outline" disabled={openingTutor} onClick={() => startChat("chapter", index)}>
           Discuss this {book.format === "pdf" ? "page" : "chapter"}
         </Button>
-        <Button size="sm" variant="outline" onClick={() => startChat("book", index)}>
+        <Button size="sm" variant="outline" disabled={openingTutor} onClick={() => startChat("book", index)}>
           Discuss the book
         </Button>
         <Button
@@ -898,6 +905,7 @@ export function StudyReader({
             <Button
               size="sm"
               variant="outline"
+              disabled={openingTutor}
               onClick={() => startChat("passage", index, selection, "teach-back")}
             >
               {t("study.capture.practice")}
@@ -917,7 +925,7 @@ export function StudyReader({
                 {t("study.capture.more")}
               </Menu.Trigger>
               <Menu.Content align="end">
-                <Menu.Item onClick={() => startChat("passage", index, selection)}>
+                <Menu.Item disabled={openingTutor} onClick={() => startChat("passage", index, selection)}>
                   Ask about selection
                 </Menu.Item>
                 <Menu.Item onClick={() => draftCards(selection.text, selection)}>
@@ -1039,6 +1047,19 @@ export function StudyReader({
             <div className="max-h-[40dvh] space-y-2 overflow-auto border-t pt-2">
               <Markdown text={result.text} />
               <div className="flex flex-wrap gap-1">
+                {result.action === "explain" && result.text.trim() ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={openingTutor}
+                    onClick={() => startChat("passage", index, selection, undefined, [
+                      { role: "user", text: t("study.reader.explainPassage") },
+                      { role: "assistant", text: result.text, citations: [{ index: 1, title: book.title, origin: sourceOf(selection) }] },
+                    ])}
+                  >
+                    {t("study.reader.continueWithTutor")}
+                  </Button>
+                ) : null}
                 <Button variant="ghost" size="sm" onClick={() => makeNote(selection, result.text)}>
                   {t("study.capture.saveAnswer")}
                 </Button>

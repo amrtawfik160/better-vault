@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, type RefObject } from "react";
+import { useImperativeHandle, useLayoutEffect, useRef, type RefObject } from "react";
 import { saveStudyReadingPlace } from "@/lib/db/study";
 import type { StudyBook, StudyReadingPlace } from "@/lib/study/records";
 import { locateStudyMark } from "@/lib/study/text-edits";
@@ -117,6 +117,7 @@ export function useStudyReadingPlace({
   loadingLayout,
   enabled,
   activity,
+  layoutCheckpoint,
 }: {
   book: StudyBook;
   section: number;
@@ -128,9 +129,12 @@ export function useStudyReadingPlace({
   loadingLayout: boolean;
   enabled: boolean;
   activity: RefObject<number>;
+  layoutCheckpoint?: RefObject<(() => void) | null>;
 }) {
   const currentBook = useRef(book);
   const restored = useRef<string | undefined>(undefined);
+  const beforeLayoutChange = useRef<StudyReadingPlace | undefined>(undefined);
+  const restoredLayout = useRef<string | undefined>(undefined);
   const id = book.id;
   const canonical = book.sections[section]?.text ?? "";
 
@@ -138,19 +142,40 @@ export function useStudyReadingPlace({
     currentBook.current = book;
   }, [book]);
 
+  useImperativeHandle(
+    layoutCheckpoint,
+    () => () => {
+      if (viewport && !loadingLayout && article.current) {
+        beforeLayoutChange.current = capturePlace(
+          viewport,
+          article.current,
+          layout,
+          canonical,
+          section,
+          revision,
+        );
+      }
+    },
+    [article, canonical, layout, loadingLayout, revision, section, viewport],
+  );
+
   useLayoutEffect(() => {
     const root = article.current;
     const scroll = viewport;
-    if (!enabled || !root || !scroll) return;
+    if (!root || !scroll) return;
     if (restored.current !== visit) {
-      const place = currentBook.current.readingPlace;
+      const captured = beforeLayoutChange.current?.section === section ? beforeLayoutChange.current : undefined;
+      if (!enabled && !captured) return;
+      const place = captured ?? currentBook.current.readingPlace;
       if (place?.section === section) {
         if (loadingLayout) return;
         restorePlace(scroll, root, layout, currentBook.current, place);
       } else scroll.scrollTo({ top: 0, behavior: "instant" });
+      beforeLayoutChange.current = undefined;
       restored.current = visit;
+      if (captured) restoredLayout.current = visit;
     }
-    if (loadingLayout) return;
+    if (!enabled || loadingLayout) return;
 
     let lastTop = scroll.scrollTop;
     let changedAt: number | undefined;
@@ -195,4 +220,6 @@ export function useStudyReadingPlace({
       flush();
     };
   }, [activity, article, canonical, enabled, id, layout, loadingLayout, revision, section, viewport, visit]);
+
+  return restoredLayout;
 }

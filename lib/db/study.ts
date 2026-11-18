@@ -528,6 +528,7 @@ export async function startStudyFollowUp(
 export async function startBookTutor(
   book: StudyBook,
   focus: Pick<StudyThread, "scope" | "section" | "quote" | "offset" | "goal" | "revision">,
+  messages: StudyThread["messages"] = [],
 ) {
   const thread: StudyThread = {
     ...focus,
@@ -537,7 +538,7 @@ export async function startBookTutor(
     title: focus.goal === "teach-back" ? `Teach it back · ${book.title}` : book.title,
     notebookId: book.notebookId,
     bookId: book.id,
-    messages: [],
+    messages,
     updatedAt: Date.now(),
   };
   await putStudyRecords(thread);

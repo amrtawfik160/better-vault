@@ -14,10 +14,18 @@ export function StudyOriginLink({
   state?: ReturnType<typeof reviewReturnState>;
   onClick?: () => void;
 }) {
-  const current = reviewReturnState(useLocation().state);
+  const location = useLocation();
+  const current = reviewReturnState(location.state);
+  const params = new URLSearchParams(location.search);
+  const readerTutor = params.get("readerTutor");
+  const href = originHref(origin);
+  const destination =
+    readerTutor && origin.kind === "book" && origin.bookId === params.get("book")
+      ? `${href}&${new URLSearchParams({ readerTutor, readerView: "book" })}`
+      : href;
   return (
     <Link
-      to={originHref(origin)}
+      to={destination}
       state={state ?? current}
       onClick={onClick}
       className="inline-flex rounded-lg px-2 py-1 text-sm text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring"
