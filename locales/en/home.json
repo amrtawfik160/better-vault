@@ -341,6 +341,7 @@
       "editConflict": "This document changed while you were editing it. Copy your draft, then reopen the editor to see the latest text.",
       "passageChanged": "This link no longer points to an exact passage.",
       "search": "Search this document",
+      "noSelectableText": "This page has no selectable text.",
       "tutorPane": "Reading Tutor",
       "closeTutor": "Close Tutor",
       "backToReading": "Back to reading",

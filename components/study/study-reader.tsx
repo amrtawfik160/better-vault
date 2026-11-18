@@ -177,6 +177,9 @@ export function StudyReader({
   const { t } = useTranslation("home");
   const source = useSource(book.sourceId);
   const fileId = source === null ? undefined : book.fileId;
+  const hasPageText = Boolean(section.text.trim());
+  const hasBookText = book.sections.some(({ text }) => text.trim());
+  const needsOriginal = !hasPageText && !!fileId && book.format !== "text";
   const selectedHighlight = highlights.find((item) => item.id === focusedHighlight);
   const anchor =
     selectedHighlight?.section === index ? locateStudyMark(book, selectedHighlight) : -1;
@@ -206,9 +209,14 @@ export function StudyReader({
   const [epubTheme, setEpubTheme] = useState<StudyEpubTheme>("system");
   const [surfaceChoice, setSurfaceChoice] = useState<StudyBook["preferredReadingSurface"]>();
   const [savingSurface, setSavingSurface] = useState(false);
-  const showLayout =
-    (surfaceChoice ?? (focusedVisual ? "layout" : undefined) ??
-      book.preferredReadingSurface ?? book.readingPlace?.surface) === "layout";
+  const previousPlace = book.readingPlace;
+  const savedSurface = previousPlace && book.sections[previousPlace.section]?.text.trim()
+    ? previousPlace.surface
+    : undefined;
+  const showLayout = needsOriginal || (
+    surfaceChoice ?? (focusedVisual ? "layout" : undefined) ??
+      book.preferredReadingSurface ?? savedSurface
+  ) === "layout";
   const [readingSurface, setReadingSurface] = useState<{ section: number; root: HTMLElement | null }>();
   const viewPdf = showLayout && book.format === "pdf";
   const viewEpub = showLayout && book.format === "epub";
@@ -436,7 +444,7 @@ export function StudyReader({
   }
 
   function capture() {
-    if (waitingMath) return;
+    if (waitingMath || !hasPageText) return;
     latestInteraction.current = Date.now();
     if (markdown !== undefined && textBody.current) {
       captureRendered(textBody.current);
@@ -462,6 +470,7 @@ export function StudyReader({
   }
 
   function captureRendered(root: HTMLElement) {
+    if (!hasPageText) return;
     const selected = renderedSelection(root, section.text);
     if (selected === undefined) return;
     if (selected === null) {
@@ -692,12 +701,12 @@ export function StudyReader({
               Download original
             </a>
           ) : null}
-          {book.format === "pdf" && fileId ? (
+          {book.format === "pdf" && fileId && !needsOriginal ? (
             <Button variant="outline" disabled={savingSurface} onClick={() => void toggleLayout(!viewPdf)}>
               {viewPdf ? "Hide original page" : "Show original page"}
             </Button>
           ) : null}
-          {book.format === "epub" && fileId ? (
+          {book.format === "epub" && fileId && !needsOriginal ? (
             <Button variant="outline" disabled={savingSurface} onClick={() => void toggleLayout(!viewEpub)}>
               {viewEpub ? "Hide book layout" : "Show book layout"}
             </Button>
@@ -811,6 +820,7 @@ export function StudyReader({
             <button
               type="button"
               className="cursor-pointer underline underline-offset-4"
+              hidden={!hasBookText}
               onClick={() => searchInput.current?.focus()}
             >
               {t("study.reader.search")}
@@ -839,16 +849,18 @@ export function StudyReader({
             ) : null}
           </div>
         ) : null}
-        <Input
-          ref={searchInput}
-          type="search"
-          value={search}
-          dir={textDirection(search)}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder={t("study.reader.search")}
-          aria-label={t("study.reader.search")}
-        />
-        {query ? (
+        {hasBookText ? (
+          <Input
+            ref={searchInput}
+            type="search"
+            value={search}
+            dir={textDirection(search)}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder={t("study.reader.search")}
+            aria-label={t("study.reader.search")}
+          />
+        ) : null}
+        {query && hasBookText ? (
           searchResults.length ? (
             <ul className="max-h-44 space-y-1 overflow-auto text-sm">
               {searchResults.map(({ page, offset, length, title, teaser }) => (
@@ -879,16 +891,16 @@ export function StudyReader({
         ) : null}
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="outline" disabled={openingTutor} onClick={() => startChat("chapter", index)}>
+        <Button size="sm" variant="outline" disabled={openingTutor || !hasPageText} onClick={() => startChat("chapter", index)}>
           Discuss this {book.format === "pdf" ? "page" : "chapter"}
         </Button>
-        <Button size="sm" variant="outline" disabled={openingTutor} onClick={() => startChat("book", index)}>
+        <Button size="sm" variant="outline" disabled={openingTutor || !hasBookText} onClick={() => startChat("book", index)}>
           Discuss the book
         </Button>
         <Button
           size="sm"
           variant="outline"
-          disabled={!section.text.trim()}
+          disabled={!hasPageText}
           onClick={() => draftCards(section.text)}
         >
           {t("study.capture.cardsFromSection")}
@@ -979,10 +991,10 @@ export function StudyReader({
         >
           {markdown !== undefined ? (
             <StudyMarkdown bare imageAltOnly math={formulaMode} onMathReady={onMathReady} text={markdown} />
-          ) : section.text ? (
+          ) : hasPageText ? (
             highlighted(section.text, pageHighlights, focus)
           ) : (
-            "This page has no selectable text."
+            t("study.reader.noSelectableText")
           )}
         </article>
       </div>

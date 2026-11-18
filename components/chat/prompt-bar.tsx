@@ -28,6 +28,7 @@ import {
   useSettings,
 } from "@/lib/db/settings";
 import { useSources } from "@/lib/db/sources";
+import { selectedTextSource } from "@/lib/db/source-text";
 import { useSkills } from "@/lib/db/skills";
 import { useNavigate } from "react-router";
 import { useChatSession } from "./chat-provider";
@@ -59,7 +60,7 @@ export function PromptBar() {
   const model = settings ? activeModel(settings) : null;
   const webAvailable = model ? providers[model.provider].webSearch : false;
   const mode: ChatMode = chat.mode === "web" && webAvailable ? "web" : "sources";
-  const selected = sources?.filter((source) => source.selected).length ?? 0;
+  const selected = sources?.filter(selectedTextSource).length ?? 0;
   const needsSource = mode === "sources" && selected === 0;
   const status: PromptState = chat.status === "ready" ? "idle" : chat.status;
 

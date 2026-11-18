@@ -42,6 +42,11 @@ export function htmlToText(html: string, fallbackTitle: string): Extracted {
 /** The text of every page of a PDF. */
 export async function pdfToText(data: Uint8Array): Promise<string> {
   const pdf = await getDocumentProxy(data);
-  const { text } = await extractText(pdf, { mergePages: true });
-  return cleanText(text);
+  try {
+    if (!pdf.numPages) throw new Error("This PDF has no pages.");
+    const { text } = await extractText(pdf, { mergePages: true });
+    return cleanText(text);
+  } finally {
+    await pdf.loadingTask.destroy();
+  }
 }

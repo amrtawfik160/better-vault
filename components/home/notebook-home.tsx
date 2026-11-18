@@ -54,6 +54,7 @@ import { notebookIcon } from "@/lib/notebooks/icons";
 import { shortcutKeys } from "@/lib/platform";
 import { routes } from "@/lib/routes";
 import { ACCEPTED_FILES, IngestError, ingestFile } from "@/lib/sources/ingest";
+import { sourceHasText } from "@/lib/db/source-text";
 import { cn } from "@/lib/utils";
 import { FolderDialog } from "./folder-dialogs";
 import {
@@ -682,15 +683,17 @@ export function NotebookHome() {
             ...(vaultId !== DEFAULT_VAULT ? { vaultId } : {}),
           });
           const failures: string[] = [];
+          const imported = [];
           for (const file of creating?.files ?? []) {
             try {
-              await ingestFile(id, file);
+              imported.push(await ingestFile(id, file));
             } catch (error) {
               failures.push(describe(error));
             }
           }
           for (const failure of failures) toast.error(failure);
-          navigate(routes.notebook(id));
+          const path = routes.notebook(id);
+          navigate(imported.length && !imported.some(sourceHasText) ? `${path}?tab=sources` : path);
         }}
       />
       <FolderDialog

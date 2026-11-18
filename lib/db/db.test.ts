@@ -84,7 +84,15 @@ import {
   seedBotsOnce,
   updateBot,
 } from "./bots";
-import { addSource, attachImages, deleteSource, getChunks, renameSource } from "./sources";
+import {
+  addSource,
+  attachImages,
+  deleteSource,
+  getChunks,
+  renameSource,
+  setAllSourcesSelected,
+  setSourceSelected,
+} from "./sources";
 import {
   DEFAULT_VAULT,
   createVault,
@@ -140,6 +148,44 @@ describe.each(backends)("%s store", (name, create) => {
       await expect(
         addSource({ notebookId, title: "x", kind: "text", text: "  " }),
       ).rejects.toThrow();
+    });
+
+    it("keeps original-only documents out of source selection and text passages", async () => {
+      const notebookId = await createNotebook("Visual sources");
+      const original = { mime: "application/pdf", data: Uint8Array.of(37, 80, 68, 70) };
+      const scanned = await addSource({ notebookId, title: "Scan", kind: "pdf", text: "", original });
+      const notes = await addSource({ notebookId, title: "Notes", kind: "text", text: "Read me." });
+      expect(scanned).toMatchObject({ text: "", charCount: 0, selected: false });
+      expect(await getChunks([scanned.id])).toEqual([]);
+      expect(await store().getBlob(scanned.originalFileId ?? "")).toMatchObject(original);
+
+      await setAllSourcesSelected(notebookId, false);
+      expect((await store().getSource(notes.id))?.selected).toBe(false);
+      await setAllSourcesSelected(notebookId, true);
+      expect((await store().getSource(notes.id))?.selected).toBe(true);
+      await setSourceSelected(scanned.id, true);
+      expect((await store().getSource(scanned.id))?.selected).toBe(false);
+      await expect(startSourceTutor(scanned.id)).rejects.toThrow("no selectable text");
+
+      const backup = JSON.parse(JSON.stringify(await exportBackup()));
+      await deleteAllData();
+      await importBackup(backup);
+      expect(await store().getSource(scanned.id)).toEqual(scanned);
+      expect(await getChunks([scanned.id])).toEqual([]);
+      expect(await store().getBlob(scanned.originalFileId ?? "")).toMatchObject(original);
+    });
+
+    it("keeps physical page positions without adding empty page headings to a notebook", async () => {
+      const bytes = Uint8Array.of(37, 80, 68, 70);
+      const mime = "application/pdf";
+      const sections = [{ title: "Page 1", text: "" }, { title: "Page 2", text: "Genuine text." }];
+      const mixed = await addStudyBook({ title: "Mixed", format: "pdf", bytes, mime, sections });
+      const scanned = await addStudyBook({ title: "Scan", format: "pdf", bytes, mime, sections: sections.slice(0, 1) });
+      expect(mixed.sections).toEqual(sections);
+      expect((await getChunks([mixed.sourceId])).map(({ text }) => text)).toEqual(["Page 2\n\nGenuine text."]);
+      expect(scanned.sections).toEqual(sections.slice(0, 1));
+      expect(await getChunks([scanned.sourceId])).toEqual([]);
+      expect((await store().getSource(scanned.sourceId))?.selected).toBe(false);
     });
   });
 

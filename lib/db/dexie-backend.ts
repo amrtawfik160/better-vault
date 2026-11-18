@@ -8,6 +8,7 @@ import { detachedVocabularyCard, vocabularyCardId, vocabularyChanges } from "@/l
 import { updatedStudioPractice } from "@/studio/shared/practice";
 import type { Backend } from "./backend";
 import { BetterVaultDatabase } from "./database";
+import { sourceHasText } from "./source-text";
 import type { Source, StudioOutput } from "./types";
 
 /** The web app's backend: the IndexedDB database in `./database`. */
@@ -175,7 +176,10 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
           await db.notebooks.update(notebookId, { title, updatedAt });
       }),
     patchNotebookSources: async (notebookId, patch) => {
-      await db.sources.where("notebookId").equals(notebookId).modify(patch);
+      await db.sources.where("notebookId").equals(notebookId).modify((source) => {
+        Object.assign(source, patch);
+        if (source.selected && !sourceHasText(source)) source.selected = false;
+      });
     },
     deleteSource: (id) =>
       db.transaction("rw", [db.sources, db.chunks, db.blobs], async () => {

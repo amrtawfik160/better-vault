@@ -7,6 +7,7 @@ import { patchedStudyBook, renamedStudyBook, revisedStudyBook } from "@/lib/stud
 import { detachedVocabularyCard, vocabularyCardId, vocabularyChanges } from "@/lib/study/vocabulary";
 import { updatedStudioPractice } from "@/studio/shared/practice";
 import type { Backend, StoreContent, TableName } from "../backend";
+import { sourceHasText } from "../source-text";
 import type {
   Chunk,
   Conversation,
@@ -432,8 +433,11 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
       }),
     patchNotebookSources: (notebookId, change) =>
       transaction(db, () => {
-        const ids = db.prepare("SELECT id FROM sources WHERE notebook_id = ?").all(notebookId);
-        for (const { id } of ids as { id: string }[]) patch<Source>("sources", id, change);
+        const sources = docs<Source>(db.prepare("SELECT doc FROM sources WHERE notebook_id = ?").all(notebookId));
+        for (const source of sources) {
+          const next = { ...source, ...change };
+          put("sources", { ...next, selected: next.selected && sourceHasText(next) });
+        }
       }),
     deleteSource: (id) =>
       transaction(db, () => {

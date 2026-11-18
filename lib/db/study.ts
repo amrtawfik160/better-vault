@@ -474,7 +474,10 @@ export async function addStudyBook(input: {
     const text =
       input.format === "text" && input.sections.length === 1
         ? input.sections[0].text
-        : input.sections.map(({ title, text }) => `${title}\n\n${text}`).join("\n\n");
+        : input.sections
+            .filter(({ text }) => normaliseText(text))
+            .map(({ title, text }) => `${title}\n\n${text}`)
+            .join("\n\n");
     const source = await addSource({
       notebookId,
       title,
@@ -545,6 +548,7 @@ export async function studyBookForSource(sourceId: string) {
       book.sections = [{ title: source.title, ...content }];
     }
   }
+  if (!source.text.trim() && !book.fileId) throw new Error("The original document could not be opened.");
   const linked = await backend.attachStudyBook(book);
   if (linked) return linked;
   throw new Error("This source was removed.");
@@ -705,6 +709,7 @@ export async function startSourceTutor(sourceId: string) {
   if (!source || !notebook) throw new Error("This source was removed.");
   const saved = await backend.getStudyBookForSource(notebook.id, source.id);
   const book = saved?.sections.some(({ text }) => text.trim()) ? saved : undefined;
+  if (!book && !source.text.trim()) throw new Error("This source has no selectable text.");
   const thread: StudyThread = {
     id: studyId(),
     kind: "thread",

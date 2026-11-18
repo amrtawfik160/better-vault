@@ -170,7 +170,7 @@ function DailyStudy({
         >
           {lastRead ? t("study.today.resumeReading") : "Add a document"}
         </Button>
-        {lastRead ? (
+        {lastRead?.sections[lastRead.section]?.text.trim() ? (
           <Button variant="outline" onClick={() => teachBack(lastRead)}>
             Teach it back
           </Button>
@@ -442,7 +442,7 @@ export default function StudyWorkspace({
       : id;
   });
   const ready = saved !== undefined && notes !== undefined;
-  const sourceTitles = useSourceTitles(tutoring);
+  const sourceTitles = useSourceTitles(tutoring, true);
   const selection = tab === "review" ? reviewSelection(location.state) : undefined;
   const scope = useMemo(
     () =>

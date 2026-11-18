@@ -62,9 +62,10 @@ export async function openStudyEpub(bytes: Uint8Array) {
       // A detached template holds the book's HTML without loading its resources.
       const template = document.createElement("template");
       template.innerHTML = raw;
+      const pageTitle = template.content.querySelector("title")?.textContent?.trim();
       template.content
         .querySelectorAll(
-          "script, style, template, noscript, head, iframe, object, embed, video, audio, svg",
+          "script, style, template, noscript, head, title, meta, link, base, iframe, object, embed, video, audio, svg",
         )
         .forEach((item) => item.remove());
       const plain = template.content.cloneNode(true);
@@ -79,7 +80,7 @@ export async function openStudyEpub(bytes: Uint8Array) {
         text: plain.textContent?.replace(/\n{3,}/g, "\n\n").trim() ?? "",
         title:
           template.content.querySelector("h1, h2, h3")?.textContent?.trim() ||
-          template.content.querySelector("title")?.textContent?.trim(),
+          pageTitle,
       };
     },
     async readImage(path: string) {

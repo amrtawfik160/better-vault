@@ -18,6 +18,7 @@ import { studyReturnState } from "@/lib/study/return-links";
 import { Sheet } from "@/components/panelui/sheet";
 import { loadBlob } from "@/lib/db/blobs";
 import { useSourceWithChunks } from "@/lib/db/sources";
+import { sourceHasText } from "@/lib/db/source-text";
 import type { Chunk, Source, SourceImage } from "@/lib/db/types";
 import { countWords } from "@/lib/format";
 import { reflow } from "@/lib/sources/reflow";
@@ -109,6 +110,10 @@ function ReaderBody({
     );
   }
   const words = countWords(source.text);
+  const hasText = sourceHasText(source);
+  const sourceSize = hasText
+    ? t("words", { count: words, formattedCount: words.toLocaleString(i18n.language) })
+    : t("noSelectableText");
 
   async function openStudy(destination: () => Promise<string>) {
     setOpening(true);
@@ -124,7 +129,7 @@ function ReaderBody({
     <>
       <Sheet.Header
         title={source.title}
-        description={`${t(`kinds.${source.kind}`)} · ${t("words", { count: words, formattedCount: words.toLocaleString(i18n.language) })}`}
+        description={`${t(`kinds.${source.kind}`)} · ${sourceSize}`}
       >
         <div className="flex flex-wrap gap-2">
           <Button
@@ -139,19 +144,21 @@ function ReaderBody({
           >
             {t("openStudy")}
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={opening}
-            onClick={() =>
-              void openStudy(async () => {
-                const thread = await startSourceTutor(source.id);
-                return originHref({ kind: "tutor", threadId: thread.id });
-              })
-            }
-          >
-            {t("askTutor")}
-          </Button>
+          {hasText ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={opening}
+              onClick={() =>
+                void openStudy(async () => {
+                  const thread = await startSourceTutor(source.id);
+                  return originHref({ kind: "tutor", threadId: thread.id });
+                })
+              }
+            >
+              {t("askTutor")}
+            </Button>
+          ) : null}
         </div>
         {source.url ? (
           <a
@@ -166,6 +173,9 @@ function ReaderBody({
         ) : null}
       </Sheet.Header>
       <Sheet.Body>
+        {!hasText && source.originalFileId ? (
+          <p className="pb-4 text-sm text-muted-foreground">{t("readOriginalInStudy")}</p>
+        ) : null}
         {passage && !cited ? (
           <div role="status" className="mb-4 rounded-xl border p-3 text-sm text-muted-foreground">
             {t("citationChanged")}

@@ -6,6 +6,7 @@ import { SourceRow } from "@/components/sources/source-row";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { setAllSourcesSelected, useSources } from "@/lib/db/sources";
+import { sourceHasText } from "@/lib/db/source-text";
 import { useWorkspace } from "./workspace-context";
 
 /** The Sources tab: everything in the notebook, and which of it is used. */
@@ -15,8 +16,9 @@ export function SourcesView() {
   const sources = useSources(notebook.id);
   if (!sources) return null;
 
-  const selected = sources.filter((source) => source.selected).length;
-  const all = sources.length > 0 && selected === sources.length;
+  const readable = sources.filter(sourceHasText);
+  const selected = readable.filter((source) => source.selected).length;
+  const all = readable.length > 0 && selected === readable.length;
 
   return (
     <ScrollArea className="h-full">
@@ -46,18 +48,20 @@ export function SourcesView() {
           </button>
         ) : (
           <>
-            <label className="mt-6 flex cursor-pointer items-center gap-3 px-3 py-2 text-sm">
-              <Checkbox
-                checked={all}
-                indeterminate={selected > 0 && !all}
-                onCheckedChange={(checked) => void setAllSourcesSelected(notebook.id, checked)}
-              />
-              <span className="font-medium">{t("selectAll")}</span>
-              <span className="ms-auto text-xs text-muted-foreground">
-                {t("selected", { selected, total: sources.length })}
-              </span>
-            </label>
-            <ul className="flex flex-col gap-0.5">
+            {readable.length > 0 ? (
+              <label className="mt-6 flex cursor-pointer items-center gap-3 px-3 py-2 text-sm">
+                <Checkbox
+                  checked={all}
+                  indeterminate={selected > 0 && !all}
+                  onCheckedChange={(checked) => void setAllSourcesSelected(notebook.id, checked)}
+                />
+                <span className="font-medium">{t("selectAll")}</span>
+                <span className="ms-auto text-xs text-muted-foreground">
+                  {t("selected", { selected, total: readable.length })}
+                </span>
+              </label>
+            ) : null}
+            <ul className={readable.length ? "flex flex-col gap-0.5" : "mt-6 flex flex-col gap-0.5"}>
               {sources.map((source) => (
                 <li key={source.id}>
                   <SourceRow source={source} onRead={() => readSource(source.id)} />

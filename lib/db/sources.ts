@@ -2,6 +2,7 @@ import { generateId } from "ai";
 import { chunkText, normaliseText } from "@/lib/grounding/chunk";
 import { saveBlob } from "./blobs";
 import { useStoreQuery } from "./live";
+import { sourceHasText } from "./source-text";
 import { store } from "./store";
 import type { Chunk, Source, SourceImage, SourceKind, StoredBlob } from "./types";
 
@@ -15,10 +16,13 @@ export interface NewSource {
   original?: Pick<StoredBlob, "data" | "mime">;
 }
 
-/** Adds a source and splits it into passages. Throws if it has no text. */
+/** Adds a source and splits its text into passages. */
 export async function addSource(input: NewSource): Promise<Source> {
   const text = normaliseText(input.text);
-  if (!text) throw new Error("empty-source");
+  const originalMime = input.kind === "pdf" ? "application/pdf" : input.kind === "epub" ? "application/epub+zip" : undefined;
+  if (!text && (!originalMime || input.original?.mime !== originalMime || !input.original.data.byteLength)) {
+    throw new Error("empty-source");
+  }
   const id = generateId();
   const now = Date.now();
   const original = input.original
@@ -40,7 +44,7 @@ export async function addSource(input: NewSource): Promise<Source> {
     originalFileId: original?.id,
     text,
     charCount: text.length,
-    selected: true,
+    selected: Boolean(text),
     createdAt: now,
   };
   await store().addSource(source, chunksForSource(source), now, original);
@@ -86,6 +90,10 @@ export async function attachImages(source: Source, images: NewSourceImage[]): Pr
 }
 
 export async function setSourceSelected(id: string, selected: boolean) {
+  if (selected) {
+    const source = await store().getSource(id);
+    if (!source || !sourceHasText(source)) return;
+  }
   await store().patchSource(id, { selected });
 }
 
@@ -144,15 +152,14 @@ export function useSourceWithChunks(
 /** Every source's title and notebook, for `[[src:…]]` links in notes. */
 export function useSourceTitles(
   enabled = true,
+  textOnly = false,
 ): Pick<Source, "id" | "notebookId" | "title">[] | undefined {
   return useStoreQuery(
     async () =>
-      (enabled ? await store().listAllSources() : []).map(({ id, notebookId, title }) => ({
-        id,
-        notebookId,
-        title,
-      })),
-    [enabled],
+      (enabled ? await store().listAllSources() : [])
+        .filter((source) => !textOnly || sourceHasText(source))
+        .map(({ id, notebookId, title }) => ({ id, notebookId, title })),
+    [enabled, textOnly],
     ["sources"],
   );
 }

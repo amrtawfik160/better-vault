@@ -5,6 +5,7 @@ import { Icon } from "@/components/icon";
 import { Button } from "@/components/panelui/button";
 import { Dialog } from "@/components/panelui/dialog";
 import { useSources } from "@/lib/db/sources";
+import { sourceHasText } from "@/lib/db/source-text";
 import { cn } from "@/lib/utils";
 import { toolClients } from "@/studio/client";
 import { toolDefinitions } from "@/studio/definitions";
@@ -49,7 +50,7 @@ function ToolForm({
   const { t } = useTranslation("studio");
   const { t: tCommon } = useTranslation();
   const runner = useStudioRunner();
-  const sources = useSources(notebookId);
+  const sources = useSources(notebookId)?.filter(sourceHasText);
   const definition = toolDefinitions[toolId];
   const client = toolClients[toolId];
   const tool = studioTools[toolId];
@@ -59,8 +60,9 @@ function ToolForm({
   const [language, setLanguage] = useState("auto");
   // Starts with the sources selected in the notebook.
   const [sourceIds, setSourceIds] = useState<string[] | null>(null);
-  const chosen =
-    sourceIds ?? sources?.filter((source) => source.selected).map((source) => source.id) ?? [];
+  const chosen = sourceIds
+    ? sourceIds.filter((id) => sources?.some((source) => source.id === id))
+    : sources?.filter((source) => source.selected).map(({ id }) => id) ?? [];
   const [busy, setBusy] = useState(false);
 
   if (!definition || !client) return null;

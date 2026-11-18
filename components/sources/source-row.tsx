@@ -14,6 +14,7 @@ import { Menu } from "@/components/panelui/menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { Source } from "@/lib/db/database";
 import { deleteSource, renameSource, setSourceSelected } from "@/lib/db/sources";
+import { sourceHasText } from "@/lib/db/source-text";
 import { countWords } from "@/lib/format";
 import { sourceKindIcons } from "./source-kind";
 
@@ -24,11 +25,13 @@ export function SourceRow({ source, onRead }: { source: Source; onRead: () => vo
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const words = countWords(source.text);
+  const hasText = sourceHasText(source);
 
   return (
     <div className="flex items-center gap-1 rounded-2xl ps-3 pe-1 transition-colors hover:bg-muted">
       <Checkbox
-        checked={source.selected}
+        checked={hasText && source.selected}
+        disabled={!hasText}
         onCheckedChange={(checked) => void setSourceSelected(source.id, checked)}
         aria-label={t("select", { title: source.title })}
       />
@@ -44,7 +47,7 @@ export function SourceRow({ source, onRead }: { source: Source; onRead: () => vo
           <span className="block truncate text-sm font-medium">{source.title}</span>
           <span className="block truncate text-xs text-muted-foreground">
             {t(`kinds.${source.kind}`)} ·{" "}
-            {t("words", { count: words, formattedCount: words.toLocaleString(i18n.language) })}
+            {hasText ? t("words", { count: words, formattedCount: words.toLocaleString(i18n.language) }) : t("noSelectableText")}
           </span>
         </span>
       </button>

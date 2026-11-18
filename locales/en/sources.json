@@ -17,6 +17,8 @@
   },
   "words_one": "{{formattedCount}} word",
   "words_other": "{{formattedCount}} words",
+  "noSelectableText": "No selectable text",
+  "readOriginalInStudy": "Open the original in Study to read it and make image flashcards.",
   "select": "Use {{title}}",
   "menu": "Options for {{title}}",
   "read": "Read",

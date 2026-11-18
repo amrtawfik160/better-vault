@@ -23,6 +23,7 @@ import {
   getSettings,
 } from "@/lib/db/settings";
 import { getChunks, listSources } from "@/lib/db/sources";
+import { selectedTextSource } from "@/lib/db/source-text";
 import { selectPassages } from "@/lib/grounding/passages";
 import { listSkills } from "@/lib/db/skills";
 import { getStudioSettings } from "@/lib/studio/settings";
@@ -230,7 +231,7 @@ function ChatRunner({
       const settings = await getSettings();
       const model = activeModel(settings);
       if (!model) throw new Error("No model is set up.");
-      const sources = (await listSources(notebookId)).filter((source) => source.selected);
+      const sources = (await listSources(notebookId)).filter(selectedTextSource);
       const chunks = await getChunks(sources.map((source) => source.id));
       const passages = selectPassages({
         sources,

@@ -83,10 +83,12 @@ export async function ingestFile(notebookId: string, file: File): Promise<Source
       original: { mime: "application/pdf", data: new Uint8Array(await file.arrayBuffer()) },
     });
     // The pictures follow in the background; the source can be used at once.
-    void import("./pdf-images")
-      .then(({ pdfImages }) => pdfImages(file, source.text))
-      .then((images) => attachImages(source, images))
-      .catch(() => undefined);
+    if (source.text) {
+      void import("./pdf-images")
+        .then(({ pdfImages }) => pdfImages(file, source.text))
+        .then((images) => attachImages(source, images))
+        .catch(() => undefined);
+    }
     return source;
   }
   if (ext === "epub" || file.type === epubMime) {
@@ -98,6 +100,7 @@ export async function ingestFile(notebookId: string, file: File): Promise<Source
         error instanceof Error ? error.message : String(error),
       );
     });
+    if (!book.sections.length) throw new IngestError("empty", file.name);
     return save({
       ...base,
       title: book.title || base.title,
