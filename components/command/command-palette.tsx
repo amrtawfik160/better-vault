@@ -284,6 +284,7 @@ export function CommandPalette() {
         );
       case "output":
         return go(`${routes.notebook(hit.notebookId!)}?output=${hit.outputId}`);
+      case "study-passage":
       case "study":
         if (hit.study) return go(hit.study.href);
         return;
@@ -313,6 +314,7 @@ export function CommandPalette() {
     { kind: "notebook", heading: t("command.groups.notebooks") },
     { kind: "source", heading: t("command.groups.sources") },
     { kind: "study", heading: tHome("vaults.study") },
+    { kind: "study-passage", heading: t("command.groups.studyPassages") },
     { kind: "passage", heading: t("command.groups.passages") },
     { kind: "output", heading: t("command.groups.outputs") },
     { kind: "folder", heading: t("command.groups.folders") },
@@ -323,6 +325,7 @@ export function CommandPalette() {
     book: Book02Icon,
     card: Cards01Icon,
     highlight: QuoteDownIcon,
+    passage: QuoteDownIcon,
     word: LanguageSkillIcon,
     thread: BubbleChatIcon,
     message: BubbleChatIcon,

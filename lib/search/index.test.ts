@@ -132,22 +132,54 @@ describe("search index", () => {
     expect(searchIndex.search("levi civita")).toHaveLength(0);
   });
 
-  it("reindexes Study text edits in the linked notebook passages", async () => {
+  it("opens the exact edited Study text and restores notebook results when a book is unlinked", async () => {
     const book = await addStudyBook({
       title: "Wave theory",
       format: "text",
       sections: [{ title: "Wave theory", text: "Reflection follows the law of specular angles." }],
     });
     await searchIndex.sync(await readCatalogue());
-    expect(searchIndex.search("specular")[0]?.chunkId).toBe(`${book.sourceId}:0`);
+    expect(searchIndex.search("specular")[0]?.study?.href).toBe(originHref({
+      kind: "book", bookId: book.id, section: 0, offset: 30, length: 8, revision: 0,
+    }));
 
     await saveStudyText(book.id, "Diffraction bends waves around an obstacle.");
     await searchIndex.sync(await readCatalogue());
     expect(searchIndex.search("specular")).toHaveLength(0);
     expect(searchIndex.search("diffraction")[0]).toMatchObject({
-      kind: "passage",
+      kind: "study-passage",
       sourceId: book.sourceId,
       snippet: "Diffraction bends waves around an obstacle.",
+      study: { href: originHref({ kind: "book", bookId: book.id, section: 0, offset: 0, length: 11, revision: 1 }) },
     });
+    await removeStudyRecord(book.id);
+    await searchIndex.sync(await readCatalogue());
+    expect(searchIndex.search("diffraction")[0]).toMatchObject({ kind: "passage", sourceId: book.sourceId });
+  });
+
+  it("distinguishes pages with repeated phrases and finds Study copies without their source", async () => {
+    const vaultId = await createVault({ name: "Networks" });
+    const phrase = "overlapping majorities";
+    const sections = [
+      { title: "Page 1", text: `🧪 ${"Background material. ".repeat(110)}${phrase} preserve evidence.` },
+      { title: "Page 2", text: `The earlier proof about ${phrase} is applied here.` },
+    ];
+    const book = await addStudyBook({ title: "Quorum proof", format: "pdf", sections, vaultId });
+    await searchIndex.sync(await readCatalogue());
+
+    const hits = searchIndex.search(phrase).filter(({ kind }) => kind === "study-passage");
+    expect(hits).toHaveLength(2);
+    for (const [section, { title, text }] of sections.entries()) {
+      expect(hits.find((hit) => hit.title === `Quorum proof · ${title}`)).toMatchObject({
+        vaultId,
+        study: { href: originHref({ kind: "book", bookId: book.id, section, offset: text.indexOf(phrase), length: phrase.length, revision: 0 }) },
+      });
+    }
+    expect(searchIndex.search(phrase).some(({ kind }) => kind === "passage")).toBe(false);
+    expect(searchIndex.search("Quorum").some(({ kind }) => kind === "study-passage")).toBe(false);
+
+    await deleteSource(book.sourceId);
+    await searchIndex.sync(await readCatalogue());
+    expect(searchIndex.search("overlapping majorites").filter(({ kind }) => kind === "study-passage")).toHaveLength(2);
   });
 });

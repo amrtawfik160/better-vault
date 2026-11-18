@@ -6,6 +6,7 @@ import { originHref, studyCitationOrigin, studyHighlightOrigin } from "./links";
 import type { StudyBook, StudyOrigin, StudyRecordOf, StudyThread } from "./records";
 import { quizChoicesText } from "./quiz-cards";
 import { locateStudyMark, resolveStudyRange, studyTextRevision } from "./text-edits";
+import { studyTextWindows } from "./text-windows";
 
 export type StudyPassage = {
   origin: StudyOrigin;
@@ -33,8 +34,6 @@ type SourcePassage = StudyPassage & { sourceId: string };
 
 export const cardEvidenceLimit = 1400;
 
-const windowSize = 1500;
-const overlap = 180;
 const filler = new Set(
   "a an and are as at be can could did do does explain for from give how i in is it main me of on or please should show tell than that the them their these they this those to was were what when where which who why will with would you".split(
     " ",
@@ -174,7 +173,7 @@ function rankedPassages(
 ) {
   const ranges = new Map<string, StudyPassage>();
   const sources = new Map<string, Pick<Source, "id" | "title" | "kind">>();
-  const size = coverSources ? 1_300 : windowSize;
+  const size = coverSources ? 1_300 : undefined;
   const chunks = passages.flatMap((passage, index) => {
     const { sourceId, title } = passage;
     if (!sources.has(sourceId)) sources.set(sourceId, { id: sourceId, title, kind: "text" });
@@ -185,24 +184,14 @@ function rankedPassages(
       return [{ id, sourceId, title, text }];
     }
     const chunks: { id: string; sourceId: string; text: string; title: string }[] = [];
-    for (let start = 0; start < passage.text.length;) {
-      const limit = Math.min(start + size, passage.text.length);
-      const boundary = passage.text.lastIndexOf("\n", limit - 1);
-      const end = limit !== passage.text.length && boundary > limit - 250 ? boundary + 1 : limit;
-      const part = passage.text.slice(start, end);
-      const text = part.trim();
+    for (const { start, offset, text } of studyTextWindows(passage.text, size)) {
       const id = `${index}:${start}`;
-      if (text) {
-        const offset = start + part.length - part.trimStart().length;
-        const origin =
-          passage.origin.kind === "book" && !passage.origin.highlightId
-            ? { ...passage.origin, offset, length: text.length }
-            : passage.origin;
-        chunks.push({ id, sourceId, text, title });
-        ranges.set(id, { title, origin, text });
-      }
-      if (end === passage.text.length) break;
-      start = end - overlap;
+      const origin =
+        passage.origin.kind === "book" && !passage.origin.highlightId
+          ? { ...passage.origin, offset, length: text.length }
+          : passage.origin;
+      chunks.push({ id, sourceId, text, title });
+      ranges.set(id, { title, origin, text });
     }
     return chunks;
   });

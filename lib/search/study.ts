@@ -1,11 +1,11 @@
 import { DEFAULT_VAULT } from "@/lib/db/vaults";
 import { originHref, studyHighlightOrigin } from "@/lib/study/links";
-import type { StudyRecord, StudyReport } from "@/lib/study/records";
+import type { StudyBook, StudyRecord, StudyReport } from "@/lib/study/records";
 import { studyReportKey, studyReports } from "@/lib/study/reports";
 import { studyVaultIndex } from "@/lib/study/vault";
 
 export type StudySearchLink = {
-  type: Exclude<StudyRecord["kind"], "session" | "document-draft"> | "message" | "report";
+  type: Exclude<StudyRecord["kind"], "session" | "document-draft"> | "message" | "report" | "passage";
   href: string;
   context?: string;
 };
@@ -33,7 +33,7 @@ function reportText(report: StudyReport) {
   ].join("\n");
 }
 
-export function studySearchEntries(
+export function studySearchCatalogue(
   input: Omit<Parameters<typeof studyVaultIndex>[0], "defaultVaultId">,
 ) {
   const { owner } = studyVaultIndex({ ...input, defaultVaultId: DEFAULT_VAULT });
@@ -41,6 +41,7 @@ export function studySearchEntries(
     input.rows.flatMap((row) => (row.kind === "book" ? [[row.id, row.title] as const] : [])),
   );
   const entries: StudySearchEntry[] = [];
+  const documents: { book: StudyBook; vaultId: string }[] = [];
 
   for (const row of input.rows) {
     if (row.kind === "session" || row.kind === "document-draft") continue;
@@ -51,6 +52,7 @@ export function studySearchEntries(
     };
     switch (row.kind) {
       case "book":
+        documents.push({ book: row, vaultId });
         add({ type: "book", href: originHref({ kind: "book", bookId: row.id }) }, row.title);
         break;
       case "card":
@@ -117,5 +119,5 @@ export function studySearchEntries(
       }
     }
   }
-  return entries;
+  return { entries, documents };
 }

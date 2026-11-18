@@ -73,6 +73,7 @@
     "vault": "Switch to {{name}}",
     "study": {
       "book": "Study document",
+      "passage": "Document passage",
       "card": "Flashcard",
       "highlight": "Highlight",
       "word": "Vocabulary",
@@ -86,6 +87,7 @@
       "notebooks": "Notebooks",
       "sources": "Sources",
       "passages": "In your sources",
+      "studyPassages": "In Study documents",
       "outputs": "Studio outputs",
       "folders": "Folders",
       "vaults": "Vaults"
