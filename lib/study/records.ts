@@ -89,7 +89,7 @@ export const studyGoal = z.enum([
   "language",
   "general",
 ]);
-export const studyScopes = ["passage", "chapter", "book", "notes", "materials", "cards", "general"] as const;
+export const studyScopes = ["passage", "chapter", "book", "notes", "materials", "cards", "image", "general"] as const;
 export const studyCorrections = ["live", "report", "off"] as const;
 export const studyRatings = ["again", "hard", "good", "easy"] as const;
 export const studyHighlightColor = z.enum(["yellow", "green", "blue", "pink", "purple"]);
@@ -122,6 +122,7 @@ export const studyTutorContextSchema = z.object({
   highlightIds: z.array(z.string()).optional(),
   cardIds: z.array(z.string()).optional(),
   practiceCardId: z.string().optional(),
+  imageContext: z.object({ anchor: studyVisualOrigin, description: z.string().max(500).optional() }).optional(),
 });
 
 const followUpSchema = z.object({
@@ -288,6 +289,7 @@ export type StudyWordResult =
   | { kind: "duplicate" | "unavailable" };
 export type StudyBook = StudyRecordOf<"book">;
 export type StudyVisualOrigin = z.infer<typeof studyVisualOrigin>;
+export type StudyImageContext = NonNullable<StudyThread["imageContext"]>;
 export type StudyReadingPlace = z.infer<typeof readingPlace>;
 export type StudyTextEdit = z.infer<typeof textEdit>;
 export type StudyBookWrite = {

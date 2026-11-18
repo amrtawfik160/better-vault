@@ -1,28 +1,46 @@
 import { useTranslation } from "react-i18next";
 import { Dialog } from "@/components/panelui/dialog";
 
+const imageLabels = {
+  question: {
+    title: "study.visualCard.questionImage",
+    enlarge: "study.visualCard.enlargeQuestion",
+    alt: "study.visualCard.questionAttachment",
+  },
+  answer: {
+    title: "study.visualCard.answerImage",
+    enlarge: "study.visualCard.enlargeAnswer",
+    alt: "study.visualCard.answerAttachment",
+  },
+  document: {
+    title: "study.reader.imageContext",
+    enlarge: "study.reader.enlargeImageContext",
+    alt: "study.reader.imageContext",
+  },
+} as const;
+
 export function StudyCardImage({
   side,
   image,
+  description,
   onOpenChange,
 }: {
-  side: "question" | "answer";
+  side: keyof typeof imageLabels;
   image: string;
+  description?: string;
   onOpenChange?: (open: boolean) => void;
 }) {
   const { t } = useTranslation("home");
   const { t: common } = useTranslation();
-  const question = side === "question";
-  const title = t(question ? "study.visualCard.questionImage" : "study.visualCard.answerImage");
+  const labels = imageLabels[side];
+  const title = t(labels.title);
   return (
     <Dialog onOpenChange={onOpenChange}>
       <Dialog.Trigger
         render={
           <button
             type="button"
-            aria-label={t(
-              question ? "study.visualCard.enlargeQuestion" : "study.visualCard.enlargeAnswer",
-            )}
+            aria-label={t(labels.enlarge)}
             className="block max-w-full cursor-zoom-in rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
         }
@@ -30,9 +48,7 @@ export function StudyCardImage({
         <img
           className="max-h-52 max-w-full rounded-lg object-contain"
           src={image}
-          alt={t(
-            question ? "study.visualCard.questionAttachment" : "study.visualCard.answerAttachment",
-          )}
+          alt={description || t(labels.alt)}
         />
       </Dialog.Trigger>
       <Dialog.Content size="lg" closeLabel={common("actions.close")}>
@@ -40,7 +56,7 @@ export function StudyCardImage({
         <Dialog.Body>
           <img
             src={image}
-            alt={title}
+            alt={description || title}
             className="mx-auto max-h-[72dvh] max-w-full object-contain"
           />
         </Dialog.Body>

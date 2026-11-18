@@ -7,6 +7,7 @@ import { StudyFollowUps } from "./study-follow-ups";
 import { StudyActivity } from "./study-activity";
 import { originHref, queryIndex, studyHighlightOrigin, studyHref } from "@/lib/study/links";
 import { tutorBookOrigin } from "@/lib/study/passages";
+import { captureStudyImage, type StudyImageCapture } from "@/lib/study/visual-card";
 import { difficultStudyItems, studyHighlightPreview } from "@/lib/study/recall";
 import { studyReadingProgress } from "@/lib/study/reading-progress";
 import { studyActivityGroups } from "@/lib/study/activity";
@@ -30,6 +31,7 @@ import { SettingsSheet } from "@/components/settings/settings-sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   startBookTutor,
+  startBookImageTutor,
   startCardTutor,
   startHighlightTutor,
   studyId,
@@ -600,7 +602,35 @@ export default function StudyWorkspace({
     );
   }
 
-  async function discussWhileReading(
+  async function openTutorWhileReading(open: () => Promise<StudyThread>) {
+    if (readerRequest.current) return;
+    const active = window.document.activeElement;
+    if (!readerThreadId && active instanceof HTMLElement && active !== window.document.body)
+      readerTrigger.current = active;
+    const request = new AbortController();
+    readerRequest.current = request;
+    setOpeningReaderTutor(true);
+    try {
+      const thread = await open();
+      if (!request.signal.aborted) showReaderTutor(thread.id);
+    } catch (error) {
+      if (!request.signal.aborted)
+        toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      readerRequest.current = null;
+      setOpeningReaderTutor(false);
+    }
+  }
+
+  function discussImage(document: StudyBook, section: number, capture: StudyImageCapture) {
+    return openTutorWhileReading(async () => {
+      const snapshot = await captureStudyImage(capture).catch(() => undefined);
+      if (!snapshot) throw new Error(t("study.reader.imageCaptureFailed"));
+      return startBookImageTutor(document, section, snapshot);
+    });
+  }
+
+  function discussWhileReading(
     document: StudyBook,
     scope: "passage" | "chapter" | "book",
     section: number,
@@ -608,10 +638,6 @@ export default function StudyWorkspace({
     goal: StudyThread["goal"] = "book",
     initial?: StudyThread["messages"],
   ) {
-    if (readerRequest.current) return;
-    const active = window.document.activeElement;
-    if (!readerThreadId && active instanceof HTMLElement && active !== window.document.body)
-      readerTrigger.current = active;
     const existing =
       !initial &&
       threads.find(
@@ -625,15 +651,7 @@ export default function StudyWorkspace({
               candidate.offset === selection?.offset &&
               candidate.revision === selection?.revision)),
       );
-    if (existing) {
-      showReaderTutor(existing.id);
-      return;
-    }
-    const request = new AbortController();
-    readerRequest.current = request;
-    setOpeningReaderTutor(true);
-    try {
-      const created = await startBookTutor(
+    return openTutorWhileReading(async () => existing || startBookTutor(
         document,
         {
           goal,
@@ -644,15 +662,7 @@ export default function StudyWorkspace({
           revision: selection?.revision,
         },
         initial,
-      );
-      if (!request.signal.aborted) showReaderTutor(created.id);
-    } catch (error) {
-      if (!request.signal.aborted)
-        toast.error(error instanceof Error ? error.message : String(error));
-    } finally {
-      readerRequest.current = null;
-      setOpeningReaderTutor(false);
-    }
+      ));
   }
 
   function openReadingPanel(what: StudyThread, document: StudyBook) {
@@ -794,6 +804,7 @@ export default function StudyWorkspace({
             startChat={(scope, section, selection, goal, initial) =>
               void discussWhileReading(book, scope, section, selection, goal, initial)
             }
+            startImageChat={(section, capture) => void discussImage(book, section, capture)}
             openingTutor={openingReaderTutor}
             layoutCheckpoint={readerCheckpoint}
           />

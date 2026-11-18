@@ -1,5 +1,6 @@
 import { generateId } from "ai";
-import { flashcardPassageSize } from "@/lib/study/ai";
+import { flashcardPassageSize, maxStudyImageBytes, studyImageSchema } from "@/lib/study/ai";
+import { toBase64 } from "@/lib/base64";
 import type { PassageRef } from "@/lib/chat/types";
 import { notebookAnswerEvidence } from "@/lib/chat/study";
 import { freshSchedule, nextStudySchedule } from "@/lib/study/schedule";
@@ -21,6 +22,7 @@ import { studyFollowUpId, studyReportKey, studyReports } from "@/lib/study/repor
 import { studyTutorContextSchema } from "@/lib/study/records";
 import { studyOriginRecordId, studyVaultIndex } from "@/lib/study/vault";
 import { clearTutorDraftRecovery } from "@/lib/study/tutor-draft-recovery";
+import { studyImageId, type StudyImageSnapshot } from "@/lib/study/visual-card";
 import { flashcardsData } from "@/studio/tools/flashcards/definition";
 import { quizData } from "@/studio/tools/quiz/definition";
 import { normaliseText } from "@/lib/grounding/chunk";
@@ -89,6 +91,31 @@ export function useSavedStudyBookForSource(notebookId: string, sourceId: string,
     () => (enabled ? store().getStudyBookForSource(notebookId, sourceId) : Promise.resolve(undefined)),
     [notebookId, sourceId, enabled],
     ["study"],
+  );
+}
+
+async function studyDocumentImage(book: StudyBook | undefined, thread: StudyThread) {
+  const anchor = thread.imageContext?.anchor;
+  const section = thread.section;
+  if (
+    thread.scope !== "image" || !book || !anchor || anchor.kind !== book.format ||
+    section === undefined || !book.sections[section] || thread.bookId !== book.id
+  ) return;
+  const file = await store().getBlob(studyImageId(book.id, section, anchor));
+  if (
+    !file || file.notebookId !== book.notebookId || file.sourceId !== book.sourceId ||
+    file.data.byteLength > maxStudyImageBytes
+  ) return;
+  return studyImageSchema.safeParse(`data:${file.mime};base64,${toBase64(file.data)}`).data;
+}
+
+export function useStudyDocumentImage(book: StudyBook | undefined, thread: StudyThread) {
+  const anchor = thread.imageContext?.anchor;
+  return useStoreQuery(
+    async () => (await studyDocumentImage(book, thread)) ?? null,
+    [book?.id, book?.notebookId, book?.sourceId, thread.bookId, thread.scope, thread.section,
+      anchor?.kind, anchor?.kind === "pdf" ? anchor.top : anchor?.figure],
+    ["blobs"],
   );
 }
 
@@ -400,6 +427,7 @@ export async function readStudyTutorSources(
   });
   if (scope.owner(thread) !== vaultId) return {};
   const visible = books.filter((book) => scope.owner(book) === vaultId);
+  const book = visible.find(({ id }) => id === thread.bookId);
   const notebookSources = savedSources.filter(
     ({ notebookId }) => scope.notebookOwner(notebookId) === vaultId,
   );
@@ -413,7 +441,10 @@ export async function readStudyTutorSources(
     else chunksBySource.set(chunk.sourceId, [chunk]);
   }
   return {
-    book: visible.find(({ id }) => id === thread.bookId),
+    book,
+    ...(thread.scope === "image" && purpose === "chat"
+      ? { documentImage: await studyDocumentImage(book, thread) }
+      : {}),
     books: visible.filter(({ id }) => bookIds.has(id)),
     notes: notes.filter(({ id }) => scope.noteOwner(id) === vaultId),
     highlights: highlightSources(
@@ -819,6 +850,47 @@ export async function startBookTutor(
   };
   await putStudyRecords(thread);
   return thread;
+}
+
+export async function startBookImageTutor(book: StudyBook, section: number, snapshot: StudyImageSnapshot) {
+  const { context, file } = snapshot;
+  const { anchor } = context;
+  const backend = store();
+  if (!file.data.byteLength || file.data.byteLength > maxStudyImageBytes ||
+    !studyImageSchema.safeParse(`data:${file.mime};base64,${toBase64(file.data)}`).success) {
+    throw new Error("The document image could not be saved.");
+  }
+  const source = await backend.getSource(book.sourceId);
+  if (!source || source.notebookId !== book.notebookId || source.originalFileId !== book.fileId ||
+    !book.fileId || !book.sections[section] || anchor.kind !== book.format)
+    throw new Error("The original document is unavailable.");
+  const fileId = studyImageId(book.id, section, anchor);
+  await backend.putBlob({
+    id: fileId,
+    notebookId: book.notebookId,
+    sourceId: book.sourceId,
+    createdAt: Date.now(),
+    ...file,
+  });
+  const thread: StudyThread = {
+    ...(await studyConversationDefaults("book")),
+    id: `${fileId}:tutor`,
+    kind: "thread",
+    title: `${book.title} · ${context.description || book.sections[section].title}`,
+    goal: "book",
+    scope: "image",
+    notebookId: book.notebookId,
+    bookId: book.id,
+    section,
+    imageContext: context,
+    messages: [],
+    updatedAt: Date.now(),
+  };
+  if (await backend.insertStudy([thread])) return thread;
+  const saved = await readStudyThread(thread.id);
+  if (saved.scope === "image") return saved;
+  await updateStudyThread(saved.id, { scope: "image" });
+  return { ...saved, scope: "image" as const };
 }
 
 export async function saveStudyNote({

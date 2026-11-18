@@ -16,6 +16,7 @@ export function StudyPdfPage({
   onSelect,
   onReadingSurface,
   onVisual,
+  onDiscuss,
 }: {
   fileId: string;
   page: number;
@@ -25,6 +26,7 @@ export function StudyPdfPage({
   onSelect: (root: HTMLElement) => void;
   onReadingSurface: (surface: { section: number; root: HTMLElement | null }) => void;
   onVisual: (capture: StudyImageCapture) => void;
+  onDiscuss: (capture: StudyImageCapture) => void;
 }) {
   const { t } = useTranslation("home");
   const paper = useRef<HTMLDivElement>(null);
@@ -115,23 +117,28 @@ export function StudyPdfPage({
     if (text.current) onSelect(text.current);
   }
 
-  function capturePage() {
+  function capturePage(onCapture: (capture: StudyImageCapture) => void) {
     const original = canvas.current;
     if (!original || !ready || capturing) return;
     setCapturing(true);
     original.toBlob((blob) => {
       if (canvas.current !== original || !original.isConnected) return;
       setCapturing(false);
-      if (blob) onVisual({ kind: "pdf", blob });
+      if (blob) onCapture({ kind: "pdf", blob });
       else toast.error(t("study.visualCard.captureFailed"));
     });
   }
 
   return (
     <div className="space-y-2">
-      <Button variant="outline" size="sm" disabled={!ready || capturing} onClick={capturePage}>
-        {t("study.visualCard.capturePage")}
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" disabled={!ready || capturing} onClick={() => capturePage(onVisual)}>
+          {t("study.visualCard.capturePage")}
+        </Button>
+        <Button variant="outline" size="sm" disabled={!ready || capturing} onClick={() => capturePage(onDiscuss)}>
+          {t("study.reader.discussPageImage")}
+        </Button>
+      </div>
       <div className="overflow-auto">
         <div
           ref={paper}

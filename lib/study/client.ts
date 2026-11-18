@@ -11,6 +11,7 @@ export async function askStudyModel({
   signal,
   cardCount,
   cardImages,
+  documentImage,
   spoken,
 }: {
   action: StudyAction;
@@ -20,6 +21,7 @@ export async function askStudyModel({
   signal?: AbortSignal;
   cardCount?: number;
   cardImages?: StudyCardImages;
+  documentImage?: string;
   spoken?: boolean;
 }) {
   const settings = await getSettings();
@@ -49,6 +51,7 @@ export async function askStudyModel({
       correct: thread?.corrections === "live",
       cardCount,
       cardImages,
+      documentImage,
       correctionMode: thread?.corrections ?? "off",
       practiceLanguage: thread?.practiceLanguage,
       spoken,

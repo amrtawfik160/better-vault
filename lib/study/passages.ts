@@ -16,6 +16,7 @@ export type StudyPassage = {
 
 export type StudyTutorSources = {
   book?: StudyBook;
+  documentImage?: string;
   books?: readonly StudyBook[];
   notes?: readonly Pick<Note, "id" | "title" | "body">[];
   notebookSources?: readonly (Pick<Source, "id" | "title" | "notebookId"> & {
@@ -49,6 +50,7 @@ export function tutorBookOrigin(
 ): Extract<StudyOrigin, { kind: "book" }> & { section: number } {
   const section = Math.min(thread.section ?? book.section, book.sections.length - 1);
   const origin = { kind: "book" as const, bookId: book.id, section };
+  if (thread.scope === "image") return { ...origin, visual: thread.imageContext?.anchor };
   if (thread.scope !== "passage" || !thread.quote) return origin;
   const length = thread.quote.length;
   if (thread.offset !== undefined)
@@ -358,6 +360,15 @@ export function passagesFor(
   if (thread.scope === "general" || !book) return [];
   const origin = tutorBookOrigin(thread, book);
   const { section: position } = origin;
+  if (thread.scope === "image") {
+    const section = book.sections[position];
+    if (!origin.visual || !section) return [];
+    return [{
+      origin,
+      title: `${book.title} · ${section.title}`,
+      text: [thread.imageContext?.description, section.text.trim().slice(0, 8000)].filter(Boolean).join("\n\n"),
+    }];
+  }
   if (thread.scope === "passage" && thread.quote) {
     return [
       {

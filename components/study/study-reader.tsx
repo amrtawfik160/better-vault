@@ -131,6 +131,7 @@ export function StudyReader({
   resume,
   openPassage,
   startChat,
+  startImageChat,
   openingTutor,
   layoutCheckpoint,
   back,
@@ -154,6 +155,7 @@ export function StudyReader({
     goal?: "teach-back",
     initial?: StudyThread["messages"],
   ) => void;
+  startImageChat: (section: number, capture: StudyImageCapture) => void;
   openingTutor: boolean;
   layoutCheckpoint: RefObject<(() => void) | null>;
   back: () => void;
@@ -207,14 +209,15 @@ export function StudyReader({
   const [font, setFont] = useState(18);
   const [zoom, setZoom] = useState(100);
   const [epubTheme, setEpubTheme] = useState<StudyEpubTheme>("system");
-  const [surfaceChoice, setSurfaceChoice] = useState<StudyBook["preferredReadingSurface"]>();
+  const [surfaceChoice, setSurfaceChoice] = useState<{ visit: string; surface: "text" | "layout" }>();
   const [savingSurface, setSavingSurface] = useState(false);
   const previousPlace = book.readingPlace;
   const savedSurface = previousPlace && book.sections[previousPlace.section]?.text.trim()
     ? previousPlace.surface
     : undefined;
   const showLayout = needsOriginal || (
-    surfaceChoice ?? (focusedVisual ? "layout" : undefined) ??
+    (surfaceChoice?.visit === location.key ? surfaceChoice.surface : undefined) ??
+      (focusedVisual ? "layout" : undefined) ??
       book.preferredReadingSurface ?? savedSurface
   ) === "layout";
   const [readingSurface, setReadingSurface] = useState<{ section: number; root: HTMLElement | null }>();
@@ -435,7 +438,7 @@ export function StudyReader({
     try {
       await updateStudyBook(book.id, { preferredReadingSurface });
       if (!visible) setReadingSurface(undefined);
-      setSurfaceChoice(preferredReadingSurface);
+      setSurfaceChoice({ visit: location.key, surface: preferredReadingSurface });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     } finally {
@@ -942,6 +945,7 @@ export function StudyReader({
               onSelect={captureRendered}
               onReadingSurface={setReadingSurface}
               onVisual={openVisualCard}
+              onDiscuss={(capture) => startImageChat(index, capture)}
             />
           </>
         ) : null}
@@ -973,6 +977,7 @@ export function StudyReader({
               onSelect={captureRendered}
               onReadingSurface={setReadingSurface}
               onVisual={openVisualCard}
+              onDiscuss={(capture) => startImageChat(index, capture)}
             />
           </>
         ) : null}

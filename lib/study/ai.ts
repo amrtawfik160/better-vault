@@ -25,30 +25,30 @@ export const studyAnswerSchema = z.object({
   imageFallback: z.boolean().optional(),
 });
 
-const maxCardImageBytes = 2 * 1024 * 1024;
-const cardImageSchema = z
+export const maxStudyImageBytes = 2 * 1024 * 1024;
+export const studyImageSchema = z
   .string()
-  .max(Math.ceil(maxCardImageBytes / 3) * 4 + 32)
+  .max(Math.ceil(maxStudyImageBytes / 3) * 4 + 32)
   .refine((value) => {
     const encoded = /^data:image\/(?:png|jpeg|webp|gif);base64,([A-Za-z0-9+/]+={0,2})$/u.exec(
       value,
     )?.[1];
     if (!encoded || encoded.length % 4 !== 0) return false;
     const padding = encoded.endsWith("==") ? 2 : Number(encoded.endsWith("="));
-    return (encoded.length / 4) * 3 - padding <= maxCardImageBytes;
+    return (encoded.length / 4) * 3 - padding <= maxStudyImageBytes;
   });
 
 export const studyCardImagesSchema = z.object({
-  question: cardImageSchema.optional(),
-  answer: cardImageSchema.optional(),
+  question: studyImageSchema.optional(),
+  answer: studyImageSchema.optional(),
 });
 
 export type StudyCardImages = z.infer<typeof studyCardImagesSchema>;
 
 export function studyPracticeImages(card: Pick<StudyCardEdit, "image" | "backImage"> | undefined) {
   return {
-    question: card?.image ? cardImageSchema.safeParse(card.image).data : undefined,
-    answer: card?.backImage ? cardImageSchema.safeParse(card.backImage).data : undefined,
+    question: card?.image ? studyImageSchema.safeParse(card.image).data : undefined,
+    answer: card?.backImage ? studyImageSchema.safeParse(card.backImage).data : undefined,
   };
 }
 

@@ -19,6 +19,7 @@ import {
   saveStudyText,
   startSourceTutor,
   startBookTutor,
+  startBookImageTutor,
   startCardTutor,
   startHighlightTutor,
   startStudyFollowUp,
@@ -51,6 +52,7 @@ import { setStoreForTests, store } from "./store";
 import { conversationTitle } from "@/lib/chat/title";
 import { studyVaultIndex } from "@/lib/study/vault";
 import { originHref, studyCitationOrigin } from "@/lib/study/links";
+import { passagesFor } from "@/lib/study/passages";
 import { studyDocumentDraftId } from "@/lib/study/document-drafts";
 import type { StudyDocumentRecovery } from "@/lib/study/records";
 import { ingestFile } from "@/lib/sources/ingest";
@@ -186,6 +188,42 @@ describe.each(backends)("%s store", (name, create) => {
       expect(scanned.sections).toEqual(sections.slice(0, 1));
       expect(await getChunks([scanned.sourceId])).toEqual([]);
       expect((await store().getSource(scanned.sourceId))?.selected).toBe(false);
+    });
+
+    it("restores an image conversation with its exact page and checks vault and source ownership", async () => {
+      const book = await addStudyBook({
+        title: "Graphics",
+        format: "pdf",
+        sections: [{ title: "Page 1", text: "" }, { title: "Page 2", text: "" }],
+        bytes: Uint8Array.of(37, 80, 68, 70),
+        mime: "application/pdf",
+      });
+      const anchor = { kind: "pdf", top: 0 } as const;
+      const snapshot = { context: { anchor }, file: { mime: "image/png", data: Uint8Array.of(1, 2, 3) } };
+      const tutor = await startBookImageTutor(book, 1, snapshot);
+      await updateStudyThread(tutor.id, {}, [{ role: "user", text: "Explain the diagram." }]);
+      const reopened = await startBookImageTutor(book, 1, snapshot);
+      expect(reopened.id).toBe(tutor.id);
+      expect(reopened.messages).toHaveLength(1);
+      expect((await startBookImageTutor(book, 0, snapshot)).id).not.toBe(tutor.id);
+      const sources = await readStudyTutorSources(reopened, DEFAULT_VAULT);
+      expect(sources.documentImage).toBe("data:image/png;base64,AQID");
+      expect(passagesFor(reopened, sources, "Explain the diagram.")).toEqual([{
+        origin: { kind: "book", bookId: book.id, section: 1, visual: anchor },
+        title: "Graphics · Page 2",
+        text: "",
+      }]);
+      expect((await readStudyTutorSources(reopened, "another-vault")).documentImage).toBeUndefined();
+      expect((await readStudyTutorSources(reopened, DEFAULT_VAULT, "report")).documentImage).toBeUndefined();
+
+      const backup = JSON.parse(JSON.stringify(await exportBackup()));
+      await deleteAllData();
+      await importBackup(backup);
+      const restored = await readStudyThread(tutor.id);
+      expect(restored.messages).toEqual(reopened.messages);
+      expect((await readStudyTutorSources(restored, DEFAULT_VAULT)).documentImage).toBe(sources.documentImage);
+      await deleteSource(book.sourceId);
+      expect((await readStudyTutorSources(restored, DEFAULT_VAULT)).documentImage).toBeUndefined();
     });
   });
 

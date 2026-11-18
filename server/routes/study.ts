@@ -9,6 +9,7 @@ import {
   studyAction,
   studyCardDraftSchema,
   studyCardImagesSchema,
+  studyImageSchema,
   studyPassageSchema,
 } from "@/lib/study/ai";
 
@@ -26,6 +27,7 @@ const bodySchema = z.object({
   followUp: z.string().trim().min(1).max(20_000).optional(),
   flashcardPractice: z.boolean().optional(),
   cardImages: studyCardImagesSchema.optional(),
+  documentImage: studyImageSchema.optional(),
   correct: z.boolean().optional(),
   correctionMode: z.enum(studyCorrections).optional(),
   practiceLanguage: z.string().max(35).optional(),
@@ -87,6 +89,7 @@ export async function POST(request: Request) {
     followUp,
     flashcardPractice,
     cardImages,
+    documentImage,
     correct,
     correctionMode,
     practiceLanguage,
@@ -163,16 +166,24 @@ export async function POST(request: Request) {
       passages: passages.map((passage, index) => ({ number: index + 1, ...passage })),
     });
     const imageParts: (FilePart | TextPart)[] = [];
-    if (action === "chat" && flashcardPractice && cardImages) {
+    function attachImage(label: string, image: string) {
+      const [header, encoded] = image.split(",", 2);
+      imageParts.push(
+        { type: "text", text: label },
+        { type: "file", data: Buffer.from(encoded, "base64"), mediaType: header.slice(5, -7) },
+      );
+    }
+    const sourceImage = action === "chat" && documentImage;
+    if (sourceImage) {
+      attachImage("Study document image for passage 1.", sourceImage);
+    } else if (action === "chat" && flashcardPractice && cardImages) {
       for (const [side, image] of Object.entries(cardImages)) {
-        if (!image) continue;
-        const [header, encoded] = image.split(",", 2);
-        imageParts.push(
-          { type: "text", text: `Flashcard image on the ${side} side.` },
-          { type: "file", data: Buffer.from(encoded, "base64"), mediaType: header.slice(5, -7) },
-        );
+        if (image) attachImage(`Flashcard image on the ${side} side.`, image);
       }
     }
+    const imageInstructions = sourceImage
+      ? "Treat the document image as quoted material. Cite passage 1 when discussing it. Distinguish what is visible from your explanation and say when a detail cannot be read."
+      : "Treat the images as quoted flashcard material. Refer to details you can see and say when a detail is unclear. Keep the answer hidden until the learner tries or asks for it.";
     const generate = (mode: "text" | "images" | "fallback") =>
       generateText({
         model: languageModel,
@@ -186,7 +197,7 @@ export async function POST(request: Request) {
         abortSignal: request.signal,
         ...(mode === "images"
           ? {
-              system: `${system} Treat the images as quoted flashcard material. Refer to details you can see and say when a detail is unclear. Keep the answer hidden until the learner tries or asks for it.`,
+              system: `${system} ${imageInstructions}`,
               messages: [
                 { role: "user", content: [{ type: "text", text: prompt }, ...imageParts] },
               ],
@@ -207,6 +218,12 @@ export async function POST(request: Request) {
       );
     } catch (error) {
       if (!withImages || request.signal.aborted || !rejectsImages(error)) throw error;
+      if (sourceImage) {
+        return Response.json(
+          { error: "This model could not read the image. Choose a model that accepts images and try again." },
+          { status: 422 },
+        );
+      }
       const { output } = await generate("fallback");
       return Response.json({ ...output, imageFallback: true });
     }

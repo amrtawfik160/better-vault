@@ -44,6 +44,7 @@ import {
   studyId,
   updateStudyThread,
   updateStudyReport,
+  useStudyDocumentImage,
 } from "@/lib/db/study";
 import { askStudyModel } from "@/lib/study/client";
 import { studyConversationMaterial, studyPracticeImages } from "@/lib/study/ai";
@@ -280,7 +281,7 @@ export function TutorIndex({
               onChange={(event) => setScope(event.target.value as StudyThread["scope"])}
             >
               {studyScopes
-                .filter((value) => value !== "passage")
+                .filter((value) => value !== "passage" && value !== "image")
                 .map((value) => (
                   <option key={value} value={value}>
                     {value === "materials" ? t("study.materials.scope")
@@ -522,9 +523,11 @@ export function StudyTutor({
   const practiceCards = selectedStudyCards(selected.cardIds, reportCards);
   const practiceCard = activeStudyCard(practiceCards, thread.practiceCardId);
   const practiceImages = studyPracticeImages(practiceCard);
+  const documentImage = useStudyDocumentImage(book, thread);
+  const imagePractice = thread.scope === "image";
   const answerImageVisible = !!practiceCard && answerImageCardId === practiceCard.id;
   const nextCard = practiceCards[practiceCards.findIndex(({ id }) => id === practiceCard?.id) + 1];
-  const contextReady = !curated || tutorSelectionCount(selected) > 0;
+  const contextReady = (!curated || tutorSelectionCount(selected) > 0) && (!imagePractice || !!documentImage);
   const controller = useRef<AbortController | null>(null);
   const voice = useRef<VoiceCapture | null>(null);
   const live = useRef<LiveVoice | null>(null);
@@ -679,6 +682,9 @@ export function StudyTutor({
       const consume = consumedId ? { kind: "consume" as const, id: consumedId } : undefined;
       const sources = await readStudyTutorSources(current, vaultId);
       signal.throwIfAborted();
+      if (current.scope === "image" && !sources.documentImage) {
+        throw new Error(t("study.reader.imageContextUnavailable"));
+      }
       const passages = passagesFor(current, sources, text);
       if (current.scope !== "general" && !passages.length)
         throw new Error(
@@ -706,6 +712,7 @@ export function StudyTutor({
           : current,
         signal,
         spoken,
+        documentImage: sources.documentImage,
         cardImages: images.question || answerImage
           ? { question: images.question, answer: answerImage }
           : undefined,
@@ -1161,7 +1168,7 @@ export function StudyTutor({
           >
             {studyScopes
               .filter(
-                (scope) =>
+                (scope) => scope === "image" ? !!thread.imageContext :
                   scope === "general" ||
                   scope === "notes" ||
                   scope === "materials" ||
@@ -1171,7 +1178,8 @@ export function StudyTutor({
               .map((scope) => (
                 <option value={scope} key={scope}>
                   {scope === "materials" ? t("study.materials.scope")
-                    : scope === "cards" ? t("study.materials.cards") : scopeLabels[scope]}
+                    : scope === "cards" ? t("study.materials.cards")
+                    : scope === "image" ? t("study.reader.imageContext") : scopeLabels[scope]}
                 </option>
               ))}
           </select>
@@ -1222,6 +1230,30 @@ export function StudyTutor({
           </div>
         ) : null}
       </div>
+      {imagePractice ? (
+        <div className="space-y-2 rounded-xl border p-3">
+          {documentImage ? (
+            <>
+              <StudyCardImage side="document" image={documentImage} description={thread.imageContext?.description} />
+              <p className="text-xs text-muted-foreground">{t("study.reader.imageContextHint")}</p>
+              {!conversation.length ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={workPending || !model}
+                  onClick={() => void send(t("study.reader.explainImage"), Date.now(), { starter: true })}
+                >
+                  {t("study.reader.explainImage")}
+                </Button>
+              ) : null}
+            </>
+          ) : (
+            <p role="status" className="text-sm text-muted-foreground">
+              {t(documentImage === null ? "study.reader.imageContextUnavailable" : "study.reader.imageContextLoading")}
+            </p>
+          )}
+        </div>
+      ) : null}
       {practiceCard ? (
         <div className="flex flex-wrap items-end gap-2 rounded-xl border p-3">
           <label className="grid min-w-0 flex-[1_1_15rem] gap-1 text-sm">

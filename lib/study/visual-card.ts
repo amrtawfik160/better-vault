@@ -1,8 +1,22 @@
+import { fromBase64 } from "@/lib/base64";
+import type { StudyImageContext, StudyVisualOrigin } from "./records";
+
 export type StudyImageCapture =
   { kind: "pdf"; blob: Blob } | { kind: "epub"; blob: Blob; figure: number; description: string };
 
 export type StudyImageCrop = { left: number; top: number; right: number; bottom: number };
 export const fullStudyImage: StudyImageCrop = { left: 0, top: 0, right: 100, bottom: 100 };
+
+export function studyImageAnchor(capture: StudyImageCapture): StudyVisualOrigin {
+  return capture.kind === "pdf"
+    ? { kind: "pdf", top: 0 }
+    : { kind: "epub", figure: capture.figure };
+}
+
+export function studyImageId(bookId: string, section: number, anchor: StudyVisualOrigin) {
+  const position = anchor.kind === "pdf" ? anchor.top : anchor.figure;
+  return `study-image:${encodeURIComponent(bookId)}:${section}:${anchor.kind}:${position}`;
+}
 
 export function studyCropPixels(crop: StudyImageCrop, width: number, height: number) {
   const x = Math.floor((crop.left * width) / 100);
@@ -41,4 +55,31 @@ export function studyCardImage(image: HTMLImageElement, crop: StudyImageCrop) {
   return data.startsWith("data:image/") && size <= Math.floor((2 * 1024 * 1024 * 4) / 3)
     ? data
     : undefined;
+}
+export type StudyImageSnapshot = {
+  context: StudyImageContext;
+  file: { mime: string; data: Uint8Array };
+};
+
+export async function captureStudyImage(
+  capture: StudyImageCapture,
+): Promise<StudyImageSnapshot | undefined> {
+  const url = URL.createObjectURL(capture.blob);
+  try {
+    const image = new Image();
+    image.src = url;
+    await image.decode();
+    const snapshot = studyCardImage(image, fullStudyImage);
+    if (!snapshot) return;
+    const [header, encoded] = snapshot.split(",", 2);
+    return {
+      context: {
+        anchor: studyImageAnchor(capture),
+        description: capture.kind === "epub" ? capture.description.slice(0, 500) : undefined,
+      },
+      file: { mime: header.slice(5, -7), data: fromBase64(encoded) },
+    };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }

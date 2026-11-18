@@ -111,31 +111,42 @@ async function loadPictures(
 }
 
 type FigureCapture = Extract<StudyImageCapture, { kind: "epub" }>;
+type FigureActions = {
+  onVisual: (capture: StudyImageCapture) => void;
+  onDiscuss: (capture: StudyImageCapture) => void;
+};
 
 function FigureAction({
   capture,
-  onVisual,
+  actions,
 }: {
   capture: FigureCapture;
-  onVisual: (capture: StudyImageCapture) => void;
+  actions: FigureActions;
 }) {
   const { t } = useTranslation("home");
   return (
-    <Button
-      type="button"
-      data-study-reading-control
-      className="select-none"
-      variant="ghost"
-      size="sm"
-      aria-label={
-        capture.description
-          ? t("study.visualCard.captureNamedFigure", { description: capture.description })
-          : undefined
-      }
-      onClick={() => onVisual(capture)}
-    >
-      {t("study.visualCard.captureFigure")}
-    </Button>
+    <span className="inline-flex flex-wrap gap-1" data-study-reading-control>
+      <Button
+        type="button"
+        className="select-none"
+        variant="ghost"
+        size="sm"
+        aria-label={capture.description ? t("study.visualCard.captureNamedFigure", { description: capture.description }) : undefined}
+        onClick={() => actions.onVisual(capture)}
+      >
+        {t("study.visualCard.captureFigure")}
+      </Button>
+      <Button
+        type="button"
+        className="select-none"
+        variant="ghost"
+        size="sm"
+        aria-label={capture.description ? t("study.reader.discussNamedFigure", { description: capture.description }) : undefined}
+        onClick={() => actions.onDiscuss(capture)}
+      >
+        {t("study.reader.discussFigure")}
+      </Button>
+    </span>
   );
 }
 
@@ -145,7 +156,7 @@ function displayChapter(
   pictures: Map<string, EpubPicture>,
   destinations: ReadonlyMap<string, number>,
   go: (index: number) => void,
-  onVisual: (capture: StudyImageCapture) => void,
+  actions: FigureActions,
 ) {
   const figures = new Map<Element, number>();
   chapter.body.querySelectorAll("img").forEach((image, index) => figures.set(image, index));
@@ -194,7 +205,7 @@ function displayChapter(
             data-study-figure={figure.capture.figure}
             className="max-h-[60vh] max-w-full object-contain"
           />
-          {linked ? null : <FigureAction capture={figure.capture} onVisual={onVisual} />}
+          {linked ? null : <FigureAction capture={figure.capture} actions={actions} />}
         </span>
       );
     }
@@ -233,7 +244,7 @@ function displayChapter(
                   <FigureAction
                     key={figure.capture.figure}
                     capture={figure.capture}
-                    onVisual={onVisual}
+                    actions={actions}
                   />,
                 ]
               : [];
@@ -293,6 +304,7 @@ export function StudyEpubChapter({
   onSelect,
   onReadingSurface,
   onVisual,
+  onDiscuss,
   go,
 }: {
   fileId: string;
@@ -305,6 +317,7 @@ export function StudyEpubChapter({
   onSelect: (root: HTMLElement) => void;
   onReadingSurface: (surface: { section: number; root: HTMLElement | null }) => void;
   onVisual: (capture: StudyImageCapture) => void;
+  onDiscuss: (capture: StudyImageCapture) => void;
   go: (index: number) => void;
 }) {
   const [loaded, setLoaded] = useState<{
@@ -379,7 +392,7 @@ export function StudyEpubChapter({
       onTouchEnd={capture}
       onKeyUp={capture}
     >
-      {displayChapter(loaded.chapter, loaded.path, loaded.pictures, destinations, go, onVisual)}
+      {displayChapter(loaded.chapter, loaded.path, loaded.pictures, destinations, go, { onVisual, onDiscuss })}
     </div>
   );
 }
