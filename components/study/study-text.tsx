@@ -19,7 +19,11 @@ export function StudyText({
   const usesMath = math.test(text);
   if (!usesMath && !prose && !code.test(text)) {
     return (
-      <DirectionalText multiline text={text} className={cn("whitespace-pre-wrap", className)} />
+      <DirectionalText
+        multiline
+        text={text.replace(/(?<!\\)\\\$/g, "$")}
+        className={cn("whitespace-pre-wrap", className)}
+      />
     );
   }
 

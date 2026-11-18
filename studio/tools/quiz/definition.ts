@@ -28,6 +28,13 @@ export const quizCounts = { fewer: 5, standard: 10, more: 20 } as const;
 
 const LETTERS = "ABCDEFGH";
 
+function markdownListItem(marker: string, label: string, content: string) {
+  if (!content.includes("\n")) return `${marker} ${label} ${content}`.trimEnd();
+  const indent = " ".repeat(marker.length + 1);
+  const body = content.split("\n").map((line) => (line ? `${indent}${line}` : ""));
+  return [`${marker} ${label}`, "", ...body].join("\n");
+}
+
 export const quizTool = defineTool({
   id: "quiz",
   options: quizOptions,
@@ -40,18 +47,25 @@ export const quizTool = defineTool({
         const { HeadingLevel, isRightToLeft, Paragraph, TextRun, wordDocument } =
           await import("@/studio/exports/docx");
         const rtl = isRightToLeft(data.questions.map((q) => q.question).join(" "));
+        const lines = (value: string, bold = false) =>
+          value
+            .split("\n")
+            .map(
+              (line, index) =>
+                new TextRun({ text: line, bold, break: index === 0 ? undefined : 1 }),
+            );
         const questions = data.questions.flatMap((q, at) => [
           new Paragraph({
             bidirectional: rtl,
             spacing: { before: 240 },
-            children: [new TextRun({ text: `${at + 1}. ${q.question}`, bold: true })],
+            children: lines(`${at + 1}. ${q.question}`, true),
           }),
           ...q.options.map(
             (option, i) =>
               new Paragraph({
                 bidirectional: rtl,
                 indent: { start: 360 },
-                children: [new TextRun(`${LETTERS[i]}. ${option}`)],
+                children: lines(`${LETTERS[i]}. ${option}`),
               }),
           ),
         ]);
@@ -65,17 +79,15 @@ export const quizTool = defineTool({
           ...data.questions.flatMap((q, at) => [
             new Paragraph({
               bidirectional: rtl,
-              children: [
-                new TextRun({
-                  text: `${at + 1}. ${LETTERS[q.answer]}. ${q.options[q.answer] ?? ""}`,
-                  bold: true,
-                }),
-              ],
+              children: lines(
+                `${at + 1}. ${LETTERS[q.answer]}. ${q.options[q.answer] ?? ""}`,
+                true,
+              ),
             }),
             new Paragraph({
               bidirectional: rtl,
               indent: { start: 360 },
-              children: [new TextRun(q.explanation)],
+              children: lines(q.explanation),
             }),
           ]),
         ];
@@ -90,13 +102,17 @@ export const quizTool = defineTool({
             `# ${title}`,
             ...data.questions.map((q, at) =>
               [
-                `## ${at + 1}. ${q.question}`,
-                ...q.options.map((option, i) => `- ${LETTERS[i]}. ${option}`),
-              ].join("\n"),
+                q.question.includes("\n")
+                  ? `## ${at + 1}\n\n${q.question}`
+                  : `## ${at + 1}. ${q.question}`,
+                q.options
+                  .map((option, i) => markdownListItem("-", `${LETTERS[i]}.`, option))
+                  .join("\n"),
+              ].join("\n\n"),
             ),
             `## ${text.answerKey}`,
-            ...data.questions.map(
-              (q, at) => `${at + 1}. **${LETTERS[q.answer]}.** ${q.explanation}`,
+            ...data.questions.map((q, at) =>
+              markdownListItem(`${at + 1}.`, `**${LETTERS[q.answer]}.**`, q.explanation),
             ),
           ].join("\n\n"),
           "text/markdown",

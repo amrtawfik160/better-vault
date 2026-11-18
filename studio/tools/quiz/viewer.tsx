@@ -4,14 +4,14 @@ import {
   CheckmarkCircle02Icon,
   RotateLeft01Icon,
 } from "@hugeicons/core-free-icons";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Icon } from "@/components/icon";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
-import { DirectionalText, directionalInline } from "@/components/common/directional-text";
 import { textDirection } from "@/lib/text/direction";
 import { Button } from "@/components/panelui/button";
+import { StudyText } from "@/components/study/study-text";
 import { cn } from "@/lib/utils";
 import type { ToolViewerProps } from "@/studio/shared/form";
 import { StudioStudySources } from "@/studio/shared/study-sources";
@@ -41,14 +41,15 @@ export function QuizViewer({
   const finished = index >= total;
   const chosen = answers[index];
   const answered = chosen !== undefined;
-  const heading = useRef<HTMLHeadingElement>(null);
+  const questionId = useId();
+  const heading = useRef<HTMLDivElement>(null);
   const feedback = useRef<HTMLDivElement>(null);
   const moveFocus = useRef(false);
 
   useEffect(() => {
     if (!moveFocus.current) return;
     moveFocus.current = false;
-    (answered ? feedback.current : heading.current)?.focus({ preventScroll: true });
+    (answered ? feedback.current : heading.current)?.focus();
   }, [localAttempt, answered]);
 
   async function apply(action: QuizAction) {
@@ -78,13 +79,15 @@ export function QuizViewer({
     const score = total - missed.length;
     return (
       <div className="mx-auto flex w-full max-w-md flex-col items-center gap-4 py-16 text-center">
-        <h3
+        <div
           ref={heading}
+          role="heading"
+          aria-level={3}
           tabIndex={-1}
           className="text-4xl font-semibold tabular-nums outline-none"
         >
           {score}/{total}
-        </h3>
+        </div>
         <p className="text-muted-foreground">{t("quiz.viewer.score", { score, total })}</p>
         {onReviewMissed && missed.length ? (
           <Button
@@ -147,52 +150,61 @@ export function QuizViewer({
         </div>
       </div>
 
-      <h3
+      <div
         ref={heading}
+        id={questionId}
+        role="heading"
+        aria-level={3}
         tabIndex={-1}
         dir={direction}
-        className="text-xl leading-snug font-semibold outline-none"
+        className="min-w-0 outline-none"
       >
-        {directionalInline(question.question, direction)}
-      </h3>
+        <StudyText text={question.question} className="text-xl leading-snug font-semibold" />
+      </div>
 
-      <div role="radiogroup" aria-label={question.question} className="flex flex-col gap-2">
+      <div role="radiogroup" aria-labelledby={questionId} className="flex flex-col gap-2">
         {question.options.map((option, at) => {
           const right = at === question.answer;
           const picked = at === chosen;
+          const optionId = `${questionId}-option-${at}`;
           return (
-            <button
+            <div
               key={at}
-              type="button"
-              role="radio"
-              aria-checked={picked}
-              disabled={answered || committing}
-              onClick={() => void apply({ kind: "answer", option: at })}
               className={cn(
-                "flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 text-start transition-colors outline-none",
-                "hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:hover:bg-transparent",
-                answered && right && "border-success bg-success/10 disabled:hover:bg-success/10",
-                answered &&
-                  picked &&
-                  !right &&
-                  "border-destructive bg-destructive/10 disabled:hover:bg-destructive/10",
+                "relative flex min-w-0 items-start gap-3 rounded-2xl border px-4 py-3 text-start transition-colors",
+                "has-[:enabled]:hover:bg-muted/60",
+                answered && right && "border-success bg-success/10",
+                answered && picked && !right && "border-destructive bg-destructive/10",
               )}
             >
-              <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={picked}
+                aria-labelledby={`${optionId}-letter ${optionId}`}
+                disabled={answered || committing}
+                onClick={() => void apply({ kind: "answer", option: at })}
+                className="absolute inset-0 cursor-pointer rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"
+              />
+              <span
+                id={`${optionId}-letter`}
+                className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold"
+              >
                 {LETTERS[at]}
               </span>
-              <DirectionalText
-                as="span"
-                text={option}
-                className="min-w-0 flex-1 pt-0.5 text-[0.9375rem] leading-6"
-              />
+              <div id={optionId} className="min-w-0 flex-1 pt-0.5">
+                <StudyText
+                  text={option}
+                  className="text-[0.9375rem] leading-6 [overflow-wrap:anywhere] [&_.katex-display]:relative [&_pre]:relative"
+                />
+              </div>
               {answered && right ? (
                 <Icon icon={CheckmarkCircle02Icon} size={18} className="mt-0.5 text-success" />
               ) : null}
               {answered && picked && !right ? (
                 <Icon icon={CancelCircleIcon} size={18} className="mt-0.5 text-destructive" />
               ) : null}
-            </button>
+            </div>
           );
         })}
       </div>
@@ -211,15 +223,15 @@ export function QuizViewer({
           >
             {chosen === question.answer ? t("quiz.viewer.correct") : t("quiz.viewer.incorrect")}
           </p>
-          <DirectionalText multiline className="mt-1" text={question.explanation} />
+          <StudyText className="mt-1 text-sm leading-6" text={question.explanation} />
           <StudioStudySources sources={question.sources} open={onOpenPassage} />
         </div>
       ) : question.hint ? (
         hintRevision === attempt.revision ? (
-          <p className="flex items-start gap-2 rounded-2xl bg-warning/10 px-4 py-3 text-sm leading-6">
+          <div className="flex items-start gap-2 rounded-2xl bg-warning/10 px-4 py-3 text-sm leading-6">
             <Icon icon={BulbIcon} size={16} className="mt-1 shrink-0 text-warning" />
-            <DirectionalText as="span" multiline className="min-w-0 flex-1" text={question.hint} />
-          </p>
+            <StudyText className="min-w-0 flex-1 text-sm leading-6" text={question.hint} />
+          </div>
         ) : (
           <button
             type="button"
