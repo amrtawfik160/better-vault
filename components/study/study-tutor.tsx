@@ -67,7 +67,7 @@ import {
 } from "@/lib/study/voice-session";
 import {
   studyCorrections,
-  studyGoals,
+  studyGoal,
   studyScopes,
   type StudyBook,
   type StudyThread,
@@ -78,12 +78,9 @@ import {
   type StudyOrigin,
 } from "@/lib/study/records";
 
-const goalLabels = {
-  book: "Book questions",
-  "teach-back": "Teach it back",
-  language: "Language practice",
-  general: "General tutor",
-};
+function simulationGoal(goal: StudyThread["goal"]) {
+  if (goal === "technical-interview" || goal === "meeting-simulation") return goal;
+}
 const scopeLabels = {
   passage: "Selection",
   chapter: "Current section",
@@ -100,7 +97,12 @@ type VoiceCapture = {
 };
 
 type LiveVoice = ReturnType<typeof startStudyVoiceSession> & { abort: AbortController };
-type TutorDelivery = { draft?: TutorComposeDraft; spoken?: boolean; session?: AbortSignal };
+type TutorDelivery = {
+  draft?: TutorComposeDraft;
+  spoken?: boolean;
+  session?: AbortSignal;
+  starter?: true;
+};
 type TutorFailure =
   | { kind: "answer"; text: string; delivery: Omit<TutorDelivery, "session">; detail?: string }
   | { kind: "report"; detail?: string };
@@ -178,6 +180,7 @@ export function TutorIndex({
   const [deleting, setDeleting] = useState<StudyThread | null>(null);
   const savedSettings = useSettings();
   const cardPractice = scope === "cards";
+  const simulation = cardPractice ? undefined : simulationGoal(goal);
   const curated = scope === "notes" || scope === "materials" || cardPractice;
   const readableBooks = useMemo(
     () => books.filter(({ sections }) => sections.some(({ text }) => text.trim())),
@@ -224,15 +227,17 @@ export function TutorIndex({
             materialTitle && selectedCount > 1
               ? t("study.materials.threadTitle", { title: materialTitle, count: selectedCount - 1 })
               : (materialTitle ?? book?.title);
+          const name = t(`study.goals.labels.${goal}`);
           const thread: StudyThread = {
             id: studyId(),
             kind: "thread",
-            title: subject ? `${goalLabels[goal]} · ${subject}` : goalLabels[goal],
+            title: subject ? `${name} · ${subject}` : name,
             goal,
             scope,
             messages: [],
             vaultId,
             bookId: book?.id,
+            section: scope === "chapter" ? book?.section : undefined,
             ...(curated ? selected : {}),
             notebookId: scope === "book" || scope === "chapter" ? book?.notebookId : undefined,
             updatedAt: Date.now(),
@@ -245,16 +250,20 @@ export function TutorIndex({
       >
         <div className="flex flex-wrap items-end gap-3">
           <label className="grid gap-1 text-sm">
-            Goal
+            {t("study.goals.label")}
             <select
+              aria-label={t("study.goals.label")}
               className={optionClass}
               value={cardPractice ? "teach-back" : goal}
               disabled={cardPractice}
-              onChange={(event) => setGoal(event.target.value as StudyThread["goal"])}
+              onChange={(event) => {
+                const choice = studyGoal.safeParse(event.target.value);
+                if (choice.success) setGoal(choice.data);
+              }}
             >
-              {studyGoals.map((value) => (
+              {studyGoal.options.map((value) => (
                 <option key={value} value={value}>
-                  {goalLabels[value]}
+                  {t(`study.goals.labels.${value}`)}
                 </option>
               ))}
             </select>
@@ -279,14 +288,15 @@ export function TutorIndex({
           </label>
           {scope === "chapter" || scope === "book" ? (
             <label className="grid gap-1 text-sm">
-              Document
+              {t("study.goals.document")}
               <select
+                aria-label={t("study.goals.document")}
                 className={optionClass}
                 value={bookId}
                 required
                 onChange={(event) => setBookId(event.target.value)}
               >
-                <option value="">Choose a document</option>
+                <option value="">{t("study.goals.chooseDocument")}</option>
                 {books.map((book) => (
                   <option value={book.id} key={book.id}>
                     {book.title}
@@ -309,6 +319,9 @@ export function TutorIndex({
             Start conversation
           </Button>
         </div>
+        {simulation ? (
+          <p className="text-sm text-muted-foreground">{t(`study.goals.simulation.${simulation}.hint`)}</p>
+        ) : null}
       </form>
       <details className="rounded-xl border p-3 text-sm">
         <summary className="cursor-pointer font-medium">Tutor preferences</summary>
@@ -511,6 +524,7 @@ export function StudyTutor({
   const models = settings ? availableModels(settings) : [];
   const reports = studyReports(thread);
   const followUp = thread.followUp;
+  const simulation = !cardPractice && !followUp ? simulationGoal(thread.goal) : undefined;
   const originalThread = followUp && vaultThreads.find(({ id }) => id === followUp.threadId);
   const originalReport =
     followUp && originalThread &&
@@ -616,7 +630,7 @@ export function StudyTutor({
   async function send(
     message: string,
     submittedAt: number,
-    { spoken = false, session, draft }: TutorDelivery = {},
+    { spoken = false, session, draft, starter }: TutorDelivery = {},
   ) {
     const text = message.trim();
     if (!text || controller.current || !model) return;
@@ -666,7 +680,7 @@ export function StudyTutor({
         return passage ? [{ index, origin: passage.origin, title: passage.title }] : [];
       });
       const turns: StudyThread["messages"] = [
-        { role: "user", text, at: submittedAt, practiceCardId, draftId: keepTurn ? draft?.id : undefined },
+        { role: "user", text, at: submittedAt, practiceCardId, draftId: keepTurn ? draft?.id : undefined, starter },
         { role: "assistant", text: answer.text, citations, at: submittedAt, practiceCardId },
       ];
       if (!keepTurn) {
@@ -692,7 +706,7 @@ export function StudyTutor({
         setFailed({
           kind: "answer",
           text,
-          delivery: { draft: recover, spoken },
+          delivery: { draft: recover, spoken, starter },
           detail: signal.aborted ? undefined : error instanceof Error ? error.message : String(error),
         });
       }
@@ -820,9 +834,13 @@ export function StudyTutor({
         toast.info(t("study.voice.noTurnForReport"));
         return;
       }
+      let history = context.messages.filter((entry) => !entry.starter);
+      if (!history.some(({ role }) => role === "user")) {
+        toast.info(t("study.goals.answerBeforeReport"));
+        return;
+      }
       const sources = await readStudyTutorSources(context, vaultId, "report");
       abort.signal.throwIfAborted();
-      let history = context.messages;
       if (context.scope === "cards") {
         const available = new Set(sources.cards?.map(({ id }) => id));
         history = history.filter(({ practiceCardId }) => practiceCardId && available.has(practiceCardId));
@@ -1252,6 +1270,13 @@ export function StudyTutor({
             </div>
           ))}
         </div>
+      ) : simulation ? (
+        <Button
+          disabled={workPending || !model || !contextReady}
+          onClick={() => void send(t(`study.goals.simulation.${simulation}.prompt`), Date.now(), { starter: true })}
+        >
+          {t(`study.goals.simulation.${simulation}.start`)}
+        </Button>
       ) : !cardPractice && !followUp ? (
         <div className="flex flex-wrap gap-2">
           {selected.highlightIds.length ? (
@@ -1529,7 +1554,7 @@ export function StudyTutor({
                 finishingVoice ||
                 (!livePhase && workPending) ||
                 !model ||
-                (!conversation.length && !pendingVoiceTurn)
+                (!conversation.some(({ entry }) => entry.role === "user" && !entry.starter) && !pendingVoiceTurn)
               }
               onClick={() => void finishVoiceReport()}
             >

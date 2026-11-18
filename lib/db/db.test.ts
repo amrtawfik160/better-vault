@@ -1408,6 +1408,44 @@ describe.each(backends)("%s store", (name, create) => {
       expect(await updateStudyReport(thread.id, { kind: "save", report: newReport })).toBe(false);
     });
 
+    it("keeps simulation goals, opening prompts, and report context on backup restore", async () => {
+      for (const goal of ["technical-interview", "meeting-simulation"] as const) {
+        await putStudyRecords({
+          id: goal,
+          kind: "thread",
+          title: goal,
+          goal,
+          scope: "general",
+          updatedAt: 0,
+          messages: [
+            { role: "user", text: "Start the exercise.", starter: true },
+            { role: "assistant", text: "Why should we keep the replicas in sync?" },
+            { role: "user", text: "So a replica failure won't lose committed changes." },
+          ],
+        });
+        const thread = await readStudyThread(goal);
+        await updateStudyReport(goal, {
+          kind: "save",
+          report: {
+            id: "first-report",
+            summary: "Discussed failure recovery.",
+            corrections: [],
+            nextSteps: [],
+            practiceContext: captureReportPracticeContext(thread, {}),
+          },
+        });
+      }
+      const backup = JSON.parse(JSON.stringify(await exportBackup()));
+      await deleteAllData();
+      await importBackup(backup);
+      for (const goal of ["technical-interview", "meeting-simulation"] as const) {
+        const thread = await readStudyThread(goal);
+        expect(thread).toMatchObject({ goal, report: { practiceContext: { goal } } });
+        expect(thread.messages[0].starter).toBe(true);
+        expect(thread.messages[2].starter).toBeUndefined();
+      }
+    });
+
     it("resumes one practice conversation per saved step with the original report's context", async () => {
       const vaultId = await createVault({ name: "Distributed systems" });
       const note = await createNote({ vaultId, title: "Quorum proof", body: "Majorities share a replica." });

@@ -317,6 +317,32 @@
       "continueWithTutor": "Continue with Tutor",
       "documentUnavailable": "This study document is no longer available."
     },
+    "goals": {
+      "label": "Goal",
+      "document": "Document",
+      "chooseDocument": "Choose a document",
+      "labels": {
+        "book": "Book questions",
+        "teach-back": "Teach it back",
+        "technical-interview": "Technical interview",
+        "meeting-simulation": "Meeting simulation",
+        "language": "Language practice",
+        "general": "General tutor"
+      },
+      "simulation": {
+        "technical-interview": {
+          "hint": "Answer one question at a time and get feedback on your reasoning.",
+          "start": "Start interview",
+          "prompt": "Start the technical interview. Ask me the first question."
+        },
+        "meeting-simulation": {
+          "hint": "Practice explaining a proposal and agreeing on next steps with a colleague.",
+          "start": "Start meeting",
+          "prompt": "Start the work meeting simulation. Play my colleague."
+        }
+      },
+      "answerBeforeReport": "Make an attempt before generating a session report."
+    },
     "recovery": {
       "answerPending": "Tutor is preparing a reply…",
       "reportPending": "Tutor is preparing the session report…",

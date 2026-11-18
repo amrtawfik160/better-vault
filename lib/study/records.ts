@@ -70,14 +70,21 @@ const citation = z.union([
   z.object({ ...citationFields, bookId: z.string(), section: index }),
 ]);
 
-export const studyGoals = ["book", "teach-back", "language", "general"] as const;
+export const studyGoal = z.enum([
+  "book",
+  "teach-back",
+  "technical-interview",
+  "meeting-simulation",
+  "language",
+  "general",
+]);
 export const studyScopes = ["passage", "chapter", "book", "notes", "materials", "cards", "general"] as const;
 export const studyCorrections = ["live", "report", "off"] as const;
 export const studyRatings = ["again", "hard", "good", "easy"] as const;
 export const studyHighlightColor = z.enum(["yellow", "green", "blue", "pink", "purple"]);
 
 export const studyTutorContextSchema = z.object({
-  goal: z.enum(studyGoals),
+  goal: studyGoal,
   scope: z.enum(studyScopes),
   corrections: z.enum(studyCorrections).optional(),
   practiceLanguage: z.string().max(35).optional(),
@@ -228,6 +235,7 @@ export const studyRecordSchema = z.discriminatedUnion("kind", [
         at: z.number().optional(),
         practiceCardId: z.string().optional(),
         draftId: z.string().optional(),
+        starter: z.literal(true).optional(),
       }),
     ),
     report: studyReportSchema.optional(),
