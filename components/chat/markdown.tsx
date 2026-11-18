@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
+import ReactMarkdown, { type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { PassageRef } from "@/lib/chat/types";
 import { linkCitations } from "@/lib/grounding/passages";
@@ -33,6 +33,8 @@ interface MarkdownProps {
   bare?: boolean;
   /** Give "##" and "###" headings ids (see `headingsOf`), for a table of contents. */
   anchorHeadings?: boolean;
+  plugins?: Pick<Options, "remarkPlugins" | "rehypePlugins">;
+  staticContent?: boolean;
 }
 
 /** A heading's id: the line it starts on, which adding citation links never changes. */
@@ -64,6 +66,8 @@ export function Markdown({
   className,
   bare = false,
   anchorHeadings = false,
+  plugins,
+  staticContent = false,
 }: MarkdownProps) {
   const byN = useMemo(
     () => new Map((passages ?? []).map((passage) => [passage.n, passage])),
@@ -91,6 +95,7 @@ export function Markdown({
           }
         : {}),
       a: ({ href, children }) => {
+        if (staticContent) return <span>{children}</span>;
         const cite = href?.match(/^#cite-([\d-]+)$/);
         if (cite) {
           const numbers = cite[1].split("-").map(Number);
@@ -103,14 +108,15 @@ export function Markdown({
           </a>
         );
       },
+      ...(staticContent ? { img: ({ alt }) => <span>{alt}</span> } : {}),
     }),
-    [byN, onCite, anchorHeadings],
+    [byN, onCite, anchorHeadings, staticContent],
   );
 
   const blocks = (
     <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      rehypePlugins={[rehypeDirection]}
+      remarkPlugins={[remarkGfm, ...(plugins?.remarkPlugins ?? [])]}
+      rehypePlugins={[rehypeDirection, ...(plugins?.rehypePlugins ?? [])]}
       components={components}
     >
       {source}

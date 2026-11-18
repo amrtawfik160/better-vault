@@ -31,7 +31,7 @@ export const generateFlashcards: Generator<FlashcardsOptions, FlashcardsData> = 
     model,
     output: Output.object({ schema }),
     system: studioSystem(
-      `Create ${count} flashcards for studying the sources. ${LEVEL[options.difficulty]} Each card has a short front (a question or a term) and a concise back. Cite up to three numbered passages that support each answer in citations. Do not repeat a card.`,
+      `Create ${count} flashcards for studying the sources. ${LEVEL[options.difficulty]} Each card has a short front (a question or a term) and a concise back. Use $...$ for inline equations and $$ on separate lines for display equations. Put multiline code in fenced code blocks. Escape literal dollar amounts in Markdown. Cite up to three numbered passages that support each answer in citations. Do not repeat a card.`,
       args,
     ),
     prompt: `Create the ${count} flashcards now.`,
@@ -40,17 +40,16 @@ export const generateFlashcards: Generator<FlashcardsOptions, FlashcardsData> = 
   const seen = new Set<string>();
   const cards = output.cards
     .map((card) => ({
-      front: clean(card.front),
-      back: clean(card.back),
+      front: card.front.trim(),
+      back: card.back.trim(),
       sources: studioSourceRefs(args.passages, card.citations),
     }))
-    .filter(
-      (card) =>
-        card.front &&
-        card.back &&
-        !seen.has(card.front.toLowerCase()) &&
-        seen.add(card.front.toLowerCase()),
-    )
+    .filter((card) => {
+      const question = clean(card.front).toLowerCase();
+      if (!question || !card.back || seen.has(question)) return false;
+      seen.add(question);
+      return true;
+    })
     .slice(0, count + 5);
   if (cards.length === 0) throw new Error("The model returned no flashcards.");
   return { title: clean(output.title) || "Flashcards", data: { cards } };

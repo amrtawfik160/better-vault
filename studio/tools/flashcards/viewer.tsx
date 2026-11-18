@@ -10,7 +10,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Icon } from "@/components/icon";
-import { DirectionalText } from "@/components/common/directional-text";
+import { StudyText } from "@/components/study/study-text";
 import { Button } from "@/components/panelui/button";
 import { cn } from "@/lib/utils";
 import type { ToolViewerProps } from "@/studio/shared/form";
@@ -22,6 +22,9 @@ import {
   type FlashcardAction,
   type FlashcardPractice,
 } from "./practice";
+
+const cardText =
+  "w-full min-w-0 max-w-full wrap-break-word [&_pre]:pointer-events-auto [&_pre]:text-start [&_table]:pointer-events-auto [&_.katex-display]:pointer-events-auto";
 
 /** Cards one at a time: flip to see the answer, then mark whether you knew it. */
 export function FlashcardsViewer({
@@ -94,9 +97,9 @@ export function FlashcardsViewer({
       const target = event.target;
       if (
         target instanceof HTMLElement &&
-        target.closest(
-          "input, textarea, select, [contenteditable], [role=dialog], [role=alertdialog], [role=menu], [role=tablist]",
-        )
+          target.closest(
+            "input, textarea, select, pre, .katex-display, [contenteditable], [role=dialog], [role=alertdialog], [role=menu], [role=tablist]",
+          )
       )
         return;
       if (event.key === " ") {
@@ -207,47 +210,44 @@ export function FlashcardsViewer({
         />
       </div>
 
-      <button
-        ref={flipButton}
-        type="button"
-        onClick={() => void apply({ kind: "flip" })}
-        aria-disabled={committing}
-        aria-label={flipped ? t("flashcards.viewer.flipBack") : t("flashcards.viewer.flip")}
-        aria-describedby={`${sideId}-${flipped ? "back" : "front"}`}
-        className="group w-full cursor-pointer outline-none [perspective:1600px]"
-      >
+      <div className="relative w-full [perspective:1600px]">
+        <button
+          ref={flipButton}
+          type="button"
+          onClick={() => void apply({ kind: "flip" })}
+          aria-disabled={committing}
+          aria-label={flipped ? t("flashcards.viewer.flipBack") : t("flashcards.viewer.flip")}
+          aria-describedby={`${sideId}-${flipped ? "back" : "front"}`}
+          className="absolute inset-0 cursor-pointer rounded-3xl outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        />
         <div
           className={cn(
-            "relative grid aspect-[16/10] w-full transition-transform duration-500 ease-[cubic-bezier(0.3,0.7,0.1,1)] transform-3d motion-reduce:transition-none",
+            "pointer-events-none relative grid aspect-[16/10] w-full transition-transform duration-500 ease-[cubic-bezier(0.3,0.7,0.1,1)] transform-3d motion-reduce:transition-none",
             flipped && "rotate-y-180",
           )}
         >
           <div
-            aria-hidden={flipped}
-            className="col-start-1 row-start-1 flex min-w-0 items-center justify-center rounded-3xl bg-card p-8 text-center text-xl leading-snug font-semibold text-card-foreground shadow-sm ring-1 ring-border backface-hidden group-focus-visible:ring-2 group-focus-visible:ring-ring sm:text-2xl"
+            id={`${sideId}-front`}
+            inert={flipped}
+            className="col-start-1 row-start-1 flex min-w-0 items-center justify-center rounded-3xl bg-card p-5 text-center text-card-foreground shadow-sm ring-1 ring-border backface-hidden sm:p-8"
           >
-            <DirectionalText
-              id={`${sideId}-front`}
-              as="span"
+            <StudyText
               text={card.front}
-              multiline
-              className="min-w-0 wrap-break-word"
+              className={cn(cardText, "text-xl leading-snug font-semibold sm:text-2xl")}
             />
           </div>
           <div
-            aria-hidden={!flipped}
-            className="col-start-1 row-start-1 flex min-w-0 rotate-y-180 items-center justify-center rounded-3xl bg-muted p-8 text-center text-lg leading-relaxed backface-hidden"
+            id={`${sideId}-back`}
+            inert={!flipped}
+            className="col-start-1 row-start-1 flex min-w-0 rotate-y-180 items-center justify-center rounded-3xl bg-muted p-5 text-center backface-hidden sm:p-8"
           >
-            <DirectionalText
-              id={`${sideId}-back`}
-              as="span"
+            <StudyText
               text={card.back}
-              multiline
-              className="min-w-0 wrap-break-word"
+              className={cn(cardText, "text-lg leading-relaxed")}
             />
           </div>
         </div>
-      </button>
+      </div>
       {flipped ? <StudioStudySources sources={card.sources} open={onOpenPassage} /> : null}
 
       <div className="flex w-full flex-wrap items-center justify-between gap-2">

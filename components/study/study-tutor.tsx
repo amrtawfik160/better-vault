@@ -56,7 +56,7 @@ import {
   studyReportKey,
   studyReports,
 } from "@/lib/study/reports";
-import { Markdown } from "@/components/chat/markdown";
+import { StudyText } from "./study-text";
 import { DirectionalText } from "@/components/common/directional-text";
 import { textDirection } from "@/lib/text/direction";
 import { recordStudyVoice, transcribeStudyVoice } from "@/lib/study/voice";
@@ -1200,7 +1200,7 @@ export function StudyTutor({
                 {entry.role === "user" ? "You" : "Tutor"}
               </p>
               {entry.role === "assistant" ? (
-                <Markdown text={entry.text} />
+                <StudyText prose text={entry.text} />
               ) : (
                 <DirectionalText
                   multiline

@@ -5,6 +5,7 @@ import { DirectionalText } from "@/components/common/directional-text";
 import { textDirection } from "@/lib/text/direction";
 import type { StudyOrigin, StudyReport } from "@/lib/study/records";
 import { StudyOriginLink } from "./study-origin-link";
+import { StudyText } from "./study-text";
 
 function ReportSection({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -109,14 +110,14 @@ export function StudySessionReport({
       className="scroll-mt-32 space-y-4 rounded-2xl border bg-card p-4"
     >
       <h3 className="font-semibold">Session report</h3>
-      <DirectionalText multiline text={report.summary} className="whitespace-pre-wrap" />
+      <StudyText text={report.summary} />
       {actions}
       {technical.length > 0 ? (
         <ReportSection title="Technical feedback">
           <ul className="space-y-2">
             {technical.map((text, index) => (
               <li key={index} className="space-y-1 rounded-xl border p-3">
-                <DirectionalText multiline text={text} className="text-sm" />
+                <StudyText text={text} className="text-sm" />
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" size="sm" onClick={() => onDraftCard(text)}>
                     {t("study.capture.draftFromFeedback")}

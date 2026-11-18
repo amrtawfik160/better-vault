@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode, type RefObject } from "rea
 import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { Markdown } from "@/components/chat/markdown";
+import { StudyText } from "./study-text";
 import { flashcardMaterialLimit, flashcardPassageSize } from "@/lib/study/ai";
 import { directionalInline, DirectionalText } from "@/components/common/directional-text";
 import { Button } from "@/components/panelui/button";
@@ -1094,7 +1094,7 @@ export function StudyReader({
           ) : null}
           {result && result.selection === selection ? (
             <div className="max-h-[40dvh] space-y-2 overflow-auto border-t pt-2">
-              <Markdown text={result.text} />
+              <StudyText prose text={result.text} />
               <div className="flex flex-wrap gap-1">
                 {result.action === "explain" && result.text.trim() ? (
                   <Button

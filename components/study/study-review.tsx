@@ -13,6 +13,7 @@ import { DirectionalText } from "@/components/common/directional-text";
 import { textDirection } from "@/lib/text/direction";
 import { StudyFlashcardGenerator } from "./study-flashcard-generator";
 import { StudyOriginLink } from "./study-origin-link";
+import { StudyText } from "./study-text";
 import {
   originHref,
   studyCitationOrigin,
@@ -296,13 +297,15 @@ export function StudyReview({
               {highlightBook.sections[item.kind === "highlight" ? item.section : 0]?.title}
             </p>
           ) : null}
-          <DirectionalText
-            multiline
-            text={
-              item.kind === "card" ? item.front : item.cue || "Recall why you saved this passage."
-            }
-            className="text-xl font-medium wrap-break-word whitespace-pre-wrap"
-          />
+          {item.kind === "card" ? (
+            <StudyText text={item.front} className="text-xl font-medium wrap-break-word" />
+          ) : (
+            <DirectionalText
+              multiline
+              text={item.cue || "Recall why you saved this passage."}
+              className="text-xl font-medium wrap-break-word whitespace-pre-wrap"
+            />
+          )}
           {item.kind === "card" && item.image ? (
             <img
               className="max-h-52 rounded-lg object-contain"
@@ -316,11 +319,15 @@ export function StudyReview({
             </Button>
           ) : (
             <div ref={answer} tabIndex={-1} className="space-y-3 outline-none">
-              <DirectionalText
-                multiline
-                text={item.kind === "card" ? item.back : item.quote}
-                className="border-t pt-4 wrap-break-word whitespace-pre-wrap"
-              />
+              {item.kind === "card" ? (
+                <StudyText text={item.back} className="border-t pt-4 wrap-break-word" />
+              ) : (
+                <DirectionalText
+                  multiline
+                  text={item.quote}
+                  className="border-t pt-4 wrap-break-word whitespace-pre-wrap"
+                />
+              )}
               {item.kind === "card" && item.backImage ? (
                 <img
                   className="max-h-52 rounded-lg object-contain"
@@ -833,7 +840,7 @@ export function CardLibrary({
               }
             />
             <div className="min-w-0 flex-1">
-              <DirectionalText text={card.front} className="font-medium wrap-break-word" />
+              <StudyText text={card.front} className="font-medium wrap-break-word" />
               {card.image ? (
                 <img
                   className="my-2 max-h-20 rounded object-contain"
@@ -843,7 +850,7 @@ export function CardLibrary({
               ) : null}
               {view === "list" || flipped === card.id ? (
                 <>
-                  <DirectionalText
+                  <StudyText
                     text={card.back}
                     className="line-clamp-2 text-sm text-muted-foreground"
                   />
