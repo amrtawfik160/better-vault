@@ -433,8 +433,14 @@
       "previewFailed": "Could not open the flashcard image.",
       "questionImage": "Question image",
       "answerImage": "Answer image",
+      "questionAttachment": "Flashcard attachment",
+      "answerAttachment": "Answer attachment",
       "enlargeQuestion": "Enlarge question image",
       "enlargeAnswer": "Enlarge answer image",
+      "showAnswer": "Show answer image",
+      "hideAnswer": "Hide answer image",
+      "tutorUsesImages": "Tutor shares visible card images with your selected AI model.",
+      "tutorTextOnly": "This model could not use the image. Tutor used the flashcard text.",
       "openSource": "Open image source"
     },
     "capture": {

@@ -2,6 +2,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { wrapLanguageModel } from "ai";
 import { z } from "zod";
 import type { ProviderId } from "./catalog";
+import { imageInputErrorStatuses, rejectsImageInput } from "./errors";
 import { isLocalAppRequest, isLoopbackHost, localProvidersAllowed } from "./server-config";
 
 import { subscriptionRoute } from "./cliproxyapi-oauth";
@@ -101,11 +102,14 @@ export async function cliProxyLanguageModel(modelId: string) {
     fetch: async (input, init) => {
       const response = await cliProxyFetch(input, init);
       if (response.ok) return response;
-      await response.body?.cancel();
-      return Response.json(
-        { error: { message: cliProxyError(response.status) } },
-        { status: response.status },
-      );
+      let message = cliProxyError(response.status);
+      if (imageInputErrorStatuses.includes(response.status)) {
+        const detail = await response.text().catch(() => "");
+        if (rejectsImageInput(detail)) message = "The selected model does not support image input.";
+      } else {
+        await response.body?.cancel();
+      }
+      return Response.json({ error: { message } }, { status: response.status });
     },
   });
 

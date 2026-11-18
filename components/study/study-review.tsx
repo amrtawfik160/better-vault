@@ -11,6 +11,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { DirectionalText } from "@/components/common/directional-text";
 import { textDirection } from "@/lib/text/direction";
+import { StudyCardImage } from "./study-card-image";
 import { StudyFlashcardGenerator } from "./study-flashcard-generator";
 import { StudyOriginLink } from "./study-origin-link";
 import { StudyText } from "./study-text";
@@ -35,7 +36,6 @@ import {
 } from "@/lib/study/review-session";
 import { toast } from "sonner";
 import { Button } from "@/components/panelui/button";
-import { Dialog } from "@/components/panelui/dialog";
 import { Input } from "@/components/panelui/input";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import {
@@ -66,46 +66,6 @@ type Word = StudyRecordOf<"word">;
 type CardEditor = StudyCardEdit & { id: string; mode: "create" | "edit" };
 const date = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 const textArea = "min-h-20 w-full rounded-xl border bg-background p-3 text-sm";
-
-function ReviewImage({
-  side,
-  image,
-  onOpenChange,
-}: {
-  side: "question" | "answer";
-  image: string;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const { t } = useTranslation("home");
-  const { t: common } = useTranslation();
-  const question = side === "question";
-  const title = t(question ? "study.visualCard.questionImage" : "study.visualCard.answerImage");
-  return (
-    <Dialog onOpenChange={onOpenChange}>
-      <Dialog.Trigger
-        render={
-          <button
-            type="button"
-            aria-label={t(question ? "study.visualCard.enlargeQuestion" : "study.visualCard.enlargeAnswer")}
-            className="block max-w-full cursor-zoom-in rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
-        }
-      >
-        <img
-          className="max-h-52 max-w-full rounded-lg object-contain"
-          src={image}
-          alt={question ? "Flashcard attachment" : "Answer attachment"}
-        />
-      </Dialog.Trigger>
-      <Dialog.Content size="lg" closeLabel={common("actions.close")}>
-        <Dialog.Header title={title} />
-        <Dialog.Body>
-          <img src={image} alt={title} className="mx-auto max-h-[72dvh] max-w-full object-contain" />
-        </Dialog.Body>
-      </Dialog.Content>
-    </Dialog>
-  );
-}
 
 function RetryCountdown({ dueAt }: { dueAt: number }) {
   const { t, i18n } = useTranslation("home");
@@ -358,7 +318,7 @@ export function StudyReview({
             />
           )}
           {item.kind === "card" && item.image ? (
-            <ReviewImage
+            <StudyCardImage
               side="question"
               image={item.image}
               onOpenChange={previewImage}
@@ -376,7 +336,7 @@ export function StudyReview({
                 <StudyText text={item.quote} className="border-t pt-4 wrap-break-word" />
               )}
               {item.kind === "card" && item.backImage ? (
-                <ReviewImage
+                <StudyCardImage
                   side="answer"
                   image={item.backImage}
                   onOpenChange={previewImage}

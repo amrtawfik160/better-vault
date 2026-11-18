@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Link, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { StudySessionReport } from "./study-session-report";
 import { StudyFollowUpButton } from "./study-follow-ups";
+import { StudyCardImage } from "./study-card-image";
 import { StudyOriginLink } from "./study-origin-link";
 import { useStudyTutorDraft, type TutorComposeDraft } from "./study-tutor-draft";
 import {
@@ -44,7 +45,7 @@ import {
   updateStudyReport,
 } from "@/lib/db/study";
 import { askStudyModel } from "@/lib/study/client";
-import { studyConversationMaterial } from "@/lib/study/ai";
+import { studyConversationMaterial, studyPracticeImages } from "@/lib/study/ai";
 import { passagesFor, tutorBookOrigin } from "@/lib/study/passages";
 import { activeStudyCard, selectedStudyCards } from "@/lib/study/recall";
 import {
@@ -459,6 +460,9 @@ export function StudyTutor({
   const [failed, setFailed] = useState<TutorFailure>();
   const busy = operation !== null;
   const [changingCard, setChangingCard] = useState(false);
+  const [answerImageCardId, setAnswerImageCardId] = useState<string>();
+  const revealedImageCardId = useRef<string | undefined>(undefined);
+  const answerImageRegion = useId();
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState(thread.title);
   const [showReport, setShowReport] = useState(openReport ?? false);
@@ -514,6 +518,8 @@ export function StudyTutor({
   const selected = availableTutorSelection(materialOptions, selection);
   const practiceCards = selectedStudyCards(selected.cardIds, reportCards);
   const practiceCard = activeStudyCard(practiceCards, thread.practiceCardId);
+  const practiceImages = studyPracticeImages(practiceCard);
+  const answerImageVisible = !!practiceCard && answerImageCardId === practiceCard.id;
   const nextCard = practiceCards[practiceCards.findIndex(({ id }) => id === practiceCard?.id) + 1];
   const contextReady = !curated || tutorSelectionCount(selected) > 0;
   const controller = useRef<AbortController | null>(null);
@@ -600,10 +606,16 @@ export function StudyTutor({
     await updateStudyThread(thread.id, change);
   }
 
+  function revealAnswerImage(cardId: string | undefined) {
+    revealedImageCardId.current = cardId;
+    setAnswerImageCardId(cardId);
+  }
+
   async function choosePracticeCard(id: string) {
     setChangingCard(true);
     try {
       await save({ practiceCardId: id });
+      revealAnswerImage(undefined);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     } finally {
@@ -634,6 +646,7 @@ export function StudyTutor({
   ) {
     const text = message.trim();
     if (!text || controller.current || !model) return;
+    const revealedCardId = revealedImageCardId.current;
     setOperation("answer");
     setFailed(undefined);
     const abort = new AbortController();
@@ -660,6 +673,8 @@ export function StudyTutor({
         );
       const cardOrigin = passages[0]?.origin;
       const practiceCardId = cardOrigin?.kind === "card" ? cardOrigin.cardId : undefined;
+      const images = studyPracticeImages(sources.cards?.find(({ id }) => id === practiceCardId));
+      const answerImage = revealedCardId === practiceCardId ? images.answer : undefined;
       const answer = await askStudyModel({
         action: "chat",
         input: text,
@@ -672,6 +687,9 @@ export function StudyTutor({
           : current,
         signal,
         spoken,
+        cardImages: images.question || answerImage
+          ? { question: images.question, answer: answerImage }
+          : undefined,
       });
       signal.throwIfAborted();
       if (!answer.text.trim()) throw new Error(t("study.recovery.emptyAnswer"));
@@ -692,6 +710,7 @@ export function StudyTutor({
           ...(practiceCardId && practiceCardId !== current.practiceCardId ? { practiceCardId } : {}),
         }, turns, consume);
       if (draft) composer.completed(draft);
+      if (answer.imageFallback) toast.info(t("study.visualCard.tutorTextOnly"));
       if (spoken) setVoicePractice(true);
       if (!session) {
         if (spoken || readAloud)
@@ -1162,12 +1181,17 @@ export function StudyTutor({
               selection={selection}
               flashcards={cardPractice}
               disabled={workPending}
-              onApply={(next) => save({
-                ...materialChanges(thread.scope, next),
-                ...(cardPractice && !next.cardIds.includes(thread.practiceCardId ?? "")
-                  ? { practiceCardId: next.cardIds[0] }
-                  : {}),
-              })}
+              onApply={async (next) => {
+                await save({
+                  ...materialChanges(thread.scope, next),
+                  ...(cardPractice && !next.cardIds.includes(thread.practiceCardId ?? "")
+                    ? { practiceCardId: next.cardIds[0] }
+                    : {}),
+                });
+                if (!next.cardIds.includes(revealedImageCardId.current ?? "")) {
+                  revealAnswerImage(undefined);
+                }
+              }}
             />
             {!contextReady ? (
               <p className="text-muted-foreground">
@@ -1208,6 +1232,38 @@ export function StudyTutor({
             >
               {t("study.recall.tutorNextCard")}
             </Button>
+          ) : null}
+          {practiceImages.question || practiceImages.answer ? (
+            <div className="min-w-0 basis-full space-y-2">
+              {practiceImages.question ? (
+                <StudyCardImage side="question" image={practiceImages.question} />
+              ) : null}
+              {practiceImages.answer ? (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    aria-expanded={answerImageVisible}
+                    aria-controls={answerImageRegion}
+                    disabled={workPending}
+                    onClick={() => revealAnswerImage(answerImageVisible ? undefined : practiceCard.id)}
+                  >
+                    {t(answerImageVisible ? "study.visualCard.hideAnswer" : "study.visualCard.showAnswer")}
+                  </Button>
+                  <div id={answerImageRegion} hidden={!answerImageVisible}>
+                    {answerImageVisible ? <StudyCardImage side="answer" image={practiceImages.answer} /> : null}
+                  </div>
+                </>
+              ) : null}
+              {practiceImages.question || answerImageVisible ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-xs text-muted-foreground">{t("study.visualCard.tutorUsesImages")}</p>
+                  {practiceCard.origin?.kind === "book" && practiceCard.origin.visual ? (
+                    <StudyOriginLink origin={practiceCard.origin} />
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
           ) : null}
         </div>
       ) : null}

@@ -1,6 +1,38 @@
 import { describe, expect, it } from "vitest";
-import { flashcardCitationsFor, flashcardMaterialLimit, studyConversationMaterial } from "./ai";
+import {
+  flashcardCitationsFor,
+  flashcardMaterialLimit,
+  studyCardImagesSchema,
+  studyConversationMaterial,
+  studyPracticeImages,
+} from "./ai";
 import type { StudyPassage } from "./passages";
+
+describe("study practice images", () => {
+  it("keeps the two sides distinct and ignores nonembedded or unsupported attachments", () => {
+    const answer = "data:image/png;base64,iVBORw0KGgo=";
+    expect(
+      studyPracticeImages({ image: "https://example.test/diagram.png", backImage: answer }),
+    ).toEqual({ question: undefined, answer });
+    expect(
+      studyCardImagesSchema.safeParse({ answer: "data:image/svg+xml;base64,PHN2Zz4=" }).success,
+    ).toBe(false);
+    expect(
+      studyCardImagesSchema.safeParse({ answer: "data:image/png;base64,abcd==" }).success,
+    ).toBe(false);
+  });
+
+  it("enforces the two-megabyte limit on decoded bytes", () => {
+    function encodedImage(size: number) {
+      return `data:image/webp;base64,${Buffer.alloc(size).toString("base64")}`;
+    }
+    const limit = 2 * 1024 * 1024;
+    expect(studyCardImagesSchema.safeParse({ question: encodedImage(limit) }).success).toBe(true);
+    expect(studyCardImagesSchema.safeParse({ question: encodedImage(limit + 1) }).success).toBe(
+      false,
+    );
+  });
+});
 
 const labels = { learner: "Learner", tutor: "Tutor" };
 

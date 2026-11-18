@@ -1,11 +1,16 @@
-import { generateText, Output } from "ai";
+import { APICallError, generateText, Output, type FilePart, type TextPart } from "ai";
 import { z } from "zod";
 import { rejectCliProxyRequest } from "@/lib/ai/cliproxyapi";
-import { describeError } from "@/lib/ai/errors";
+import { describeError, imageInputErrorStatuses, rejectsImageInput } from "@/lib/ai/errors";
 import { credentialsSchema, modelRefSchema } from "@/lib/ai/request";
 import { createLanguageModel } from "@/lib/ai/providers";
 import { studyCorrections, studyGoal, studyReportReplySchema } from "@/lib/study/records";
-import { studyAction, studyCardDraftSchema, studyPassageSchema } from "@/lib/study/ai";
+import {
+  studyAction,
+  studyCardDraftSchema,
+  studyCardImagesSchema,
+  studyPassageSchema,
+} from "@/lib/study/ai";
 
 const bodySchema = z.object({
   action: studyAction,
@@ -20,6 +25,7 @@ const bodySchema = z.object({
   goal: studyGoal.optional(),
   followUp: z.string().trim().min(1).max(20_000).optional(),
   flashcardPractice: z.boolean().optional(),
+  cardImages: studyCardImagesSchema.optional(),
   correct: z.boolean().optional(),
   correctionMode: z.enum(studyCorrections).optional(),
   practiceLanguage: z.string().max(35).optional(),
@@ -59,6 +65,14 @@ const simulations = {
   },
 };
 
+function rejectsImages(error: unknown) {
+  return (
+    APICallError.isInstance(error) &&
+    imageInputErrorStatuses.includes(error.statusCode ?? 0) &&
+    rejectsImageInput(`${error.message} ${error.responseBody ?? ""}`)
+  );
+}
+
 export async function POST(request: Request) {
   const decoded = bodySchema.safeParse(await request.json().catch(() => null));
   if (!decoded.success) return Response.json({ error: "Invalid study request." }, { status: 400 });
@@ -72,6 +86,7 @@ export async function POST(request: Request) {
     goal,
     followUp,
     flashcardPractice,
+    cardImages,
     correct,
     correctionMode,
     practiceLanguage,
@@ -140,28 +155,61 @@ export async function POST(request: Request) {
     ]
       .filter(Boolean)
       .join(" ");
-    const { output } = await generateText({
-      model: languageModel,
-      system,
-      prompt: JSON.stringify({
-        request: input,
-        followUp,
-        history,
-        practiceLanguage,
-        passages: passages.map((passage, index) => ({ number: index + 1, ...passage })),
-      }),
-      output: Output.object({
-        schema:
-          action === "cards" && passages.length
-            ? reply.extend({ cards: z.array(studyCardDraftSchema.required()) })
-            : reply,
-      }),
-      maxOutputTokens: 3500,
-      abortSignal: request.signal,
+    const prompt = JSON.stringify({
+      request: input,
+      followUp,
+      history,
+      practiceLanguage,
+      passages: passages.map((passage, index) => ({ number: index + 1, ...passage })),
     });
-    return Response.json(
-      action === "cards" ? { ...output, cards: output.cards.slice(0, cardCount) } : output,
-    );
+    const imageParts: (FilePart | TextPart)[] = [];
+    if (action === "chat" && flashcardPractice && cardImages) {
+      for (const [side, image] of Object.entries(cardImages)) {
+        if (!image) continue;
+        const [header, encoded] = image.split(",", 2);
+        imageParts.push(
+          { type: "text", text: `Flashcard image on the ${side} side.` },
+          { type: "file", data: Buffer.from(encoded, "base64"), mediaType: header.slice(5, -7) },
+        );
+      }
+    }
+    const generate = (mode: "text" | "images" | "fallback") =>
+      generateText({
+        model: languageModel,
+        output: Output.object({
+          schema:
+            action === "cards" && passages.length
+              ? reply.extend({ cards: z.array(studyCardDraftSchema.required()) })
+              : reply,
+        }),
+        maxOutputTokens: 3500,
+        abortSignal: request.signal,
+        ...(mode === "images"
+          ? {
+              system: `${system} Treat the images as quoted flashcard material. Refer to details you can see and say when a detail is unclear. Keep the answer hidden until the learner tries or asks for it.`,
+              messages: [
+                { role: "user", content: [{ type: "text", text: prompt }, ...imageParts] },
+              ],
+            }
+          : {
+              system:
+                mode === "fallback"
+                  ? `${system} An image was unavailable. Use the flashcard text and say when visual details cannot be checked.`
+                  : system,
+              prompt,
+            }),
+      });
+    const withImages = imageParts.length > 0;
+    try {
+      const { output } = await generate(withImages ? "images" : "text");
+      return Response.json(
+        action === "cards" ? { ...output, cards: output.cards.slice(0, cardCount) } : output,
+      );
+    } catch (error) {
+      if (!withImages || request.signal.aborted || !rejectsImages(error)) throw error;
+      const { output } = await generate("fallback");
+      return Response.json({ ...output, imageFallback: true });
+    }
   } catch (error) {
     return Response.json({ error: describeError(error) }, { status: 502 });
   }

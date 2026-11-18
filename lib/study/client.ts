@@ -1,5 +1,5 @@
 import { activeModel, credentialsFor, getSettings } from "@/lib/db/settings";
-import { studyAnswerSchema, type StudyAction } from "./ai";
+import { studyAnswerSchema, type StudyAction, type StudyCardImages } from "./ai";
 import type { StudyThread } from "./records";
 import type { StudyPassage } from "./passages";
 
@@ -10,6 +10,7 @@ export async function askStudyModel({
   thread,
   signal,
   cardCount,
+  cardImages,
   spoken,
 }: {
   action: StudyAction;
@@ -18,6 +19,7 @@ export async function askStudyModel({
   thread?: StudyThread;
   signal?: AbortSignal;
   cardCount?: number;
+  cardImages?: StudyCardImages;
   spoken?: boolean;
 }) {
   const settings = await getSettings();
@@ -46,6 +48,7 @@ export async function askStudyModel({
       flashcardPractice: thread?.scope === "cards" || undefined,
       correct: thread?.corrections === "live",
       cardCount,
+      cardImages,
       correctionMode: thread?.corrections ?? "off",
       practiceLanguage: thread?.practiceLanguage,
       spoken,
