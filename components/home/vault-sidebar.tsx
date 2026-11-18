@@ -53,7 +53,7 @@ interface VaultSidebarProps {
   /** The current vault's pinned notebooks. */
   pinned: Notebook[];
   section: HomeSection;
-  onSection: (section: HomeSection) => void;
+  onSection: (section: HomeSection, vaultId?: string) => void;
   /** Moves dropped notebooks to the top of the vault. */
   onDropCards: (event: DragEvent) => void;
 }
@@ -78,6 +78,14 @@ export function VaultSidebar({
   const { t: tNotes } = useTranslation("notes");
   const [creating, setCreating] = useState(false);
   const drop = useDropTarget(onDropCards);
+
+  function chooseVault(id: string) {
+    if (section === "study") onSection("study", id);
+    else {
+      setCurrentVault(id);
+      onSection("vault");
+    }
+  }
 
   return (
     <aside
@@ -189,10 +197,7 @@ export function VaultSidebar({
                 vault={each}
                 current={each.id === vault.id}
                 active={each.id === vault.id && section === "vault"}
-                onChoose={() => {
-                  setCurrentVault(each.id);
-                  onSection("vault");
-                }}
+                onChoose={() => chooseVault(each.id)}
               />
             ))}
             <button
@@ -225,8 +230,7 @@ export function VaultSidebar({
         }}
         onSubmit={async ({ title, icon, color }) => {
           const id = await createVault({ name: title, icon, color });
-          setCurrentVault(id);
-          onSection("vault");
+          chooseVault(id);
         }}
       />
     </aside>

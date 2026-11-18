@@ -31,6 +31,7 @@ import { ContextMenu, ContextMenuTrigger } from "@/components/common/context-men
 import { Icon } from "@/components/icon";
 import { Menu } from "@/components/panelui/menu";
 import { SettingsSheet } from "@/components/settings/settings-sheet";
+import { ReviewReturn } from "@/components/study/review-return";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { openCommandPalette } from "@/lib/command";
 import type { Folder } from "@/lib/db/database";
@@ -108,7 +109,10 @@ export function NotebookHome() {
   const everyFolder = useFolders();
   const counts = useNotebookCounts();
   const vaults = useVaults();
-  const vaultId = useCurrentVault(vaults);
+  const selectedVault = useCurrentVault(vaults);
+  const studyVault = params.get("view") === "study" ? params.get("vault") : null;
+  const vaultId =
+    studyVault && vaults?.some(({ id }) => id === studyVault) ? studyVault : selectedVault;
   const vault = vaults?.find((each) => each.id === vaultId);
   const vaultName = useVaultName();
   const notebooks = useMemo(
@@ -234,7 +238,10 @@ export function NotebookHome() {
       ...(section === "vault" ? { view: "vault" } : {}),
       ...(id ? { folder: id } : {}),
     });
-  const showSection = (next: HomeSection) => setParams(next === "all" ? {} : { view: next });
+  const showSection = (next: HomeSection, selectedVault?: string) =>
+    setParams(
+      next === "all" ? {} : { view: next, ...(selectedVault ? { vault: selectedVault } : {}) },
+    );
 
   const order = <T extends { updatedAt: number }>(items: T[], name: (item: T) => string) =>
     [...items].sort((a, b) =>
@@ -337,7 +344,16 @@ export function NotebookHome() {
         >
           <div className="flex items-center gap-2 md:hidden">
             <Logo size={24} />
-            {vaults && vault ? <MobileVaults vaults={vaults} current={vault.id} /> : null}
+            {vaults && vault ? (
+              <MobileVaults
+                vaults={vaults}
+                current={vault.id}
+                onChoose={(id) => {
+                  if (studying) showSection("study", id);
+                  else setCurrentVault(id);
+                }}
+              />
+            ) : null}
           </div>
           <Pill className={cn("hidden sm:flex", fullPage && "sm:hidden")}>
             <ToolButton label={t("toolbar.back")} onClick={() => navigate(-1)}>
@@ -450,6 +466,8 @@ export function NotebookHome() {
           />
         </header>
 
+        <ReviewReturn className="shrink-0 px-3 sm:px-5" />
+
         {panelPage ? (
           <main className="min-h-0 flex-1 px-2 pb-2 md:p-2 md:ps-2">
             <Suspense
@@ -463,7 +481,13 @@ export function NotebookHome() {
               {section === "notes" ? (
                 <NotesWorkspace />
               ) : section === "study" ? (
-                <StudyWorkspace />
+                allNotebooks && vaults ? (
+                  <StudyWorkspace vaultId={vaultId} notebooks={allNotebooks} vaults={vaults} />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                    {tCommon("status.loading")}
+                  </div>
+                )
               ) : section === "skills" ? (
                 <SkillsWorkspace />
               ) : section === "bot" ? (
@@ -761,9 +785,11 @@ function PathStep({
 function MobileVaults({
   vaults,
   current,
+  onChoose,
 }: {
   vaults: { id: string; name: string; icon?: string }[];
   current: string;
+  onChoose: (id: string) => void;
 }) {
   const { t } = useTranslation("home");
   const vaultName = useVaultName();
@@ -778,10 +804,10 @@ function MobileVaults({
       <Menu.Content align="start">
         <Menu.RadioGroup
           value={current}
-          onValueChange={(next: unknown) => typeof next === "string" && setCurrentVault(next)}
+          onValueChange={(next: unknown) => typeof next === "string" && onChoose(next)}
         >
           {vaults.map((vault) => (
-            <Menu.RadioItem key={vault.id} value={vault.id}>
+            <Menu.RadioItem key={vault.id} value={vault.id} closeOnClick>
               {vaultName(vault)}
             </Menu.RadioItem>
           ))}

@@ -108,7 +108,7 @@
     "edit": "Name, icon and colour",
     "delete": "Delete vault",
     "deleteTitle": "Delete “{{name}}”?",
-    "deleteBody": "Every notebook and folder in this vault is deleted, with their sources, chats and Studio outputs. This can't be undone.",
+    "deleteBody": "This permanently deletes the vault’s notebooks, folders, notes, skills, and study materials, including flashcards and Tutor conversations.",
     "deleteConfirm": "Delete vault",
     "pin": "Pin",
     "unpin": "Unpin",
@@ -153,6 +153,7 @@
       "highlightsDue_other": "Review {{count}} due highlights"
     },
     "recall": {
+      "backToReview": "Back to review",
       "practiceRemaining_one": "Practice only · {{count}} left",
       "practiceRemaining_other": "Practice only · {{count}} left",
       "practiceComplete_one": "Practiced {{count}} item.",

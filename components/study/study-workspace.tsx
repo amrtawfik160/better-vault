@@ -1,21 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { StudyOriginLink } from "./study-origin-link";
 import { queryIndex, studyHref } from "@/lib/study/links";
 import { weakStudyCards } from "@/lib/study/recall";
+import { reviewReturnState, reviewSelection } from "@/lib/study/review-session";
+import { studyVaultIndex } from "@/lib/study/vault";
 import { Button } from "@/components/panelui/button";
 import { Card } from "@/components/panelui/card";
 import { Tabs } from "@/components/panelui/tabs";
 import { SettingsSheet } from "@/components/settings/settings-sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  putStudyRecords,
-  studyConversationDefaults,
-  studyId,
-  useStudyRecords,
-} from "@/lib/db/study";
+import { startBookTutor, useStudyRecords } from "@/lib/db/study";
+import { useNotes } from "@/lib/db/notes";
+import { currentVaultId, DEFAULT_VAULT, setCurrentVault } from "@/lib/db/vaults";
+import type { Notebook, Vault } from "@/lib/db/types";
 import {
   studyRatings,
   type StudyBook,
@@ -313,15 +313,49 @@ function StudyProgress({
   );
 }
 
-export default function StudyWorkspace() {
+export default function StudyWorkspace({
+  vaultId,
+  notebooks,
+  vaults,
+}: {
+  vaultId: string;
+  notebooks: Notebook[];
+  vaults: Vault[];
+}) {
   const { t } = useTranslation("home");
   const { t: tCommon } = useTranslation();
   const location = useLocation();
   const [params, setParams] = useSearchParams();
   const [settings, setSettings] = useState(false);
   const saved = useStudyRecords();
+  const notes = useNotes();
+  const ready = saved !== undefined && notes !== undefined;
   const tab: Tab = tabs.find((entry) => entry === params.get("tab")) ?? "today";
-  const rows = (saved ?? []).toSorted((a, b) => b.updatedAt - a.updatedAt);
+  const selection = tab === "review" ? reviewSelection(location.state) : undefined;
+  const scope = useMemo(
+    () =>
+      studyVaultIndex({
+        rows: saved ?? [],
+        notebooks,
+        notes: notes ?? [],
+        vaults,
+        defaultVaultId: DEFAULT_VAULT,
+      }),
+    [saved, notebooks, notes, vaults],
+  );
+  const reviewVault = selection?.studyReviewVault;
+  const linkedVault = ready
+    ? (scope.linkedVault(params) ??
+      (reviewVault && vaults.some(({ id }) => id === reviewVault) ? reviewVault : undefined))
+    : undefined;
+  const studyVaultId = linkedVault ?? vaultId;
+  const rows = (saved ?? [])
+    .filter((row) => scope.owner(row) === studyVaultId)
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+
+  useEffect(() => {
+    if (linkedVault && linkedVault !== currentVaultId()) setCurrentVault(linkedVault);
+  }, [linkedVault, location.key]);
   const books = rows.filter((row) => row.kind === "book");
   const cards = rows.filter((row) => row.kind === "card");
   const highlights = rows.filter((row) => row.kind === "highlight");
@@ -336,12 +370,12 @@ export default function StudyWorkspace() {
   const output = params.get("output");
   const cardId = params.get("card");
   const notebookId = params.get("notebook");
-  const requestedReview = location.state?.studyReviewIds;
+  const requestedReview = selection?.studyReviewIds;
   const weakMode = tab === "review" && params.get("mode") === "weak";
   const reviewIds = weakMode
     ? new Set(weakStudyCards(rows).map(({ card }) => card.id))
-    : Array.isArray(requestedReview)
-      ? new Set(requestedReview.filter((id): id is string => typeof id === "string"))
+    : requestedReview
+      ? new Set(requestedReview)
       : null;
   const filteredCards = cards.filter(
     (row) =>
@@ -363,8 +397,13 @@ export default function StudyWorkspace() {
 
   function go(next: Tab, extra?: Record<string, string>, review?: string[]) {
     setParams(
-      { view: "study", tab: next, ...extra },
-      { state: review ? { studyReviewIds: review } : null },
+      { view: "study", tab: next, vault: studyVaultId, ...extra },
+      {
+        state:
+          next === "review"
+            ? { studyReviewIds: review, studyReviewVault: studyVaultId }
+            : reviewReturnState(location.state),
+      },
     );
   }
   function read(what: StudyBook) {
@@ -380,23 +419,14 @@ export default function StudyWorkspace() {
     selection?: { text: string; offset: number },
     goal: StudyThread["goal"] = "book",
   ) {
-    const item: StudyThread = {
-      id: studyId(),
-      kind: "thread",
-      title: goal === "teach-back" ? `Teach it back · ${what.title}` : what.title,
-      goal,
-      scope,
-      notebookId: what.notebookId,
-      bookId: what.id,
-      section,
-      quote: selection?.text,
-      offset: selection?.offset,
-      messages: [],
-      updatedAt: Date.now(),
-    };
     try {
-      const created = { ...item, ...(await studyConversationDefaults(goal)) };
-      await putStudyRecords(created);
+      const created = await startBookTutor(what, {
+        goal,
+        scope,
+        section,
+        quote: selection?.text,
+        offset: selection?.offset,
+      });
       openThread(created);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
@@ -405,12 +435,12 @@ export default function StudyWorkspace() {
 
   const content = (
     <>
-      {!saved ? (
+      {!ready ? (
         <p role="status" className="text-muted-foreground">
           {tCommon("status.loading")}
         </p>
       ) : null}
-      {saved && tab === "today" ? (
+      {ready && tab === "today" ? (
         <DailyStudy
           rows={rows}
           books={books}
@@ -421,7 +451,7 @@ export default function StudyWorkspace() {
           }
         />
       ) : null}
-      {saved && tab === "library" ? (
+      {ready && tab === "library" ? (
         book ? (
           <StudyReader
             key={book.id}
@@ -449,11 +479,12 @@ export default function StudyWorkspace() {
           <StudyLibrary
             books={notebookId ? books.filter((item) => item.notebookId === notebookId) : books}
             notebookId={notebookId}
+            vaultId={studyVaultId}
             openBook={read}
           />
         )
       ) : null}
-      {saved && tab === "cards" ? (
+      {ready && tab === "cards" ? (
         <CardLibrary
           cards={filteredCards}
           filter={
@@ -474,9 +505,10 @@ export default function StudyWorkspace() {
                 ? {
                     origin: { kind: "book", bookId: book.id, section: book.section },
                     notebookId: book.notebookId,
+                    vaultId: studyVaultId,
                     tags: [book.title],
                   }
-                : { notebookId: notebookId ?? undefined, tags: [] }
+                : { notebookId: notebookId ?? undefined, vaultId: studyVaultId, tags: [] }
           }
           review={(ids) =>
             go(
@@ -492,9 +524,10 @@ export default function StudyWorkspace() {
           }
         />
       ) : null}
-      {saved && tab === "review" ? (
+      {ready && tab === "review" ? (
         <StudyReview
           key={location.key}
+          vaultId={studyVaultId}
           cards={reviewIds ? filteredCards.filter(({ id }) => reviewIds.has(id)) : filteredCards}
           highlights={filteredHighlights}
           useHighlights={params.get("kind") === "highlights"}
@@ -509,7 +542,7 @@ export default function StudyWorkspace() {
           }
         />
       ) : null}
-      {saved && tab === "highlights" ? (
+      {ready && tab === "highlights" ? (
         <HighlightsLibrary
           highlights={filteredHighlights}
           filter={book?.title}
@@ -520,14 +553,16 @@ export default function StudyWorkspace() {
           review={() => go("review", { kind: "highlights", ...bookFilter })}
         />
       ) : null}
-      {saved && tab === "vocabulary" ? (
+      {ready && tab === "vocabulary" ? (
         <VocabularyLibrary words={words} focusedWord={params.get("word") ?? undefined} />
       ) : null}
-      {saved && tab === "tutor" ? (
+      {ready && tab === "tutor" ? (
         thread ? (
           <StudyTutor
             key={`${thread.id}:${params.get("report") ?? ""}`}
             thread={thread}
+            vaultId={studyVaultId}
+            vaultNotes={(notes ?? []).filter((note) => scope.noteOwner(note.id) === studyVaultId)}
             book={books.find((item) => item.id === thread.bookId)}
             openReport={params.get("report") === "1"}
             focusMessage={queryIndex(params.get("message"))}
@@ -535,7 +570,7 @@ export default function StudyWorkspace() {
             setup={() => setSettings(true)}
           />
         ) : (
-          <TutorIndex books={books} threads={threads} open={openThread} />
+          <TutorIndex books={books} threads={threads} vaultId={studyVaultId} open={openThread} />
         )
       ) : null}
     </>
@@ -561,7 +596,10 @@ export default function StudyWorkspace() {
       {tabs.map((entry) => (
         <Tabs.Content key={entry} value={entry} className="flex min-h-0 flex-col">
           {entry === tab ? (
-            <ScrollArea key={`${book?.id ?? ""}:${thread?.id ?? ""}`} className="min-h-0 flex-1">
+            <ScrollArea
+              key={`${studyVaultId}:${book?.id ?? ""}:${thread?.id ?? ""}`}
+              className="min-h-0 flex-1"
+            >
               <div className="mx-auto max-w-6xl px-4 pt-5 pb-8 sm:px-6">{content}</div>
             </ScrollArea>
           ) : null}

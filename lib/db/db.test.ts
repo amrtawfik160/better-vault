@@ -23,6 +23,7 @@ import { createOutput, deleteOutput, markInterruptedOutputs } from "./outputs";
 import { asBackend, createSqliteStore, schemaVersion } from "./sqlite/store";
 import { setStoreForTests, store } from "./store";
 import { conversationTitle } from "@/lib/chat/title";
+import { studyVaultIndex } from "@/lib/study/vault";
 import {
   deleteConversation,
   latestConversation,
@@ -224,6 +225,67 @@ describe.each(backends)("%s store", (name, create) => {
       await importBackup(backup);
       expect((await listVaults()).map((vault) => vault.name)).toEqual(["", "Work"]);
       expect((await store().listNotebooks())[0].vaultId).toBe(work);
+    });
+
+    it("keeps study material with its vault and carries notebook-linked material when moved", async () => {
+      const work = await createVault({ name: "Work" });
+      const note = await createNote({ title: "Work notes", vaultId: work });
+      const book = await addStudyBook({
+        title: "Work reading",
+        format: "text",
+        sections: [{ title: "Chapter", text: "A passage." }],
+        vaultId: work,
+      });
+      const card = {
+        kind: "card" as const,
+        front: "Question",
+        back: "Answer",
+        tags: [],
+        schedule: freshSchedule(0),
+        updatedAt: 0,
+      };
+      await store().putStudy([
+        { ...card, id: "old" },
+        { ...card, id: "standalone", vaultId: work },
+        { ...card, id: "note-card", origin: { kind: "note", noteId: note.id } },
+        {
+          ...card,
+          id: "book-card",
+          vaultId: work,
+          origin: { kind: "book", bookId: book.id, section: 0 },
+        },
+      ]);
+      expect(await rateStudyItem("standalone", "easy", 5)).toBe(true);
+
+      const backup = JSON.parse(JSON.stringify(await exportBackup()));
+      await deleteAllData();
+      await importBackup(backup);
+      await updateNotebook(book.notebookId, { vaultId: DEFAULT_VAULT });
+
+      const rows = await store().listStudy();
+      const scope = studyVaultIndex({
+        rows,
+        notebooks: await store().listNotebooks(),
+        notes: await store().listNotes(),
+        vaults: await listVaults(),
+        defaultVaultId: DEFAULT_VAULT,
+      });
+      expect(
+        rows
+          .filter((item) => scope.owner(item) === work)
+          .map((item) => item.kind)
+          .sort(),
+      ).toEqual(["card", "card", "session"]);
+      expect(scope.linkedVault(new URLSearchParams({ card: "note-card" }))).toBe(work);
+      expect(scope.linkedVault(new URLSearchParams({ card: "book-card", vault: work }))).toBe(
+        DEFAULT_VAULT,
+      );
+
+      await deleteVault(work);
+      expect((await store().listStudy()).map(({ id }) => id).sort()).toEqual(
+        [book.id, "book-card", "old"].sort(),
+      );
+      expect(await store().getNote(note.id)).toBeUndefined();
     });
   });
 

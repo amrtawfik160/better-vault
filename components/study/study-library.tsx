@@ -23,6 +23,7 @@ import { Menu } from "@/components/panelui/menu";
 import { Textarea } from "@/components/panelui/textarea";
 import { useNotebook } from "@/lib/db/notebooks";
 import { addStudyBook, deleteStudyBook, renameStudyBook } from "@/lib/db/study";
+import { currentVaultId } from "@/lib/db/vaults";
 import { routes } from "@/lib/routes";
 import { studyHref } from "@/lib/study/links";
 import { readStudyFile } from "@/lib/study/read-file";
@@ -33,10 +34,12 @@ const formatIcons = { pdf: Pdf01Icon, epub: Book02Icon, text: TextIcon };
 export function StudyLibrary({
   books,
   notebookId,
+  vaultId,
   openBook,
 }: {
   books: StudyBook[];
   notebookId: string | null;
+  vaultId: string;
   openBook: (book: StudyBook) => void;
 }) {
   const { t } = useTranslation("home");
@@ -57,7 +60,7 @@ export function StudyLibrary({
     try {
       for (const file of files) {
         try {
-          last = await addStudyBook(await readStudyFile(file));
+          last = await addStudyBook({ ...(await readStudyFile(file)), vaultId });
         } catch (error) {
           toast.error(t("study.library.importError", { name: file.name, error: String(error) }));
         }
@@ -65,7 +68,7 @@ export function StudyLibrary({
     } finally {
       setLoading(false);
     }
-    if (last) openBook(last);
+    if (last && currentVaultId() === vaultId) openBook(last);
   }
 
   return (
@@ -197,10 +200,11 @@ export function StudyLibrary({
       )}
       {drafting ? (
         <NewStudyDocument
+          vaultId={vaultId}
           onClose={() => setDrafting(false)}
           onSave={(book) => {
             setDrafting(false);
-            openBook(book);
+            if (currentVaultId() === vaultId) openBook(book);
           }}
         />
       ) : null}
@@ -260,9 +264,11 @@ function NotebookLibraryScope({ notebookId }: { notebookId: string }) {
 }
 
 function NewStudyDocument({
+  vaultId,
   onClose,
   onSave,
 }: {
+  vaultId: string;
   onClose: () => void;
   onSave: (book: StudyBook) => void;
 }) {
@@ -285,7 +291,14 @@ function NewStudyDocument({
               if (saving || !title.trim() || !text.trim()) return;
               setSaving(true);
               try {
-                onSave(await addStudyBook({ title, format: "text", sections: [{ title, text }] }));
+                onSave(
+                  await addStudyBook({
+                    title,
+                    format: "text",
+                    sections: [{ title, text }],
+                    vaultId,
+                  }),
+                );
               } catch (error) {
                 toast.error(error instanceof Error ? error.message : String(error));
                 setSaving(false);

@@ -6,11 +6,12 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { StudyFlashcardGenerator } from "./study-flashcard-generator";
 import { StudyOriginLink } from "./study-origin-link";
 import { originHref, studyHref } from "@/lib/study/links";
+import { loadReviewSession, reviewSelection, saveReviewSession } from "@/lib/study/review-session";
 import { toast } from "sonner";
 import { Button } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
@@ -59,6 +60,7 @@ export function StudyReview({
   books,
   collection,
   initialPractice,
+  vaultId,
 }: {
   cards: Card[];
   highlights: Highlight[];
@@ -66,14 +68,27 @@ export function StudyReview({
   books: StudyBook[];
   collection?: string;
   initialPractice?: boolean;
+  vaultId: string;
 }) {
   const { t } = useTranslation("home");
   const now = useReviewClock();
-  const [revealed, setRevealed] = useState("");
+  const location = useLocation();
+  const selection = reviewSelection(location.state);
+  const sessionId = selection?.studyReviewSession ?? location.key;
+  const path = location.pathname + location.search;
+  const storageId = JSON.stringify([sessionId, path, vaultId]);
+  const [session, setSession] = useState(
+    () =>
+      loadReviewSession(storageId) ?? {
+        revealed: "",
+        rated: 0,
+        practiced: initialPractice ? [] : null,
+      },
+  );
+  const { revealed, rated, practiced } = session;
+  const setRevealed = (id: string) => setSession((value) => ({ ...value, revealed: id }));
   const [started, setStarted] = useState(Date.now);
-  const [rated, setRated] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [practiced, setPracticed] = useState<string[] | null>(() => (initialPractice ? [] : null));
   const answer = useRef<HTMLDivElement>(null);
   const reveal = useRef<HTMLButtonElement>(null);
   const grading = useRef(false);
@@ -82,7 +97,8 @@ export function StudyReview({
     .filter(({ schedule }) => schedule.dueAt <= now)
     .toSorted((a, b) => a.schedule.dueAt - b.schedule.dueAt);
   const practiceQueue = practiced ? all.filter(({ id }) => !practiced.includes(id)) : [];
-  const item = practiced ? practiceQueue[0] : due[0];
+  const queue = practiced ? practiceQueue : due;
+  const item = queue.find(({ id }) => id === revealed) ?? queue[0];
   const remaining = all.toSorted((a, b) => a.schedule.dueAt - b.schedule.dueAt)[0];
   const isRevealed = Boolean(item && revealed === item.id);
   const highlightBook =
@@ -93,10 +109,12 @@ export function StudyReview({
     grading.current = true;
     setBusy(true);
     try {
-      if (await rateStudyItem(item.id, rating, (gradedAt - started) / 1000)) {
-        setRated((value) => value + 1);
-      }
-      setRevealed("");
+      const committed = await rateStudyItem(item.id, rating, (gradedAt - started) / 1000);
+      setSession((value) => ({
+        ...value,
+        revealed: "",
+        rated: value.rated + (committed ? 1 : 0),
+      }));
       setStarted(gradedAt);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
@@ -105,6 +123,8 @@ export function StudyReview({
       setBusy(false);
     }
   }
+
+  useEffect(() => saveReviewSession(storageId, session), [storageId, session]);
 
   useEffect(() => {
     if (isRevealed) answer.current?.focus({ preventScroll: true });
@@ -125,6 +145,16 @@ export function StudyReview({
       void grade(rating, performance.timeOrigin + event.timeStamp);
     }
   }
+
+  const origin =
+    item?.kind === "highlight"
+      ? {
+          kind: "book" as const,
+          bookId: item.bookId,
+          section: item.section,
+          highlightId: item.id,
+        }
+      : item?.origin;
 
   return (
     <section className="space-y-5">
@@ -181,23 +211,32 @@ export function StudyReview({
                   {item.note}
                 </p>
               ) : null}
-              {item.kind === "highlight" ? (
+              {origin && !busy ? (
                 <StudyOriginLink
-                  origin={{
-                    kind: "book",
-                    bookId: item.bookId,
-                    section: item.section,
-                    highlightId: item.id,
+                  origin={origin}
+                  state={{
+                    studyReturn: {
+                      path,
+                      state: {
+                        ...selection,
+                        studyReviewSession: sessionId,
+                        studyReviewVault: vaultId,
+                      },
+                    },
+                  }}
+                  onClick={() => {
+                    saveReviewSession(storageId, session);
                   }}
                 />
-              ) : item.origin ? (
-                <StudyOriginLink origin={item.origin} />
               ) : null}
               {practiced ? (
                 <Button
                   onClick={() => {
-                    setPracticed([...practiced, item.id]);
-                    setRevealed("");
+                    setSession((value) => ({
+                      ...value,
+                      practiced: [...practiced, item.id],
+                      revealed: "",
+                    }));
                   }}
                 >
                   {t("study.recall.nextPractice")}
@@ -241,7 +280,10 @@ export function StudyReview({
           </p>
           <div className="flex flex-wrap items-center gap-3">
             {all.length ? (
-              <Button variant="outline" onClick={() => setPracticed([])}>
+              <Button
+                variant="outline"
+                onClick={() => setSession((value) => ({ ...value, practiced: [], revealed: "" }))}
+              >
                 {t("study.recall.practiceNow")}
               </Button>
             ) : null}
@@ -318,7 +360,7 @@ export function CardLibrary({
   filter?: string;
   clearFilter: () => void;
   review: (ids?: string[]) => void;
-  creation: Pick<Card, "notebookId" | "origin" | "tags"> | false;
+  creation: Pick<Card, "notebookId" | "origin" | "tags" | "vaultId"> | false;
 }) {
   const { t } = useTranslation("home");
   const now = useReviewClock();

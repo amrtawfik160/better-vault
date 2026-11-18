@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Markdown } from "@/components/chat/markdown";
@@ -12,6 +12,7 @@ import { Input } from "@/components/panelui/input";
 import { Menu } from "@/components/panelui/menu";
 import { loadBlob } from "@/lib/db/blobs";
 import { useSource } from "@/lib/db/sources";
+import { reviewReturnState } from "@/lib/study/review-session";
 import {
   freshSchedule,
   putStudyRecords,
@@ -124,6 +125,7 @@ export function StudyReader({
   const index = Math.min(Math.max(0, requestedPage ?? book.section), book.sections.length - 1);
   const section = book.sections[index];
   const navigate = useNavigate();
+  const returnState = reviewReturnState(useLocation().state);
   const { t } = useTranslation("home");
   const source = useSource(book.sourceId);
   const fileId = source === null ? undefined : book.fileId;
@@ -331,7 +333,8 @@ export function StudyReader({
         toast.success("Saved to Notes", {
           action: {
             label: "Open note",
-            onClick: () => navigate(originHref({ kind: "note", noteId: note.id })),
+            onClick: () =>
+              navigate(originHref({ kind: "note", noteId: note.id }), { state: returnState }),
           },
         }),
       )
@@ -399,7 +402,8 @@ export function StudyReader({
         toast.success("Saved to vocabulary", {
           action: {
             label: "View word",
-            onClick: () => navigate(originHref({ kind: "word", wordId: id })),
+            onClick: () =>
+              navigate(originHref({ kind: "word", wordId: id }), { state: returnState }),
           },
         }),
       )
@@ -441,6 +445,7 @@ export function StudyReader({
         <div className="flex flex-wrap items-center gap-2">
           <Link
             to={routes.notebook(book.notebookId)}
+            state={returnState}
             className="rounded-lg border px-3 py-2 text-sm hover:bg-accent"
           >
             Open notebook
@@ -448,18 +453,21 @@ export function StudyReader({
           <Link
             className="rounded-lg border px-3 py-2 text-sm hover:bg-accent"
             to={studyNotesHref(book.notebookId)}
+            state={returnState}
           >
             Notes
           </Link>
           <Link
             className="rounded-lg border px-3 py-2 text-sm hover:bg-accent"
             to={studyHref("cards", { book: book.id })}
+            state={returnState}
           >
             Flashcards
           </Link>
           <Link
             className="rounded-lg border px-3 py-2 text-sm hover:bg-accent"
             to={studyHref("highlights", { book: book.id })}
+            state={returnState}
           >
             Highlights
           </Link>
@@ -561,6 +569,7 @@ export function StudyReader({
                       section,
                       ...(at === -1 ? {} : { offset: at, length: quote.length }),
                     })}
+                    state={returnState}
                   >
                     {quote}
                   </Link>
@@ -884,7 +893,8 @@ export function StudyReader({
                     toast.success("Flashcard created", {
                       action: {
                         label: "View flashcards",
-                        onClick: () => navigate(studyHref("cards", { book: book.id })),
+                        onClick: () =>
+                          navigate(studyHref("cards", { book: book.id }), { state: returnState }),
                       },
                     });
                   })
@@ -949,7 +959,8 @@ export function StudyReader({
             toast.success(t("study.capture.cardsSaved", { count }), {
               action: {
                 label: t("study.capture.viewCards"),
-                onClick: () => navigate(studyHref("cards", { book: book.id })),
+                onClick: () =>
+                  navigate(studyHref("cards", { book: book.id }), { state: returnState }),
               },
             })
           }

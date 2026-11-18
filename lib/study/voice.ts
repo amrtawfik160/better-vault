@@ -58,7 +58,9 @@ export async function recordStudyVoice(signal: AbortSignal) {
 async function voiceWav(audio: Blob) {
   if (!audio.size) throw new Error("The microphone did not capture any audio.");
   const decoder = new OfflineAudioContext(1, 1, voiceSampleRate);
-  const decoded = await decoder.decodeAudioData(await audio.arrayBuffer());
+  const decoded = await decoder.decodeAudioData(await audio.arrayBuffer()).catch(() => {
+    throw new Error("Could not read the recording. Check your microphone and try again.");
+  });
   const length = Math.min(decoded.length, maxVoiceSeconds * voiceSampleRate);
   const mix = new OfflineAudioContext(1, length, voiceSampleRate);
   const player = mix.createBufferSource();

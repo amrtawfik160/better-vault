@@ -30,8 +30,12 @@ export function useStudyRecords() {
   return useStoreQuery(() => store().listStudy(), [], ["study"]);
 }
 
+function withCurrentStudyVault<T extends { notebookId?: string; vaultId?: string }>(row: T): T {
+  return row.notebookId || row.vaultId ? row : { ...row, vaultId: currentVaultId() };
+}
+
 export function putStudyRecords(...rows: StudyRecord[]) {
-  return store().putStudy(rows);
+  return store().putStudy(rows.map(withCurrentStudyVault));
 }
 
 export async function updateStudyThread(
@@ -65,9 +69,10 @@ export async function addStudyBook(input: {
   sections: StudySection[];
   bytes?: Uint8Array;
   mime?: string;
+  vaultId?: string;
 }): Promise<StudyBook> {
   const title = input.title.trim() || "Untitled";
-  const notebookId = await createNotebook(title, { vaultId: currentVaultId() });
+  const notebookId = await createNotebook(title, { vaultId: input.vaultId ?? currentVaultId() });
   try {
     const text = input.sections
       .map((section) => `${section.title}\n\n${section.text}`)
@@ -149,12 +154,18 @@ export async function deleteStudyBook(book: StudyBook) {
 export type StudyCard = StudyRecordOf<"card">;
 type CardContent = Pick<
   StudyCard,
-  "front" | "back" | "image" | "backImage" | "tags" | "notebookId" | "origin"
+  "front" | "back" | "image" | "backImage" | "tags" | "notebookId" | "origin" | "vaultId"
 >;
 
 export function newStudyCard(content: CardContent, id = studyId()): StudyCard {
   const now = Date.now();
-  return { ...content, id, kind: "card", updatedAt: now, schedule: freshSchedule(now) };
+  return withCurrentStudyVault({
+    ...content,
+    id,
+    kind: "card",
+    updatedAt: now,
+    schedule: freshSchedule(now),
+  });
 }
 
 export async function saveStudyCard(content: CardContent, id?: string) {
@@ -167,7 +178,12 @@ export async function saveStudyWord(
   content: Omit<StudyRecordOf<"word">, "id" | "updatedAt" | "kind">,
   id = studyId(),
 ) {
-  const word: StudyRecordOf<"word"> = { ...content, id, kind: "word", updatedAt: Date.now() };
+  const word: StudyRecordOf<"word"> = withCurrentStudyVault({
+    ...content,
+    id,
+    kind: "word",
+    updatedAt: Date.now(),
+  });
   await store().insertStudy([word]);
   return word;
 }
@@ -228,6 +244,25 @@ export async function startNoteTutor(note: Pick<Note, "id" | "vaultId" | "notebo
     noteIds: [note.id],
     vaultId: note.vaultId,
     ...(await studyConversationDefaults("book")),
+    messages: [],
+    updatedAt: Date.now(),
+  };
+  await putStudyRecords(thread);
+  return thread;
+}
+
+export async function startBookTutor(
+  book: StudyBook,
+  focus: Pick<StudyThread, "scope" | "section" | "quote" | "offset" | "goal">,
+) {
+  const thread: StudyThread = {
+    ...focus,
+    ...(await studyConversationDefaults(focus.goal)),
+    id: studyId(),
+    kind: "thread",
+    title: focus.goal === "teach-back" ? `Teach it back · ${book.title}` : book.title,
+    notebookId: book.notebookId,
+    bookId: book.id,
     messages: [],
     updatedAt: Date.now(),
   };
@@ -306,6 +341,7 @@ export async function rateStudyItem(id: string, rating: StudyRating, seconds: nu
           ? { kind: "book", bookId: record.bookId, section: record.section, highlightId: record.id }
           : record.origin,
       notebookId: record.notebookId,
+      vaultId: record.vaultId,
       seconds: Math.max(0, Math.min(seconds, 120)),
       count: 1,
       updatedAt: now,

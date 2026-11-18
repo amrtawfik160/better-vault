@@ -17,7 +17,7 @@ import {
   useSettings,
 } from "@/lib/db/settings";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
-import { useNotes } from "@/lib/db/notes";
+import type { Note } from "@/lib/db/types";
 import {
   saveStudyCard,
   saveStudyWord,
@@ -29,7 +29,6 @@ import {
   studyId,
   updateStudyThread,
 } from "@/lib/db/study";
-import { currentVaultId } from "@/lib/db/vaults";
 import { askStudyModel } from "@/lib/study/client";
 import { passagesFor } from "@/lib/study/passages";
 import { Markdown } from "@/components/chat/markdown";
@@ -68,10 +67,12 @@ type VoiceCapture = {
 export function TutorIndex({
   threads,
   books,
+  vaultId,
   open,
 }: {
   threads: StudyThread[];
   books: StudyBook[];
+  vaultId: string;
   open: (thread: StudyThread) => void;
 }) {
   const [goal, setGoal] = useState<StudyThread["goal"]>("book");
@@ -96,7 +97,7 @@ export function TutorIndex({
             goal,
             scope,
             messages: [],
-            vaultId: currentVaultId(),
+            vaultId,
             bookId: book?.id,
             notebookId: scope === "book" || scope === "chapter" ? book?.notebookId : undefined,
             updatedAt: Date.now(),
@@ -246,6 +247,8 @@ export function TutorIndex({
 
 export function StudyTutor({
   thread,
+  vaultId,
+  vaultNotes,
   book,
   openReport,
   focusMessage,
@@ -253,6 +256,8 @@ export function StudyTutor({
   setup,
 }: {
   thread: StudyThread;
+  vaultId: string;
+  vaultNotes: Note[];
   book?: StudyBook;
   openReport?: boolean;
   focusMessage?: number;
@@ -279,12 +284,9 @@ export function StudyTutor({
   const workPending = busy || voiceState !== null;
   const controller = useRef<AbortController | null>(null);
   const voice = useRef<VoiceCapture | null>(null);
-  const notes = useNotes();
   const settings = useSettings();
   const model = settings ? activeModel(settings) : null;
   const models = settings ? availableModels(settings) : [];
-  const vaultId = thread.vaultId ?? currentVaultId();
-  const vaultNotes = (notes ?? []).filter((note) => note.vaultId === vaultId);
   const conversation = [
     ...thread.messages.map((entry, index) => ({ entry, index })),
     ...temporaryTurns.map((entry) => ({ entry, index: undefined })),

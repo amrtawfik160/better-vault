@@ -2,7 +2,8 @@ import { useMemo, type ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Root, Element, ElementContent } from "hast";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
+import { reviewReturnState } from "@/lib/study/review-session";
 import { useTranslation } from "react-i18next";
 import type { NoteLink } from "@/lib/db/types";
 import { resolveLink, type LinkWorld } from "@/lib/notes/resolve";
@@ -132,6 +133,7 @@ export function NoteReader({
   className,
 }: NoteReaderProps) {
   const { t } = useTranslation("notes");
+  const { state } = useLocation();
   const { data, content } = useMemo(() => readFrontmatter(body), [body]);
   const markdown = useMemo(() => toMarkdown(content), [content]);
 
@@ -184,7 +186,12 @@ export function NoteReader({
             </Embed>
           );
         }
-        if (isStudyHref(href)) return <Link to={href}>{children}</Link>;
+        if (isStudyHref(href))
+          return (
+            <Link to={href} state={reviewReturnState(state)}>
+              {children}
+            </Link>
+          );
         return (
           <a href={href} target="_blank" rel="noreferrer noopener">
             {children}
@@ -212,7 +219,7 @@ export function NoteReader({
         );
       },
     }),
-    [world, vaultId, depth, onOpenLink, onTag],
+    [world, vaultId, depth, onOpenLink, onTag, state],
   );
 
   const properties = Object.entries(data).filter(

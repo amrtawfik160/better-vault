@@ -11,7 +11,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate, useSearchParams } from "react-router";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { Icon } from "@/components/icon";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -20,6 +20,7 @@ import { createNote, renameNote, saveNoteBody } from "@/lib/db/notes";
 import type { Note, NoteLink } from "@/lib/db/types";
 import { startNoteTutor } from "@/lib/db/study";
 import { studyHref } from "@/lib/study/links";
+import { reviewReturnState } from "@/lib/study/review-session";
 import { Button } from "@/components/panelui/button";
 import { useCurrentVault } from "@/lib/db/vaults";
 import { formatRelativeTime } from "@/lib/format";
@@ -68,6 +69,7 @@ const write = (key: string, value: unknown) => {
 export default function NotesWorkspace() {
   const { t, i18n } = useTranslation("notes");
   const navigate = useNavigate();
+  const { state } = useLocation();
   const world = useNotesWorld();
   const vaultId = useCurrentVault(world?.vaults);
   const [params, setParams] = useSearchParams();
@@ -119,9 +121,9 @@ export default function NotesWorkspace() {
       if (next.graph) out.graph = "1";
       const keep = next.graph ? (params.get("note") ?? undefined) : (next.note ?? undefined);
       if (keep) out.note = keep;
-      setParams(out);
+      setParams(out, { state: reviewReturnState(state) });
     },
-    [params, setParams, notebookFilter],
+    [params, setParams, notebookFilter, state],
   );
 
   /** Opens a note in the current tab, or a new one (⌘-click). */
@@ -197,10 +199,11 @@ export default function NotesWorkspace() {
         pendingReveal.current = link.heading ?? null;
         open(target.note.id);
       } else if (target?.kind === "notebook") {
-        navigate(routes.notebook(target.notebook.id));
+        navigate(routes.notebook(target.notebook.id), { state: reviewReturnState(state) });
       } else if (target?.kind === "source") {
         navigate(
           `${routes.notebook(target.source.notebookId)}?source=${encodeURIComponent(target.source.id)}`,
+          { state: reviewReturnState(state) },
         );
       } else if (link.kind === "note" && link.target) {
         // A link to nothing yet creates the note, in the vault it names.
@@ -219,7 +222,7 @@ export default function NotesWorkspace() {
         toast.error(t("missing"));
       }
     },
-    [world, note, vaultId, open, navigate, revealHeading, notebookFilter, t],
+    [world, note, vaultId, open, navigate, revealHeading, notebookFilter, state, t],
   );
 
   // After following a `[[Note#Heading]]` link, scroll to the heading once the note is open.
@@ -346,7 +349,10 @@ export default function NotesWorkspace() {
                   type="button"
                   aria-label={t("thisVault")}
                   onClick={() =>
-                    setParams({ view: "notes", ...(activeId ? { note: activeId } : {}) })
+                    setParams(
+                      { view: "notes", ...(activeId ? { note: activeId } : {}) },
+                      { state: reviewReturnState(state) },
+                    )
                   }
                   className="flex size-5 cursor-pointer items-center justify-center rounded-full outline-none hover:bg-background focus-visible:ring-2 focus-visible:ring-ring"
                 >
@@ -514,12 +520,14 @@ export default function NotesWorkspace() {
               if (kind === "note") open(id);
               else if (kind === "missing")
                 void openLink({ kind: "note", target: node.label, embed: false });
-              else if (kind === "notebook") navigate(routes.notebook(id));
+              else if (kind === "notebook")
+                navigate(routes.notebook(id), { state: reviewReturnState(state) });
               else if (kind === "source") {
                 const source = world.sources.find((each) => each.id === id);
                 if (source)
                   navigate(
                     `${routes.notebook(source.notebookId)}?source=${encodeURIComponent(id)}`,
+                    { state: reviewReturnState(state) },
                   );
               } else if (kind === "tag") {
                 setQuery(node.label);
@@ -545,7 +553,11 @@ export default function NotesWorkspace() {
                   disabled={!note.body.trim()}
                   onClick={() => {
                     void startNoteTutor(note)
-                      .then((thread) => navigate(studyHref("tutor", { thread: thread.id })))
+                      .then((thread) =>
+                        navigate(studyHref("tutor", { thread: thread.id }), {
+                          state: reviewReturnState(state),
+                        }),
+                      )
                       .catch((error: Error) => toast.error(error.message));
                   }}
                 >

@@ -1,8 +1,9 @@
-import { useSearchParams } from "react-router";
+import { useLocation, useSearchParams } from "react-router";
 import { useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { subscriptionConnectionsAllowed } from "@/lib/ai/cliproxyapi-client";
 import { stableContext } from "@/lib/context";
 import type { Conversation, Notebook, StudioOutput } from "@/lib/db/database";
+import { reviewReturnState } from "@/lib/study/review-session";
 import type { StudioToolId } from "@/studio/tools";
 
 export type WorkspaceTab = "chat" | "sources" | "studio";
@@ -71,6 +72,7 @@ export function WorkspaceProvider({
   children: ReactNode;
 }) {
   const [params, setParams] = useSearchParams();
+  const { state } = useLocation();
   const openOutputId = params.get("output");
   const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>(() =>
     params.has("output") ? "studio" : "chat",
@@ -80,13 +82,16 @@ export function WorkspaceProvider({
     (next: WorkspaceTab) => {
       setWorkspaceTab(next);
       if (next !== "studio" && openOutputId)
-        setParams((current) => {
-          const updated = new URLSearchParams(current);
-          updated.delete("output");
-          return updated;
-        });
+        setParams(
+          (current) => {
+            const updated = new URLSearchParams(current);
+            updated.delete("output");
+            return updated;
+          },
+          { state: reviewReturnState(state) },
+        );
     },
-    [openOutputId, setParams],
+    [openOutputId, setParams, state],
   );
   const [studioOpen, setStudioOpen] = useState(false);
   const [settingsOpen, showSettings] = useState(false);
@@ -107,15 +112,18 @@ export function WorkspaceProvider({
       openOutput: (id) => {
         setStudioOpen(false);
         setWorkspaceTab("studio");
-        setParams({ output: id });
+        setParams({ output: id }, { state: reviewReturnState(state) });
       },
       closeOutput: () => {
         setWorkspaceTab("studio");
-        setParams((current) => {
-          const updated = new URLSearchParams(current);
-          updated.delete("output");
-          return updated;
-        });
+        setParams(
+          (current) => {
+            const updated = new URLSearchParams(current);
+            updated.delete("output");
+            return updated;
+          },
+          { state: reviewReturnState(state) },
+        );
       },
       studioOpen,
       setStudioOpen,
@@ -170,6 +178,7 @@ export function WorkspaceProvider({
       reading,
       setParams,
       setTab,
+      state,
     ],
   );
 

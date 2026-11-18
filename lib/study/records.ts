@@ -1,6 +1,11 @@
 import { z } from "zod";
 
-const base = z.object({ id: z.string(), notebookId: z.string().optional(), updatedAt: z.number() });
+const base = z.object({
+  id: z.string(),
+  notebookId: z.string().optional(),
+  vaultId: z.string().optional(),
+  updatedAt: z.number(),
+});
 const section = z.object({ title: z.string(), text: z.string(), epubPath: z.string().optional() });
 const schedule = z.object({
   dueAt: z.number(),
@@ -145,7 +150,6 @@ export const studyRecordSchema = z.discriminatedUnion("kind", [
     quote: z.string().optional(),
     offset: index.optional(),
     noteIds: z.array(z.string()).optional(),
-    vaultId: z.string().optional(),
     messages: z.array(
       z.object({
         role: z.enum(["user", "assistant"]),
