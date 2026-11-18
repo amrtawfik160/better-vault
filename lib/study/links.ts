@@ -10,7 +10,15 @@ function withQuery(path: string, values: Record<string, string | number | undefi
 }
 
 export function studyHref(tab: string, params: Record<string, string | number | undefined> = {}) {
-  return withQuery(routes.study, { tab, ...params });
+  return withQuery(routes.home, { view: "study", tab, ...params });
+}
+
+export function isStudyHref(href: string) {
+  const [path, query] = href.split("#")[0].split("?", 2);
+  return (
+    path === "/study" ||
+    (path === routes.home && new URLSearchParams(query).get("view") === "study")
+  );
 }
 
 export function studyNotesHref(notebookId: string) {

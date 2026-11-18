@@ -44,7 +44,8 @@ import { useVaultName } from "./vault-name";
  * notebooks or the calendar. "vault" is "all" reached by choosing the vault
  * in the sidebar, so the sidebar highlights the vault row, not "All notebooks".
  */
-export type HomeSection = "all" | "vault" | "recents" | "calendar" | "bot" | "notes" | "skills";
+export type HomeSection =
+  "all" | "vault" | "recents" | "calendar" | "bot" | "notes" | "skills" | "study";
 
 interface VaultSidebarProps {
   vaults: Vault[];
@@ -115,7 +116,11 @@ export function VaultSidebar({
               <Icon icon={GridViewIcon} size={18} className="text-muted-foreground" />
               {t("vaults.all")}
             </button>
-            <Link to={routes.study} className={row}>
+            <Link
+              to={routes.study}
+              aria-current={section === "study" ? "page" : undefined}
+              className={cn(row, section === "study" && "bg-foreground/10 font-medium")}
+            >
               <Icon icon={Book02Icon} size={18} className="text-muted-foreground" />
               {t("vaults.study")}
             </Link>

@@ -1,7 +1,14 @@
-import { createBrowserRouter, Outlet, useParams } from "react-router";
+import { createBrowserRouter, Navigate, Outlet, useLocation, useParams } from "react-router";
 import { RouteError } from "@/components/common/route-error";
 import { AppProviders } from "@/components/providers/app-providers";
 import { routes } from "@/lib/routes";
+
+function StudyRedirect() {
+  const { search, hash } = useLocation();
+  const params = new URLSearchParams(search);
+  params.set("view", "study");
+  return <Navigate to={{ pathname: routes.home, search: params.toString(), hash }} replace />;
+}
 
 /** The app's pages; their paths come from lib/routes.ts. Each page loads on first visit. */
 export const router = createBrowserRouter([
@@ -25,11 +32,9 @@ export const router = createBrowserRouter([
         }),
       },
       {
-        path: routes.study,
+        path: "/study",
         errorElement: <RouteError />,
-        lazy: async () => ({
-          Component: (await import("@/components/study/study-workspace")).StudyWorkspace,
-        }),
+        Component: StudyRedirect,
       },
       {
         path: routes.notebook(":id"),

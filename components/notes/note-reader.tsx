@@ -14,6 +14,7 @@ import {
   readFrontmatter,
   sectionOf,
 } from "@/lib/notes/syntax";
+import { isStudyHref } from "@/lib/study/links";
 import { cn } from "@/lib/utils";
 
 /** Rewrites matches outside code and comments, leaving the rest of the text as it is. */
@@ -183,7 +184,7 @@ export function NoteReader({
             </Embed>
           );
         }
-        if (href.startsWith("/study?")) return <Link to={href}>{children}</Link>;
+        if (isStudyHref(href)) return <Link to={href}>{children}</Link>;
         return (
           <a href={href} target="_blank" rel="noreferrer noopener">
             {children}

@@ -90,7 +90,7 @@ Local models work when deepLe runs on the same machine as the model server. Web 
 
 ### Study
 
-Open **Study** from the sidebar to import PDF, EPUB, Markdown, and text documents. Study documents have a linked notebook for standard Chat and Studio tools. The Study area saves your place, bookmarks, highlights, vocabulary, flashcards, review schedule, and activity locally. Use Tutor for selected passages, a chapter or page, a whole book, notes, or general practice. It uses the AI model selected in deepLe.
+Open **Study** in the vault sidebar to import PDF, EPUB, Markdown, and text documents. From a notebook, use **Notebook options → Study documents** to see its reading material. Study documents have a linked notebook for Chat and Studio. Study saves your place, bookmarks, highlights, vocabulary, flashcards, review schedule, and activity locally. Tutor uses the model selected in deepLe for questions about a passage, a chapter, a whole book, or your notes.
 
 Select a passage to save it as a highlight, a note, a flashcard, or a vocabulary entry. Open a saved item's source to return to that passage. Open an existing notebook source in Study or add a Studio flashcard set to spaced review. Reopening the same Studio set preserves its review schedules.
 

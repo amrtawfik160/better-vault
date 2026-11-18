@@ -75,6 +75,7 @@ const CalendarView = lazy(() => import("@/components/calendar/calendar-view"));
 const BotView = lazy(() => import("@/components/bot/bot-view"));
 const NotesWorkspace = lazy(() => import("@/components/notes/notes-workspace"));
 const SkillsWorkspace = lazy(() => import("@/components/skills/skills-workspace"));
+const StudyWorkspace = lazy(() => import("@/components/study/study-workspace"));
 
 const sortKey = "better-vault:home-sort";
 const viewKey = "better-vault:home-view";
@@ -134,12 +135,15 @@ export function NotebookHome() {
     viewParam === "bot" ||
     viewParam === "vault" ||
     viewParam === "notes" ||
-    viewParam === "skills"
+    viewParam === "skills" ||
+    viewParam === "study"
       ? viewParam
       : "all";
-  // The calendar and notes fill the page: they have bars of their own.
+  const studying = section === "study";
+  // The calendar, bot, notes and skills supply their own desktop toolbar.
   const fullPage =
     section === "calendar" || section === "bot" || section === "notes" || section === "skills";
+  const panelPage = fullPage || studying;
   // "vault" shows the same list as "all"; it only records that the vault was
   // chosen in the sidebar, so the sidebar highlights the vault instead.
   const listing = section === "all" || section === "vault";
@@ -159,9 +163,11 @@ export function NotebookHome() {
           ? t("calendar.title")
           : section === "bot"
             ? t("bot.title")
-            : section === "recents"
-              ? t("vaults.recent")
-              : (currentFolder?.name ?? (vault ? vaultName(vault) : ""));
+            : studying
+              ? t("vaults.study")
+              : section === "recents"
+                ? t("vaults.recent")
+                : (currentFolder?.name ?? (vault ? vaultName(vault) : ""));
 
   useEffect(() => {
     document.title = title ? `${title} · ${tCommon("appName")}` : tCommon("appName");
@@ -343,7 +349,7 @@ export function NotebookHome() {
           </Pill>
           <h1 className="min-w-0 flex-1 truncate text-lg font-semibold tracking-tight">{title}</h1>
 
-          <Pill className={cn(fullPage && "hidden")}>
+          <Pill className={cn(panelPage && "hidden")}>
             <Menu>
               <Menu.Trigger
                 aria-label={t("toolbar.view")}
@@ -387,7 +393,7 @@ export function NotebookHome() {
             </Menu>
           </Pill>
 
-          <Pill className={cn(fullPage && "hidden")}>
+          <Pill className={cn(panelPage && "hidden")}>
             <ToolButton label={t("newNotebook")} onClick={() => setCreating({ files: [] })}>
               <Icon icon={Add01Icon} size={18} />
             </ToolButton>
@@ -422,8 +428,11 @@ export function NotebookHome() {
             <Icon icon={Search01Icon} size={18} />
           </button>
           <span className="flex gap-1 md:hidden">
-            <ToolButton label={t("vaults.study")} onClick={() => navigate(routes.study)}>
-              <Icon icon={Book02Icon} size={18} />
+            <ToolButton
+              label={t(studying ? "vaults.all" : "vaults.study")}
+              onClick={() => showSection(studying ? "all" : "study")}
+            >
+              <Icon icon={studying ? GridViewIcon : Book02Icon} size={18} />
             </ToolButton>
             <SettingsSheet />
           </span>
@@ -441,7 +450,7 @@ export function NotebookHome() {
           />
         </header>
 
-        {fullPage ? (
+        {panelPage ? (
           <main className="min-h-0 flex-1 px-2 pb-2 md:p-2 md:ps-2">
             <Suspense
               fallback={
@@ -453,6 +462,8 @@ export function NotebookHome() {
               {/* Notes and skills draw their own panels; the calendar sits on one card. */}
               {section === "notes" ? (
                 <NotesWorkspace />
+              ) : section === "study" ? (
+                <StudyWorkspace />
               ) : section === "skills" ? (
                 <SkillsWorkspace />
               ) : section === "bot" ? (
@@ -577,7 +588,7 @@ export function NotebookHome() {
           aria-label={t("breadcrumbs")}
           className={cn(
             "flex h-10 shrink-0 [scrollbar-width:none] items-center gap-1 overflow-x-auto border-t px-4 text-sm text-muted-foreground sm:px-6",
-            fullPage && "hidden",
+            panelPage && "hidden",
           )}
         >
           {vault ? (

@@ -1,18 +1,20 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { StudyOriginLink } from "./study-origin-link";
 import { queryIndex, studyHref } from "@/lib/study/links";
-import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/panelui/button";
+import { Card } from "@/components/panelui/card";
+import { Tabs } from "@/components/panelui/tabs";
 import { SettingsSheet } from "@/components/settings/settings-sheet";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   putStudyRecords,
   studyConversationDefaults,
   studyId,
   useStudyRecords,
 } from "@/lib/db/study";
-import { routes } from "@/lib/routes";
 import {
   studyRatings,
   type StudyBook,
@@ -26,15 +28,6 @@ import { StudyTutor, TutorIndex } from "./study-tutor";
 
 const tabs = ["today", "library", "cards", "review", "highlights", "vocabulary", "tutor"] as const;
 type Tab = (typeof tabs)[number];
-const labels: Record<Tab, string> = {
-  today: "Today",
-  library: "Library",
-  cards: "Flashcards",
-  review: "Review",
-  highlights: "Highlights",
-  vocabulary: "Vocabulary",
-  tutor: "Tutor",
-};
 
 function DailyStudy({
   rows,
@@ -94,17 +87,19 @@ function DailyStudy({
             ["Speaking", "speaking"],
           ] as const
         ).map(([label, key]) => (
-          <div className="rounded-2xl border bg-card p-4" key={key}>
-            <p className="text-sm text-muted-foreground">{label}</p>
-            <p className="mt-1 text-xl font-semibold">
-              {Math.floor(
-                activity
-                  .filter((item) => item.activity === key)
-                  .reduce((n, item) => n + item.seconds, 0) / 60,
-              )}{" "}
-              min
-            </p>
-          </div>
+          <Card size="sm" key={key}>
+            <Card.Content>
+              <p className="text-sm text-muted-foreground">{label}</p>
+              <p className="mt-1 text-xl font-semibold tabular-nums">
+                {Math.floor(
+                  activity
+                    .filter((item) => item.activity === key)
+                    .reduce((n, item) => n + item.seconds, 0) / 60,
+                )}{" "}
+                min
+              </p>
+            </Card.Content>
+          </Card>
         ))}
       </div>
       <div className="flex flex-wrap gap-2">
@@ -271,7 +266,9 @@ function StudyProgress({
   );
 }
 
-export function StudyWorkspace() {
+export default function StudyWorkspace() {
+  const { t } = useTranslation("home");
+  const { t: tCommon } = useTranslation();
   const [params, setParams] = useSearchParams();
   const [settings, setSettings] = useState(false);
   const saved = useStudyRecords();
@@ -290,6 +287,7 @@ export function StudyWorkspace() {
   const focusedRange = at !== undefined && length ? { offset: at, length } : undefined;
   const output = params.get("output");
   const cardId = params.get("card");
+  const notebookId = params.get("notebook");
   const filteredCards = cards.filter(
     (row) =>
       (!book || (row.origin?.kind === "book" && row.origin.bookId === book.id)) &&
@@ -300,14 +298,15 @@ export function StudyWorkspace() {
     ? highlights.filter((item) => item.bookId === book.id)
     : highlights;
   const bookFilter = book ? { book: book.id } : undefined;
+  const libraryScope = notebookId ? { notebook: notebookId } : undefined;
   const locate = (bookId: string, section: number) =>
-    go("library", { book: bookId, page: String(section) });
+    go("library", { ...libraryScope, book: bookId, page: String(section) });
 
   function go(next: Tab, extra?: Record<string, string>) {
-    setParams({ tab: next, ...extra });
+    setParams({ view: "study", tab: next, ...extra });
   }
   function read(what: StudyBook) {
-    go("library", { book: what.id });
+    go("library", { ...libraryScope, book: what.id });
   }
   function openThread(what: StudyThread) {
     go("tutor", { thread: what.id });
@@ -342,130 +341,136 @@ export function StudyWorkspace() {
     }
   }
 
+  const content = (
+    <>
+      {!saved ? (
+        <p role="status" className="text-muted-foreground">
+          {tCommon("status.loading")}
+        </p>
+      ) : null}
+      {saved && tab === "today" ? (
+        <DailyStudy
+          rows={rows}
+          books={books}
+          go={go}
+          read={read}
+          teachBack={(item) =>
+            void createThread(item, "chapter", item.section, undefined, "teach-back")
+          }
+        />
+      ) : null}
+      {saved && tab === "library" ? (
+        book ? (
+          <StudyReader
+            key={book.id}
+            book={book}
+            requestedPage={page}
+            focusedHighlight={params.get("highlight") ?? undefined}
+            focusedRange={focusedRange}
+            highlights={highlights.filter((highlight) => highlight.bookId === book.id)}
+            back={() => go("library", libraryScope)}
+            openPage={(section) => locate(book.id, section)}
+            startChat={(scope, section, selection) =>
+              void createThread(book, scope, section, selection)
+            }
+          />
+        ) : (
+          <StudyLibrary
+            books={notebookId ? books.filter((item) => item.notebookId === notebookId) : books}
+            notebookId={notebookId}
+            openBook={read}
+          />
+        )
+      ) : null}
+      {saved && tab === "cards" ? (
+        <CardLibrary
+          cards={filteredCards}
+          filter={
+            book?.title ??
+            (output ? "Studio flashcards" : cardId ? "Selected flashcard" : undefined)
+          }
+          clearFilter={() => go("cards")}
+          review={() =>
+            go("review", {
+              ...bookFilter,
+              ...(output ? { output } : {}),
+              ...(cardId ? { card: cardId } : {}),
+            })
+          }
+        />
+      ) : null}
+      {saved && tab === "review" ? (
+        <StudyReview
+          key={params.toString()}
+          cards={filteredCards}
+          highlights={filteredHighlights}
+          useHighlights={params.get("kind") === "highlights"}
+        />
+      ) : null}
+      {saved && tab === "highlights" ? (
+        <HighlightsLibrary
+          highlights={filteredHighlights}
+          filter={book?.title}
+          clearFilter={() => go("highlights")}
+          locate={(item) =>
+            go("library", { book: item.bookId, page: String(item.section), highlight: item.id })
+          }
+          review={() => go("review", { kind: "highlights", ...bookFilter })}
+        />
+      ) : null}
+      {saved && tab === "vocabulary" ? (
+        <VocabularyLibrary words={words} focusedWord={params.get("word") ?? undefined} />
+      ) : null}
+      {saved && tab === "tutor" ? (
+        thread ? (
+          <StudyTutor
+            key={`${thread.id}:${params.get("report") ?? ""}`}
+            thread={thread}
+            book={books.find((item) => item.id === thread.bookId)}
+            openReport={params.get("report") === "1"}
+            focusMessage={queryIndex(params.get("message"))}
+            back={() => go("tutor")}
+            setup={() => setSettings(true)}
+          />
+        ) : (
+          <TutorIndex books={books} threads={threads} open={openThread} />
+        )
+      ) : null}
+    </>
+  );
+
   return (
-    <div className="h-full overflow-y-auto bg-background">
-      <header data-window-bar className="sticky top-0 z-20 border-b bg-background">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3 sm:px-7">
-          <Link
-            to={routes.home}
-            className="flex items-center gap-2 rounded-lg text-sm font-semibold focus-visible:outline-2"
-          >
-            <Logo size={22} /> deepLe
-          </Link>
-          <h1 className="text-sm font-medium text-muted-foreground">Study</h1>
-          <div className="ms-auto">
-            <SettingsSheet
-              open={settings}
-              onOpenChange={setSettings}
-              page={settings ? "providers" : undefined}
-            />
-          </div>
-          <nav aria-label="Study sections" className="flex w-full gap-1 overflow-x-auto pb-1">
-            {tabs.map((entry) => (
-              <button
-                key={entry}
-                type="button"
-                aria-current={entry === tab ? "page" : undefined}
-                onClick={() => go(entry)}
-                className={`shrink-0 cursor-pointer rounded-lg px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring ${entry === tab ? "bg-primary font-medium text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
-              >
-                {labels[entry]}
-              </button>
-            ))}
-          </nav>
-        </div>
-      </header>
-      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-7">
-        {!saved ? (
-          <p role="status" className="text-muted-foreground">
-            Loading study data…
-          </p>
-        ) : null}
-        {saved && tab === "today" ? (
-          <DailyStudy
-            rows={rows}
-            books={books}
-            go={go}
-            read={read}
-            teachBack={(item) =>
-              void createThread(item, "chapter", item.section, undefined, "teach-back")
-            }
-          />
-        ) : null}
-        {saved && tab === "library" ? (
-          book ? (
-            <StudyReader
-              key={book.id}
-              book={book}
-              requestedPage={page}
-              focusedHighlight={params.get("highlight") ?? undefined}
-              focusedRange={focusedRange}
-              highlights={highlights.filter((highlight) => highlight.bookId === book.id)}
-              back={() => go("library")}
-              openPage={(section) => locate(book.id, section)}
-              startChat={(scope, section, selection) =>
-                void createThread(book, scope, section, selection)
-              }
-            />
-          ) : (
-            <StudyLibrary books={books} openBook={read} />
-          )
-        ) : null}
-        {saved && tab === "cards" ? (
-          <CardLibrary
-            cards={filteredCards}
-            filter={
-              book?.title ??
-              (output ? "Studio flashcards" : cardId ? "Selected flashcard" : undefined)
-            }
-            clearFilter={() => go("cards")}
-            review={() =>
-              go("review", {
-                ...bookFilter,
-                ...(output ? { output } : {}),
-                ...(cardId ? { card: cardId } : {}),
-              })
-            }
-          />
-        ) : null}
-        {saved && tab === "review" ? (
-          <StudyReview
-            key={params.toString()}
-            cards={filteredCards}
-            highlights={filteredHighlights}
-            useHighlights={params.get("kind") === "highlights"}
-          />
-        ) : null}
-        {saved && tab === "highlights" ? (
-          <HighlightsLibrary
-            highlights={filteredHighlights}
-            filter={book?.title}
-            clearFilter={() => go("highlights")}
-            locate={(item) =>
-              go("library", { book: item.bookId, page: String(item.section), highlight: item.id })
-            }
-            review={() => go("review", { kind: "highlights", ...bookFilter })}
-          />
-        ) : null}
-        {saved && tab === "vocabulary" ? (
-          <VocabularyLibrary words={words} focusedWord={params.get("word") ?? undefined} />
-        ) : null}
-        {saved && tab === "tutor" ? (
-          thread ? (
-            <StudyTutor
-              key={`${thread.id}:${params.get("report") ?? ""}`}
-              thread={thread}
-              book={books.find((item) => item.id === thread.bookId)}
-              openReport={params.get("report") === "1"}
-              focusMessage={queryIndex(params.get("message"))}
-              back={() => go("tutor")}
-              setup={() => setSettings(true)}
-            />
-          ) : (
-            <TutorIndex books={books} threads={threads} open={openThread} />
-          )
-        ) : null}
-      </main>
-    </div>
+    <Tabs
+      value={tab}
+      onValueChange={(value) => {
+        const selected = tabs.find((entry) => entry === value);
+        if (selected) go(selected);
+      }}
+      variant="underline"
+      className="h-full min-h-0 gap-0 overflow-hidden rounded-3xl bg-card ring-1 ring-border"
+    >
+      <Tabs.List aria-label={t("study.sections")} className="shrink-0 px-2 sm:px-4">
+        {tabs.map((entry) => (
+          <Tabs.Trigger key={entry} value={entry}>
+            {t(`study.tabs.${entry}`)}
+          </Tabs.Trigger>
+        ))}
+      </Tabs.List>
+      {tabs.map((entry) => (
+        <Tabs.Content key={entry} value={entry} className="flex min-h-0 flex-col">
+          {entry === tab ? (
+            <ScrollArea key={`${book?.id ?? ""}:${thread?.id ?? ""}`} className="min-h-0 flex-1">
+              <div className="mx-auto max-w-6xl px-4 pt-5 pb-8 sm:px-6">{content}</div>
+            </ScrollArea>
+          ) : null}
+        </Tabs.Content>
+      ))}
+      <SettingsSheet
+        open={settings}
+        onOpenChange={setSettings}
+        page={settings ? "providers" : undefined}
+        trigger={<button type="button" hidden aria-hidden tabIndex={-1} />}
+      />
+    </Tabs>
   );
 }

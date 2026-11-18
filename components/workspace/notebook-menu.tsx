@@ -1,5 +1,6 @@
 import {
   ArrowDown01Icon,
+  Book02Icon,
   Delete02Icon,
   GridViewIcon,
   NoteAddIcon,
@@ -18,6 +19,7 @@ import { createNotebook, deleteNotebook, renameNotebook } from "@/lib/db/noteboo
 import { notebookIcon } from "@/lib/notebooks/icons";
 import { useWorkspace } from "./workspace-context";
 import { routes } from "@/lib/routes";
+import { studyHref } from "@/lib/study/links";
 
 /** The notebook's name, opening a menu to switch, rename or delete it. */
 export function NotebookMenu() {
@@ -53,6 +55,10 @@ export function NotebookMenu() {
           <Menu.Item onClick={() => setCreating(true)}>
             <Icon icon={NoteAddIcon} />
             {t("newNotebook")}
+          </Menu.Item>
+          <Menu.Item onClick={() => navigate(studyHref("library", { notebook: notebook.id }))}>
+            <Icon icon={Book02Icon} />
+            {t("studyDocuments")}
           </Menu.Item>
           <Menu.Separator />
           <Menu.Item onClick={() => setRenaming(true)}>

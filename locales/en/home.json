@@ -142,6 +142,41 @@
   "calendar": {
     "title": "Calendar"
   },
+  "study": {
+    "sections": "Study sections",
+    "tabs": {
+      "today": "Today",
+      "library": "Library",
+      "cards": "Flashcards",
+      "review": "Review",
+      "highlights": "Highlights",
+      "vocabulary": "Vocabulary",
+      "tutor": "Tutor"
+    },
+    "library": {
+      "import": "Import documents",
+      "importing": "Importing…",
+      "importError": "Could not import {{name}}. {{error}}",
+      "newText": "New text document",
+      "title": "Document title",
+      "text": "Document text",
+      "save": "Save document",
+      "search": "Find a document",
+      "noMatches": "No matching documents",
+      "empty": "No study documents yet",
+      "emptyDescription": "Import a PDF or EPUB, or create a text document.",
+      "emptyNotebook": "Open a source in this notebook and choose Read in Study.",
+      "allDocuments": "All study documents",
+      "position": "{{format}} · {{current}} of {{total}}",
+      "progress": "Reading progress",
+      "options": "Options for {{title}}",
+      "rename": "Rename document",
+      "delete": "Delete document",
+      "deleteTitle": "Delete document?",
+      "removeBody": "This removes the reading position, bookmarks, and highlights. The source stays in the notebook.",
+      "deleteBody": "This deletes the notebook, reading position, and associated study items."
+    }
+  },
   "actions": {
     "openNewTab": "Open in new tab"
   },
