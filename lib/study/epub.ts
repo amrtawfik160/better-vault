@@ -48,6 +48,17 @@ export async function openStudyEpub(bytes: Uint8Array) {
       const raw = await zip.file(path)?.async("string");
       if (!raw) return null;
 
+      // The fragment parser drops the document's html and body tags.
+      const documentMeta = parser.parseFromString(raw, "application/xhtml+xml");
+      const html = documentMeta.documentElement;
+      const body = named(documentMeta, "body")[0];
+      const direction = body?.getAttribute("dir") ?? html.getAttribute("dir");
+      const language =
+        body?.getAttribute("lang") ??
+        body?.getAttribute("xml:lang") ??
+        html.getAttribute("lang") ??
+        html.getAttribute("xml:lang");
+
       // A detached template holds the book's HTML without loading its resources.
       const template = document.createElement("template");
       template.innerHTML = raw;
@@ -63,6 +74,8 @@ export async function openStudyEpub(bytes: Uint8Array) {
         .forEach((item) => item.after(document.createTextNode("\n\n")));
       return {
         body: template.content,
+        direction,
+        language,
         text: plain.textContent?.replace(/\n{3,}/g, "\n\n").trim() ?? "",
         title:
           template.content.querySelector("h1, h2, h3")?.textContent?.trim() ||

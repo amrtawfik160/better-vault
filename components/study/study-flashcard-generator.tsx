@@ -6,6 +6,7 @@ import { Button } from "@/components/panelui/button";
 import { Dialog } from "@/components/panelui/dialog";
 import { Input } from "@/components/panelui/input";
 import { Textarea } from "@/components/panelui/textarea";
+import { textDirection } from "@/lib/text/direction";
 import { newStudyCard, putStudyRecords } from "@/lib/db/study";
 import { flashcardMaterialLimit } from "@/lib/study/ai";
 import { askStudyModel } from "@/lib/study/client";
@@ -170,7 +171,7 @@ export function StudyFlashcardGenerator({
         <Textarea
           aria-label="Text for flashcards"
           placeholder="Paste the material you want to study"
-          dir="auto"
+          dir={textDirection(input)}
           minRows={4}
           value={input}
           disabled={working || saving}
@@ -214,10 +215,11 @@ export function StudyFlashcardGenerator({
           <ul className="divide-y rounded-xl border">
             {drafts.map((draft, position) => (
               <li key={position} className="grid gap-2 p-3">
-                <Input
+                <Textarea
                   aria-label={`Card ${position + 1} question`}
+                  minRows={1}
                   value={draft.front}
-                  dir="auto"
+                  dir={textDirection(draft.front)}
                   disabled={working || saving}
                   onChange={(event) =>
                     setDrafts((items) =>
@@ -227,10 +229,11 @@ export function StudyFlashcardGenerator({
                     )
                   }
                 />
-                <Input
+                <Textarea
                   aria-label={`Card ${position + 1} answer`}
+                  minRows={1}
                   value={draft.back}
-                  dir="auto"
+                  dir={textDirection(draft.back)}
                   disabled={working || saving}
                   onChange={(event) =>
                     setDrafts((items) =>

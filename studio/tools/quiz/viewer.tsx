@@ -7,6 +7,8 @@ import {
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Icon } from "@/components/icon";
+import { DirectionalText, directionalInline } from "@/components/common/directional-text";
+import { textDirection } from "@/lib/text/direction";
 import { Button } from "@/components/panelui/button";
 import { cn } from "@/lib/utils";
 import type { ToolViewerProps } from "@/studio/shared/form";
@@ -72,6 +74,7 @@ export function QuizViewer({ data, onReviewMissed }: ToolViewerProps<QuizData>) 
   const question = data.questions[index];
   const chosen = answers[index];
   const answered = chosen !== null;
+  const direction = textDirection(question.question);
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 pb-10">
@@ -87,7 +90,9 @@ export function QuizViewer({ data, onReviewMissed }: ToolViewerProps<QuizData>) 
         </div>
       </div>
 
-      <h3 className="text-xl leading-snug font-semibold">{question.question}</h3>
+      <h3 dir={direction} className="text-xl leading-snug font-semibold">
+        {directionalInline(question.question, direction)}
+      </h3>
 
       <div role="radiogroup" aria-label={question.question} className="flex flex-col gap-2">
         {question.options.map((option, at) => {
@@ -116,7 +121,11 @@ export function QuizViewer({ data, onReviewMissed }: ToolViewerProps<QuizData>) 
               <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
                 {LETTERS[at]}
               </span>
-              <span className="min-w-0 flex-1 pt-0.5 text-[0.9375rem] leading-6">{option}</span>
+              <DirectionalText
+                as="span"
+                text={option}
+                className="min-w-0 flex-1 pt-0.5 text-[0.9375rem] leading-6"
+              />
               {answered && right ? (
                 <Icon icon={CheckmarkCircle02Icon} size={18} className="mt-0.5 text-success" />
               ) : null}
@@ -138,13 +147,13 @@ export function QuizViewer({ data, onReviewMissed }: ToolViewerProps<QuizData>) 
           >
             {chosen === question.answer ? t("quiz.viewer.correct") : t("quiz.viewer.incorrect")}
           </p>
-          <p className="mt-1">{question.explanation}</p>
+          <DirectionalText multiline className="mt-1" text={question.explanation} />
         </div>
       ) : question.hint ? (
         hint ? (
           <p className="flex items-start gap-2 rounded-2xl bg-warning/10 px-4 py-3 text-sm leading-6">
             <Icon icon={BulbIcon} size={16} className="mt-1 shrink-0 text-warning" />
-            {question.hint}
+            <DirectionalText as="span" multiline className="min-w-0 flex-1" text={question.hint} />
           </p>
         ) : (
           <button

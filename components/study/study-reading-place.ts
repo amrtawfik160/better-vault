@@ -12,21 +12,25 @@ function visibleText(root: HTMLElement, y: number) {
   const left = bounds.left + Math.min(16, bounds.width / 3);
   const right = bounds.right - Math.min(16, bounds.width / 3);
   const rtl = getComputedStyle(root).direction === "rtl";
-  for (const x of [rtl ? right : left, (left + right) / 2, rtl ? left : right]) {
-    const caret = document.caretPositionFromPoint?.(x, y);
-    const range = new Range();
-    if (caret) range.setStart(caret.offsetNode, caret.offset);
-    else {
-      const fallback = document.caretRangeFromPoint?.(x, y);
-      if (!fallback) continue;
-      range.setStart(fallback.startContainer, fallback.startOffset);
+  const columns = [rtl ? right : left, (left + right) / 2, rtl ? left : right];
+  // The reading inset can land on a blank line between two paragraphs.
+  for (let row = y; row < bounds.bottom && row <= y + 64; row += 8) {
+    for (const x of columns) {
+      const caret = document.caretPositionFromPoint?.(x, row);
+      const range = new Range();
+      if (caret) range.setStart(caret.offsetNode, caret.offset);
+      else {
+        const fallback = document.caretRangeFromPoint?.(x, row);
+        if (!fallback) continue;
+        range.setStart(fallback.startContainer, fallback.startOffset);
+      }
+      const node = range.startContainer;
+      if (!(node instanceof Text) || !node.length || !root.contains(node)) continue;
+      const offset = Math.min(range.startOffset, node.length - 1);
+      range.setStart(node, offset);
+      range.setEnd(node, Math.min(offset + 64, node.length));
+      if (range.toString().trim()) return range;
     }
-    const node = range.startContainer;
-    if (!(node instanceof Text) || !node.length || !root.contains(node)) continue;
-    const offset = Math.min(range.startOffset, node.length - 1);
-    range.setStart(node, offset);
-    range.setEnd(node, Math.min(offset + 64, node.length));
-    if (range.toString().trim()) return range;
   }
 }
 

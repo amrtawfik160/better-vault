@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Markdown } from "@/components/chat/markdown";
+import { directionalInline, DirectionalText } from "@/components/common/directional-text";
 import { Button } from "@/components/panelui/button";
 import { StudyEpubChapter, type StudyEpubTheme } from "./study-epub-chapter";
 import { StudyPdfPage } from "./study-pdf-page";
@@ -10,6 +11,7 @@ import { StudyFlashcardDraftDialog, type FlashcardSource } from "./study-flashca
 import { renderedSelection } from "./study-rendered-text";
 import { useStudyReadingPlace } from "./study-reading-place";
 import { Input } from "@/components/panelui/input";
+import { Textarea } from "@/components/panelui/textarea";
 import { Menu } from "@/components/panelui/menu";
 import { loadBlob } from "@/lib/db/blobs";
 import { useSource } from "@/lib/db/sources";
@@ -27,6 +29,7 @@ import {
   updateStudyBook,
 } from "@/lib/db/study";
 import { routes } from "@/lib/routes";
+import { textDirection, textLines } from "@/lib/text/direction";
 import { askStudyModel } from "@/lib/study/client";
 import { originHref, studyHref, studyNotesHref } from "@/lib/study/links";
 import type { StudyBook, StudyOrigin, StudyRecordOf, StudyThread } from "@/lib/study/records";
@@ -52,43 +55,61 @@ function highlighted(
   highlights: StudyRecordOf<"highlight">[],
   focus?: { offset: number; length: number },
 ) {
-  const nodes: ReactNode[] = [];
-  let at = 0;
-  const ranges = highlights.filter(
-    ({ offset, quote }) =>
-      !focus || offset >= focus.offset + focus.length || offset + quote.length <= focus.offset,
-  );
-  for (const highlight of ranges.toSorted((a, b) => a.offset - b.offset)) {
-    if (focus && at <= focus.offset && highlight.offset >= focus.offset + focus.length) {
-      nodes.push(
-        text.slice(at, focus.offset),
-        <mark key="focused-passage" id="focused-passage" className={colors.blue}>
-          {text.slice(focus.offset, focus.offset + focus.length)}
+  const candidates = highlights.flatMap(({ id, offset, quote, color }) => {
+    const end = offset + quote.length;
+    if (focus && offset < focus.offset + focus.length && end > focus.offset) return [];
+    return text.slice(offset, end) === quote ? [{ id, offset, end, color }] : [];
+  });
+  if (focus)
+    candidates.push({
+      id: "focused-passage",
+      offset: focus.offset,
+      end: focus.offset + focus.length,
+      color: "blue",
+    });
+  let lastEnd = 0;
+  const ranges = candidates
+    .sort((a, b) => a.offset - b.offset)
+    .filter(({ offset, end }) => {
+      if (offset < lastEnd || offset >= end) return false;
+      lastEnd = end;
+      return true;
+    });
+
+  let start = 0;
+  let rangeIndex = 0;
+  return textLines(text).map((line) => {
+    const direction = textDirection(line);
+    const end = start + line.length;
+    let at = start;
+    const content: ReactNode[] = [];
+    for (; rangeIndex < ranges.length; rangeIndex++) {
+      const range = ranges[rangeIndex];
+      if (range.offset >= end) break;
+      const from = Math.max(at, range.offset);
+      const to = Math.min(end, range.end);
+      if (from > at) content.push(directionalInline(text.slice(at, from), direction));
+      content.push(
+        <mark
+          id={range.offset >= start ? range.id : undefined}
+          key={range.id}
+          className={colors[range.color]}
+        >
+          {directionalInline(text.slice(from, to), direction)}
         </mark>,
       );
-      at = focus.offset + focus.length;
+      at = to;
+      if (range.end > end) break;
     }
-    const end = highlight.offset + highlight.quote.length;
-    if (highlight.offset < at || text.slice(highlight.offset, end) !== highlight.quote) continue;
-    nodes.push(text.slice(at, highlight.offset));
-    nodes.push(
-      <mark id={highlight.id} key={highlight.id} className={colors[highlight.color]}>
-        {highlight.quote}
-      </mark>,
+    if (at < end) content.push(directionalInline(text.slice(at, end), direction));
+    const lineOffset = start;
+    start = end;
+    return (
+      <span key={lineOffset} dir={direction} className="block">
+        {content}
+      </span>
     );
-    at = end;
-  }
-  if (focus && at <= focus.offset) {
-    nodes.push(
-      text.slice(at, focus.offset),
-      <mark key="focused-passage" id="focused-passage" className={colors.blue}>
-        {text.slice(focus.offset, focus.offset + focus.length)}
-      </mark>,
-    );
-    at = focus.offset + focus.length;
-  }
-  nodes.push(text.slice(at));
-  return nodes;
+  });
 }
 
 export function StudyReader({
@@ -481,7 +502,7 @@ export function StudyReader({
           <Button size="sm" variant="ghost" onClick={back}>
             ← Library
           </Button>
-          <h2 className="text-xl font-semibold wrap-break-word" dir="auto">
+          <h2 className="text-xl font-semibold wrap-break-word" dir={textDirection(book.title)}>
             {book.title}
           </h2>
         </div>
@@ -661,15 +682,22 @@ export function StudyReader({
             {missingPassage ? (
               <div>
                 <p className="font-medium">{t("study.highlights.savedExcerpt")}</p>
-                <blockquote dir="auto" className="mt-1 whitespace-pre-wrap wrap-break-word">
-                  {selectedHighlight.quote}
-                </blockquote>
+                <DirectionalText
+                  as="blockquote"
+                  multiline
+                  text={selectedHighlight.quote}
+                  className="mt-1 wrap-break-word whitespace-pre-wrap"
+                />
               </div>
             ) : null}
             {selectedHighlight.note.trim() ? (
               <div>
                 <p className="font-medium">{t("study.highlights.annotation")}</p>
-                <p dir="auto" className="mt-1 whitespace-pre-wrap wrap-break-word">{selectedHighlight.note}</p>
+                <DirectionalText
+                  multiline
+                  text={selectedHighlight.note}
+                  className="mt-1 wrap-break-word whitespace-pre-wrap"
+                />
               </div>
             ) : null}
           </div>
@@ -678,6 +706,7 @@ export function StudyReader({
           ref={searchInput}
           type="search"
           value={search}
+          dir={textDirection(search)}
           onChange={(event) => setSearch(event.target.value)}
           placeholder={t("study.reader.search")}
           aria-label={t("study.reader.search")}
@@ -698,9 +727,11 @@ export function StudyReader({
                     }}
                   >
                     <span className="block font-medium">{title}</span>
-                    <span dir="auto" className="line-clamp-2 text-muted-foreground">
-                      {teaser}
-                    </span>
+                    <DirectionalText
+                      as="span"
+                      text={teaser}
+                      className="line-clamp-2 text-muted-foreground"
+                    />
                   </button>
                 </li>
               ))}
@@ -760,7 +791,7 @@ export function StudyReader({
             <textarea
               aria-label="Edit document text"
               className="min-h-40 w-full rounded-xl border bg-background p-3"
-              dir="auto"
+              dir={textDirection(edit.text)}
               disabled={savingText}
               value={edit.text}
               onChange={(event) => setEdit({ ...edit, text: event.target.value })}
@@ -841,7 +872,6 @@ export function StudyReader({
         <article
           ref={textBody}
           tabIndex={0}
-          dir="auto"
           aria-label={section.title}
           className="mx-auto max-w-prose leading-relaxed wrap-break-word whitespace-pre-wrap outline-none focus-visible:ring-2 focus-visible:ring-ring"
           style={{ fontSize: font }}
@@ -863,9 +893,10 @@ export function StudyReader({
           className="sticky bottom-3 z-10 space-y-2 rounded-2xl border bg-popover p-3 shadow"
         >
           <div className="flex items-start justify-between gap-3">
-            <p dir="auto" className="line-clamp-2 text-sm text-muted-foreground">
-              {selection.text}
-            </p>
+            <DirectionalText
+              text={selection.text}
+              className="line-clamp-2 text-sm text-muted-foreground"
+            />
             <Button size="sm" variant="ghost" onClick={clearSelection}>
               {t("study.capture.dismiss")}
             </Button>
@@ -987,7 +1018,7 @@ export function StudyReader({
           ) : null}
           {cardFront !== null ? (
             <form
-              className="flex flex-wrap gap-2"
+              className="flex flex-wrap items-start gap-2"
               onSubmit={(event) => {
                 event.preventDefault();
                 if (cardSaving || !cardFront.trim() || !cardBack.trim()) return;
@@ -1015,16 +1046,21 @@ export function StudyReader({
             >
               <Input
                 value={cardFront}
+                dir={textDirection(cardFront)}
                 onChange={(event) => setCardFront(event.target.value)}
                 aria-label="Front of flashcard"
                 placeholder="Question to review"
                 className="max-w-sm"
               />
-              <Input
+              <Textarea
                 value={cardBack}
+                dir={textDirection(cardBack)}
                 onChange={(event) => setCardBack(event.target.value)}
                 aria-label={t("study.capture.flashcardAnswer")}
-                className="min-w-0 sm:flex-1"
+                size="sm"
+                minRows={1}
+                maxRows={4}
+                className="basis-full sm:flex-1"
               />
               <Button
                 type="submit"

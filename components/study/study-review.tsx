@@ -10,6 +10,8 @@ import {
 } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
+import { DirectionalText } from "@/components/common/directional-text";
+import { textDirection } from "@/lib/text/direction";
 import { StudyFlashcardGenerator } from "./study-flashcard-generator";
 import { StudyOriginLink } from "./study-origin-link";
 import {
@@ -251,9 +253,13 @@ export function StudyReview({
               {highlightBook.sections[item.kind === "highlight" ? item.section : 0]?.title}
             </p>
           ) : null}
-          <p dir="auto" className="text-xl font-medium whitespace-pre-wrap wrap-break-word">
-            {item.kind === "card" ? item.front : item.cue || "Recall why you saved this passage."}
-          </p>
+          <DirectionalText
+            multiline
+            text={
+              item.kind === "card" ? item.front : item.cue || "Recall why you saved this passage."
+            }
+            className="text-xl font-medium wrap-break-word whitespace-pre-wrap"
+          />
           {item.kind === "card" && item.image ? (
             <img
               className="max-h-52 rounded-lg object-contain"
@@ -267,9 +273,11 @@ export function StudyReview({
             </Button>
           ) : (
             <div ref={answer} tabIndex={-1} className="space-y-3 outline-none">
-              <p dir="auto" className="border-t pt-4 whitespace-pre-wrap wrap-break-word">
-                {item.kind === "card" ? item.back : item.quote}
-              </p>
+              <DirectionalText
+                multiline
+                text={item.kind === "card" ? item.back : item.quote}
+                className="border-t pt-4 wrap-break-word whitespace-pre-wrap"
+              />
               {item.kind === "card" && item.backImage ? (
                 <img
                   className="max-h-52 rounded-lg object-contain"
@@ -278,16 +286,13 @@ export function StudyReview({
                 />
               ) : null}
               {item.kind === "highlight" && item.note ? (
-                <p dir="auto" className="text-sm text-muted-foreground">
-                  {item.note}
-                </p>
-              ) : null}
-              {origin && !busy ? (
-                <StudyOriginLink
-                  origin={origin}
-                  state={returnState}
+                <DirectionalText
+                  multiline
+                  text={item.note}
+                  className="text-sm text-muted-foreground"
                 />
               ) : null}
+              {origin && !busy ? <StudyOriginLink origin={origin} state={returnState} /> : null}
               {wordOrigin && !busy ? <StudyOriginLink origin={wordOrigin} state={returnState} /> : null}
               {citations.length && !busy ? (
                 <div>
@@ -613,7 +618,7 @@ export function CardLibrary({
         >
           <textarea
             className={textArea}
-            dir="auto"
+            dir={textDirection(editing.front)}
             aria-label="Front"
             placeholder="Front"
             required
@@ -623,7 +628,7 @@ export function CardLibrary({
           />
           <textarea
             className={textArea}
-            dir="auto"
+            dir={textDirection(editing.back)}
             aria-label="Back"
             placeholder="Back"
             required
@@ -763,9 +768,7 @@ export function CardLibrary({
               }
             />
             <div className="min-w-0 flex-1">
-              <p dir="auto" className="font-medium wrap-break-word">
-                {card.front}
-              </p>
+              <DirectionalText text={card.front} className="font-medium wrap-break-word" />
               {card.image ? (
                 <img
                   className="my-2 max-h-20 rounded object-contain"
@@ -775,9 +778,10 @@ export function CardLibrary({
               ) : null}
               {view === "list" || flipped === card.id ? (
                 <>
-                  <p dir="auto" className="line-clamp-2 text-sm text-muted-foreground">
-                    {card.back}
-                  </p>
+                  <DirectionalText
+                    text={card.back}
+                    className="line-clamp-2 text-sm text-muted-foreground"
+                  />
                   {card.backImage ? (
                     <img
                       className="my-2 max-h-20 rounded object-contain"
@@ -918,9 +922,11 @@ export function HighlightsLibrary({
                     setSelected((ids) => checked ? [...ids, item.id] : ids.filter((id) => id !== item.id));
                   }}
                 />
-                <blockquote dir="auto" className="min-w-0 font-medium wrap-break-word">
-                  {item.quote}
-                </blockquote>
+                <DirectionalText
+                  as="blockquote"
+                  text={item.quote}
+                  className="min-w-0 font-medium wrap-break-word"
+                />
               </div>
               {editing?.id === item.id ? (
                 <form
@@ -933,7 +939,7 @@ export function HighlightsLibrary({
                   }}
                 >
                   <Input
-                    dir="auto"
+                    dir={textDirection(editing.cue ?? "")}
                     aria-label={t("study.recall.cue")}
                     placeholder={t("study.recall.cue")}
                     value={editing.cue ?? ""}
@@ -941,7 +947,7 @@ export function HighlightsLibrary({
                     onChange={(event) => setEditing({ ...editing, cue: event.target.value })}
                   />
                   <textarea
-                    dir="auto"
+                    dir={textDirection(editing.note)}
                     className={textArea}
                     aria-label="Highlight note"
                     value={editing.note}
@@ -966,14 +972,14 @@ export function HighlightsLibrary({
               ) : (
                 <>
                   {item.cue ? (
-                    <p dir="auto" className="text-sm font-medium">
-                      {item.cue}
-                    </p>
+                    <DirectionalText text={item.cue} className="text-sm font-medium" />
                   ) : null}
                   {item.note ? (
-                    <p dir="auto" className="text-sm text-muted-foreground">
-                      {item.note}
-                    </p>
+                    <DirectionalText
+                      multiline
+                      text={item.note}
+                      className="text-sm text-muted-foreground"
+                    />
                   ) : null}
                   <div className="flex flex-wrap gap-2">
                     <Button size="sm" variant="outline" onClick={() => locate(item)}>

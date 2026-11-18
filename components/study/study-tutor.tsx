@@ -55,6 +55,8 @@ import {
   studyReports,
 } from "@/lib/study/reports";
 import { Markdown } from "@/components/chat/markdown";
+import { DirectionalText } from "@/components/common/directional-text";
+import { textDirection } from "@/lib/text/direction";
 import { recordStudyVoice, transcribeStudyVoice } from "@/lib/study/voice";
 import {
   speakStudyReply,
@@ -936,7 +938,7 @@ export function StudyTutor({
             </Button>
           </form>
         ) : (
-          <h2 className="text-xl font-semibold" dir="auto">
+          <h2 className="text-xl font-semibold" dir={textDirection(thread.title)}>
             {thread.title}
           </h2>
         )}
@@ -976,7 +978,11 @@ export function StudyTutor({
       {followUp ? (
         <div className="space-y-2 rounded-xl border p-3 text-sm">
           {thread.title !== followUp.text ? (
-            <p dir="auto" className="whitespace-pre-wrap wrap-break-word">{followUp.text}</p>
+            <DirectionalText
+              multiline
+              text={followUp.text}
+              className="wrap-break-word whitespace-pre-wrap"
+            />
           ) : null}
           <div className="flex flex-wrap items-center gap-2">
             {!conversation.length && !input.trim() && !followUpComplete ? (
@@ -1164,9 +1170,11 @@ export function StudyTutor({
               {entry.role === "assistant" ? (
                 <Markdown text={entry.text} />
               ) : (
-                <p dir="auto" className="wrap-break-word whitespace-pre-wrap">
-                  {entry.text}
-                </p>
+                <DirectionalText
+                  multiline
+                  text={entry.text}
+                  className="wrap-break-word whitespace-pre-wrap"
+                />
               )}
               <div className="flex flex-wrap gap-1.5">
                 {entry.citations?.map((citation) => (
@@ -1254,7 +1262,7 @@ export function StudyTutor({
           className="min-h-24 w-full rounded-xl border bg-background p-3"
           aria-label="Study message"
           placeholder="Ask a question or explain what you learned"
-          dir="auto"
+          dir={textDirection(input)}
           value={input}
           onChange={(event) => composer.edit(event.target.value)}
           maxLength={12000}

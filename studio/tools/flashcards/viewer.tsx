@@ -9,6 +9,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Icon } from "@/components/icon";
+import { DirectionalText } from "@/components/common/directional-text";
 import { Button } from "@/components/panelui/button";
 import { cn } from "@/lib/utils";
 import type { ToolViewerProps } from "@/studio/shared/form";
@@ -157,10 +158,10 @@ export function FlashcardsViewer({ data }: ToolViewerProps<FlashcardsData>) {
           )}
         >
           <div className="col-start-1 row-start-1 flex items-center justify-center rounded-3xl bg-card p-8 text-center text-xl leading-snug font-semibold text-card-foreground shadow-sm ring-1 ring-border backface-hidden group-focus-visible:ring-2 group-focus-visible:ring-ring sm:text-2xl">
-            {card.front}
+            <DirectionalText as="span" text={card.front} multiline />
           </div>
           <div className="col-start-1 row-start-1 flex rotate-y-180 items-center justify-center rounded-3xl bg-muted p-8 text-center text-lg leading-relaxed backface-hidden">
-            {card.back}
+            <DirectionalText as="span" text={card.back} multiline />
           </div>
         </div>
       </button>

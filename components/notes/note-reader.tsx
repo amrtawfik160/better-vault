@@ -16,6 +16,7 @@ import {
   sectionOf,
 } from "@/lib/notes/syntax";
 import { isStudyHref } from "@/lib/study/links";
+import { rehypeDirection } from "@/lib/text/rehype-direction";
 import { cn } from "@/lib/utils";
 
 /** Rewrites matches outside code and comments, leaving the rest of the text as it is. */
@@ -198,9 +199,9 @@ export function NoteReader({
           </a>
         );
       },
-      blockquote: ({ node, children }) => {
+      blockquote: ({ node, children, dir }) => {
         const callout = node?.properties?.dataCallout as string | undefined;
-        if (!callout) return <blockquote>{children}</blockquote>;
+        if (!callout) return <blockquote dir={dir}>{children}</blockquote>;
         const tone = /warn|caution|danger|error|bug|fail/.test(callout)
           ? "border-warning bg-warning/10"
           : /tip|success|check|done/.test(callout)
@@ -209,6 +210,7 @@ export function NoteReader({
         return (
           <div
             data-callout={callout}
+            dir={dir}
             className={cn(
               "rounded-lg border-s-4 px-4 py-2 not-italic [&_[data-callout-title]]:font-semibold",
               tone,
@@ -239,7 +241,7 @@ export function NoteReader({
       ) : null}
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeCallouts]}
+        rehypePlugins={[rehypeCallouts, rehypeDirection]}
         urlTransform={(url) => url}
         components={components}
       >

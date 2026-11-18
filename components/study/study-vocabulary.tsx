@@ -18,6 +18,8 @@ import {
   vocabularyCardSides,
 } from "@/lib/study/vocabulary";
 import { StudyOriginLink } from "./study-origin-link";
+import { DirectionalText } from "@/components/common/directional-text";
+import { textDirection } from "@/lib/text/direction";
 
 export function VocabularyLibrary({
   words,
@@ -144,7 +146,7 @@ export function VocabularyLibrary({
             <label key={name} className="text-sm capitalize">
               {name}
               <Input
-                dir="auto"
+                dir={textDirection(editor.word[name])}
                 value={editor.word[name]}
                 disabled={saving}
                 required={name === "term"}
@@ -189,11 +191,16 @@ export function VocabularyLibrary({
                 <div className="min-w-0 basis-full sm:flex-1">
                   <p
                     id={`study-term-${word.id}`}
-                    dir="auto"
+                    dir={textDirection(word.term)}
                     className="font-medium wrap-break-word"
                   >
-                    {word.term}
-                    {word.translation ? ` — ${word.translation}` : ""}
+                    <bdi dir={textDirection(word.term)}>{word.term}</bdi>
+                    {word.translation ? (
+                      <>
+                        {" "}
+                        — <bdi dir={textDirection(word.translation)}>{word.translation}</bdi>
+                      </>
+                    ) : null}
                   </p>
                   {word.language ? (
                     <p className="text-sm text-muted-foreground" dir="auto">
@@ -201,14 +208,18 @@ export function VocabularyLibrary({
                     </p>
                   ) : null}
                   {word.context ? (
-                    <p dir="auto" className="text-sm wrap-break-word">
-                      {word.context}
-                    </p>
+                    <DirectionalText
+                      multiline
+                      text={word.context}
+                      className="text-sm wrap-break-word"
+                    />
                   ) : null}
                   {word.note ? (
-                    <p dir="auto" className="text-sm wrap-break-word text-muted-foreground">
-                      {word.note}
-                    </p>
+                    <DirectionalText
+                      multiline
+                      text={word.note}
+                      className="text-sm wrap-break-word text-muted-foreground"
+                    />
                   ) : null}
                 </div>
                 {word.origin ? <StudyOriginLink origin={word.origin} /> : null}
@@ -240,9 +251,11 @@ export function VocabularyLibrary({
                     {word.examples.map(({ context, origin }, index) => (
                       <li key={index} className="flex flex-wrap items-center gap-2 py-2">
                         {context ? (
-                          <p dir="auto" className="min-w-0 basis-full wrap-break-word sm:flex-1">
-                            {context}
-                          </p>
+                          <DirectionalText
+                            multiline
+                            text={context}
+                            className="min-w-0 basis-full wrap-break-word sm:flex-1"
+                          />
                         ) : null}
                         {origin ? <StudyOriginLink origin={origin} /> : null}
                       </li>

@@ -3,6 +3,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { PassageRef } from "@/lib/chat/types";
 import { linkCitations } from "@/lib/grounding/passages";
+import { rehypeDirection } from "@/lib/text/rehype-direction";
 import { cn } from "@/lib/utils";
 import { Citation } from "./citation";
 
@@ -77,11 +78,15 @@ export function Markdown({
     () => ({
       ...(anchorHeadings
         ? {
-            h2: ({ node, children }) => (
-              <h2 id={headingId(node?.position?.start.line)}>{children}</h2>
+            h2: ({ node, children, dir }) => (
+              <h2 id={headingId(node?.position?.start.line)} dir={dir}>
+                {children}
+              </h2>
             ),
-            h3: ({ node, children }) => (
-              <h3 id={headingId(node?.position?.start.line)}>{children}</h3>
+            h3: ({ node, children, dir }) => (
+              <h3 id={headingId(node?.position?.start.line)} dir={dir}>
+                {children}
+              </h3>
             ),
           }
         : {}),
@@ -103,7 +108,11 @@ export function Markdown({
   );
 
   const blocks = (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      rehypePlugins={[rehypeDirection]}
+      components={components}
+    >
       {source}
     </ReactMarkdown>
   );

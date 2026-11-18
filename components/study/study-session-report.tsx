@@ -1,6 +1,8 @@
 import { useId, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/panelui/button";
+import { DirectionalText } from "@/components/common/directional-text";
+import { textDirection } from "@/lib/text/direction";
 import type { StudyReport } from "@/lib/study/records";
 
 function ReportSection({ title, children }: { title: string; children: ReactNode }) {
@@ -73,18 +75,14 @@ export function StudySessionReport({
       className="scroll-mt-32 space-y-4 rounded-2xl border bg-card p-4"
     >
       <h3 className="font-semibold">Session report</h3>
-      <p dir="auto" className="whitespace-pre-wrap">
-        {report.summary}
-      </p>
+      <DirectionalText multiline text={report.summary} className="whitespace-pre-wrap" />
       {actions}
       {technical.length > 0 ? (
         <ReportSection title="Technical feedback">
           <ul className="space-y-2">
             {technical.map((text, index) => (
               <li key={index} className="space-y-1 rounded-xl border p-3">
-                <p dir="auto" className="text-sm">
-                  {text}
-                </p>
+                <DirectionalText multiline text={text} className="text-sm" />
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" size="sm" onClick={() => onDraftCard(text)}>
                     {t("study.capture.draftFromFeedback")}
@@ -101,17 +99,17 @@ export function StudySessionReport({
           <ul className="space-y-2">
             {language.map((item, index) => (
               <li key={index} className="space-y-2 rounded-xl border p-3 text-sm">
-                <p dir="auto">
+                <p>
                   <span className="text-muted-foreground">Original </span>
-                  {item.original}
+                  <DirectionalText as="span" text={item.original} />
                 </p>
-                <p dir="auto">
+                <p>
                   <span className="text-muted-foreground">Try </span>
-                  <strong>{item.suggestion}</strong>
+                  <strong>
+                    <DirectionalText as="span" text={item.suggestion} />
+                  </strong>
                 </p>
-                <p dir="auto" className="text-muted-foreground">
-                  {item.reason}
-                </p>
+                <DirectionalText multiline text={item.reason} className="text-muted-foreground" />
                 <div className="flex flex-wrap gap-2">
                   <Button
                     variant="outline"
@@ -142,13 +140,15 @@ export function StudySessionReport({
           <ul className="space-y-2">
             {words.map((word, index) => (
               <li key={index} className="space-y-2 rounded-xl border p-3 text-sm">
-                <strong dir="auto">{word.term}</strong>
-                <p dir="auto">{word.definition}</p>
-                {word.translation ? <p dir="auto">{word.translation}</p> : null}
+                <strong dir={textDirection(word.term)}>{word.term}</strong>
+                <DirectionalText multiline text={word.definition} />
+                {word.translation ? <DirectionalText text={word.translation} /> : null}
                 {word.example ? (
-                  <p dir="auto" className="text-muted-foreground">
-                    {word.example}
-                  </p>
+                  <DirectionalText
+                    multiline
+                    text={word.example}
+                    className="text-muted-foreground"
+                  />
                 ) : null}
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -177,9 +177,11 @@ export function StudySessionReport({
               const id = `${nextStepId}-${index}`;
               return (
                 <li key={index} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
-                  <p id={id} dir="auto" className="min-w-0 basis-full wrap-break-word sm:flex-1">
-                    {text}
-                  </p>
+                  <DirectionalText
+                    id={id}
+                    text={text}
+                    className="min-w-0 basis-full wrap-break-word sm:flex-1"
+                  />
                   {done ? (
                     <span className="text-muted-foreground">{t("study.followUps.done")}</span>
                   ) : null}

@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/panelui/button";
 import { Card } from "@/components/panelui/card";
+import { DirectionalText } from "@/components/common/directional-text";
 import { startStudyFollowUp, updateStudyReport } from "@/lib/db/study";
 import { studyHref } from "@/lib/study/links";
 import type { StudyFollowUp, StudyThread } from "@/lib/study/records";
@@ -96,12 +97,8 @@ export function StudyFollowUps({
               className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm"
             >
               <div className="min-w-0 basis-full sm:flex-1">
-                <p id={id} className="wrap-break-word" dir="auto">
-                  {text}
-                </p>
-                <p className="truncate text-xs text-muted-foreground" dir="auto">
-                  {title}
-                </p>
+                <DirectionalText id={id} text={text} className="wrap-break-word" />
+                <DirectionalText text={title} className="truncate text-xs text-muted-foreground" />
               </div>
               <StudyOriginLink origin={{ kind: "report", threadId, reportId }} />
               {action === "complete" ? (

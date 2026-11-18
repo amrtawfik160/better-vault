@@ -2,6 +2,8 @@ import { createElement, useEffect, useRef, useState, type ReactNode } from "reac
 import { loadBlob } from "@/lib/db/blobs";
 import { epubPath, openStudyEpub } from "@/lib/study/epub";
 import type { StudyRecordOf, StudySection } from "@/lib/study/records";
+import { textDirection, type TextDirection } from "@/lib/text/direction";
+import { directionalInline } from "@/components/common/directional-text";
 import { useRenderedStudyMarks } from "./study-rendered-text";
 
 const epubThemeClass = {
@@ -13,6 +15,10 @@ const epubThemeClass = {
 export type StudyEpubTheme = keyof typeof epubThemeClass;
 
 const retainedTags = new Set([
+  "div",
+  "section",
+  "span",
+  "bdi",
   "p",
   "ul",
   "ol",
@@ -46,6 +52,25 @@ const retainedTags = new Set([
 
 type EpubArchive = Awaited<ReturnType<typeof openStudyEpub>>;
 type Chapter = NonNullable<Awaited<ReturnType<EpubArchive["readChapter"]>>>;
+
+const textBlocks = new Set([
+  "p",
+  "ul",
+  "ol",
+  "dl",
+  "dt",
+  "dd",
+  "blockquote",
+  "figcaption",
+  "table",
+  "td",
+  "th",
+]);
+
+function bookDirection(value: string | null): TextDirection | undefined {
+  const dir = value?.toLowerCase();
+  if (dir === "ltr" || dir === "rtl" || dir === "auto") return dir;
+}
 
 async function findChapter(book: EpubArchive, section: StudySection, index: number) {
   if (section.epubPath)
@@ -88,8 +113,14 @@ function displayChapter(
   destinations: ReadonlyMap<string, number>,
   go: (index: number) => void,
 ) {
-  function display(node: Node, key: number): ReactNode {
-    if (node.nodeType === Node.TEXT_NODE) return node.textContent;
+  function display(
+    node: Node,
+    key: number,
+    inherited: TextDirection,
+    authored?: TextDirection,
+  ): ReactNode {
+    if (node.nodeType === Node.TEXT_NODE)
+      return directionalInline(node.textContent ?? "", inherited);
     if (!(node instanceof Element)) return null;
     const tag = node.localName;
     if (tag === "img") {
@@ -105,17 +136,33 @@ function displayChapter(
         />
       ) : null;
     }
-    const children = Array.from(node.childNodes, display);
+    const heading = /^h[1-6]$/.test(tag);
+    const declared = bookDirection(node.getAttribute("dir"));
+    const lang = node.getAttribute("lang") ?? node.getAttribute("xml:lang") ?? undefined;
+    const dir =
+      declared ??
+      (tag === "pre" || tag === "code"
+        ? "ltr"
+        : !authored && (heading || textBlocks.has(tag))
+          ? textDirection(node.textContent ?? "")
+          : undefined);
+    const children = Array.from(node.childNodes, (child, index) =>
+      display(child, index, dir ?? inherited, declared ?? authored),
+    );
     if (tag === "a") {
       const href = node.getAttribute("href") ?? "";
       const target = href && !href.startsWith("#") ? epubPath(href, path) : null;
       const destination = target ? destinations.get(target) : undefined;
       return destination === undefined ? (
-        <span key={key}>{children}</span>
+        <span key={key} dir={dir} lang={lang}>
+          {children}
+        </span>
       ) : (
         <button
           type="button"
           key={key}
+          dir={dir}
+          lang={lang}
           className="cursor-pointer text-primary underline"
           onClick={() => go(destination)}
         >
@@ -123,18 +170,24 @@ function displayChapter(
         </button>
       );
     }
-    if (/^h[1-6]$/.test(tag))
+    if (heading)
       return (
-        <h3 key={key} dir="auto" className="my-2 text-xl font-semibold">
+        <h3 key={key} dir={dir} lang={lang} className="my-2 text-xl font-semibold">
           {children}
         </h3>
       );
-    if (!retainedTags.has(tag)) return <span key={key}>{children}</span>;
+    if (!retainedTags.has(tag))
+      return (
+        <span key={key} dir={dir} lang={lang}>
+          {children}
+        </span>
+      );
     return createElement(
       tag,
       {
         key,
-        dir: /^(p|li|blockquote|figcaption|td|th)$/.test(tag) ? "auto" : undefined,
+        dir,
+        lang,
         className: /^p$/.test(tag)
           ? "my-3"
           : /^(ul|ol)$/.test(tag)
@@ -152,7 +205,10 @@ function displayChapter(
       children,
     );
   }
-  return Array.from(chapter.body.childNodes, display);
+  const authored = bookDirection(chapter.direction);
+  return Array.from(chapter.body.childNodes, (node, index) =>
+    display(node, index, authored ?? "auto", authored),
+  );
 }
 
 export function StudyEpubChapter({
@@ -242,6 +298,8 @@ export function StudyEpubChapter({
       ref={content}
       role="region"
       aria-label="EPUB chapter layout"
+      dir={bookDirection(loaded.chapter.direction)}
+      lang={loaded.chapter.language ?? undefined}
       className={`mx-auto max-w-prose rounded-md p-3 leading-relaxed wrap-break-word [&_ol]:list-decimal [&_ul]:list-disc ${epubThemeClass[theme]}`}
       style={{ fontSize: font }}
       onMouseUp={capture}
