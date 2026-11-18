@@ -14,6 +14,7 @@ import {
   readFlashcardDraftPassages,
   removeStudyRecord,
   saveStudyCard,
+  saveStudyDraftCards,
   saveStudyNote,
   saveStudyWord,
   saveStudyReadingPlace,
@@ -1533,6 +1534,15 @@ describe.each(backends)("%s store", (name, create) => {
         messages: [{ role: "user", practiceCardId: own.id }],
       });
       expect(await store().getStudy(own.id)).toMatchObject({ schedule: own.schedule });
+    });
+
+    it("replays an interrupted draft save without overwriting or duplicating its cards", async () => {
+      const card = await saveStudyCard({ front: "Existing question", back: "Existing answer", tags: [] });
+      const second = { ...card, id: card.id + "-new", front: "Second question" };
+      expect(await saveStudyDraftCards([{ ...card, front: "Old draft text" }, second])).toBe(1);
+      expect(await saveStudyDraftCards([card, second])).toBe(0);
+      expect(await store().getStudy(card.id)).toMatchObject({ front: "Existing question" });
+      expect(await store().getStudy(second.id)).toMatchObject({ front: "Second question" });
     });
 
     it("restores note passages in flashcards after edits and backup", async () => {

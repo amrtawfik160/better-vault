@@ -86,6 +86,7 @@ const citation = z.union([
   z.object({ ...citationFields, origin: studyOriginSchema }),
   z.object({ ...citationFields, bookId: z.string(), section: index }),
 ]);
+export { citation as studyCitationSchema };
 
 export const studyGoal = z.enum([
   "book",

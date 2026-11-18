@@ -12,6 +12,7 @@ import {
   studyMarkdownContent,
 } from "@/lib/study/markdown-document";
 import { clearDocumentRecoveries } from "@/lib/study/document-drafts";
+import { clearFlashcardDraftsFrom } from "@/lib/study/flashcard-draft-recovery";
 import { locateStudyMark, resolveStudyRange, studyTextEdit, studyTextRevision } from "@/lib/study/text-edits";
 import { cardEvidenceLimit, type StudyDraftPassage, type StudyPassage, type StudyTutorSources } from "@/lib/study/passages";
 import { locateCitedChunk } from "@/lib/study/locators";
@@ -510,6 +511,10 @@ export async function studyConversationDefaults(goal: StudyThread["goal"]) {
 export async function removeStudyRecord(id: string) {
   await store().deleteStudy(id);
   clearTutorDraftRecovery(id);
+  clearFlashcardDraftsFrom(({ origin }) => {
+    if (origin.kind === "book") return origin.bookId === id;
+    return (origin.kind === "tutor" || origin.kind === "report") && origin.threadId === id;
+  });
 }
 
 export function studyId() {
@@ -637,6 +642,10 @@ export async function saveStudyCard(content: CardContent, id?: string) {
   const card = newStudyCard(content, id);
   await store().insertStudy([card]);
   return card;
+}
+
+export function saveStudyDraftCards(cards: StudyCard[]) {
+  return store().insertStudy(cards);
 }
 
 export function updateStudyReviewItem(write: StudyReviewItemWrite) {

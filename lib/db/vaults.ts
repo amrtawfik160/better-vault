@@ -2,6 +2,7 @@ import { generateId } from "ai";
 import { useSyncExternalStore } from "react";
 import { clearReviewCheckpoint } from "@/lib/study/review-session";
 import { clearDocumentRecoveries, clearDocumentRecovery, studyDocumentDraftId } from "@/lib/study/document-drafts";
+import { clearFlashcardDrafts } from "@/lib/study/flashcard-draft-recovery";
 import { DEFAULT_VAULT, studyVaultIndex } from "@/lib/study/vault";
 import { useStoreQuery } from "./live";
 import { store } from "./store";
@@ -91,6 +92,7 @@ export async function deleteVault(id: string) {
   for (const skill of (await store().listSkills()).filter((item) => item.vaultId === id))
     await store().deleteSkill(skill.id);
   await store().deleteVault(id);
+  clearFlashcardDrafts(id);
   clearDocumentRecovery(studyDocumentDraftId({ vaultId: id }));
   for (const row of rows) {
     if (row.kind === "book" && scope.owner(row) === id)

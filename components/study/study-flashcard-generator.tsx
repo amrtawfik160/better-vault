@@ -2,51 +2,43 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { Button } from "@/components/panelui/button";
 import { Dialog } from "@/components/panelui/dialog";
 import { Input } from "@/components/panelui/input";
 import { Select } from "@/components/panelui/select";
 import { Textarea } from "@/components/panelui/textarea";
 import { textDirection } from "@/lib/text/direction";
-import { newStudyCard, putStudyRecords, readFlashcardDraftPassages } from "@/lib/db/study";
+import { newStudyCard, readFlashcardDraftPassages, saveStudyDraftCards, studyId } from "@/lib/db/study";
 import { flashcardCitationsFor, flashcardMaterialLimit, maxDraftImages } from "@/lib/study/ai";
 import { askStudyModel } from "@/lib/study/client";
+import {
+  clearFlashcardDraft,
+  flashcardDraftKey,
+  readFlashcardDraft,
+  restoreFlashcardSource,
+  snapshotFlashcardSource,
+  writeFlashcardDraft,
+  type FlashcardDraftState,
+  type FlashcardSource,
+} from "@/lib/study/flashcard-draft-recovery";
 import { studyHref } from "@/lib/study/links";
-import type { StudyDraftPassage } from "@/lib/study/passages";
-import type { StudyCitation, StudyOrigin } from "@/lib/study/records";
 
-type Draft = { front: string; back: string; citations?: StudyCitation[] };
-type FlashcardMaterial = {
-  text: string;
-  origin: StudyOrigin;
-  evidence?: StudyOrigin[];
-  passages?: StudyDraftPassage[];
-};
-export type FlashcardSource = FlashcardMaterial & {
-  title: string;
-  notebookId?: string;
-  tags: string[];
-  cards?: Draft[];
-  parts?: { heading?: string; preview?: string; load: () => FlashcardMaterial }[];
-};
-
-type DraftBatch = {
-  part: number;
-  origin?: StudyOrigin;
-  drafts: Draft[];
-  excerpts: string[];
-};
+export type { FlashcardSource };
+type Draft = FlashcardDraftState["batches"][number]["drafts"][number];
 
 export function StudyFlashcardDraftDialog({
   source,
   vaultId,
   title,
+  recoveryKey,
   onClose,
   onSave,
 }: {
-  source: FlashcardSource;
+  source?: FlashcardSource;
   vaultId: string;
   title?: string;
+  recoveryKey?: string;
   onClose: () => void;
   onSave: (count: number) => void;
 }) {
@@ -55,11 +47,13 @@ export function StudyFlashcardDraftDialog({
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <Dialog.Content closeLabel={common("actions.close")}>
-        <Dialog.Header title={title ?? t("study.capture.draftCards")} description={source.title} />
+        <Dialog.Header title={title ?? t("study.capture.draftCards")} description={source?.title} />
         <Dialog.Body>
           <StudyFlashcardGenerator
+            key={recoveryKey ?? flashcardDraftKey(vaultId, source)}
             close={onClose}
             source={source}
+            recoveryKey={recoveryKey}
             vaultId={vaultId}
             onSave={onSave}
           />
@@ -71,25 +65,46 @@ export function StudyFlashcardDraftDialog({
 
 export function StudyFlashcardGenerator({
   close,
-  source,
+  source: requestedSource,
+  recoveryKey,
   vaultId,
   onSave,
 }: {
   close: () => void;
   source?: FlashcardSource;
+  recoveryKey?: string;
   vaultId: string;
   onSave?: (count: number) => void;
 }) {
   const { t } = useTranslation("home");
   const navigate = useNavigate();
-  const [freeText, setFreeText] = useState("");
-  const [part, setPart] = useState(0);
-  const [count, setCount] = useState(5);
-  const [batches, setBatches] = useState<DraftBatch[]>(() =>
-    source?.cards?.length ? [{ part: 0, origin: source.origin, drafts: source.cards, excerpts: [] }] : [],
-  );
+  const [key] = useState(() => recoveryKey ?? flashcardDraftKey(vaultId, requestedSource));
+  const [restored] = useState(() => {
+    const recovery = readFlashcardDraft(key);
+    return recovery?.vaultId === vaultId ? recovery : undefined;
+  });
+  const [source] = useState(() => restored ? restoreFlashcardSource(restored.source) : requestedSource);
+  const [editor, setEditor] = useState<FlashcardDraftState>(() => restored?.editor ?? ({
+    freeText: "",
+    part: 0,
+    count: 5,
+    batches: source?.cards?.length ? [{
+      part: 0,
+      origin: source.origin,
+      drafts: source.cards.map((card) => ({ ...card, id: studyId() })),
+      excerpts: [],
+    }] : [],
+  }));
+  const { freeText, part, count, batches } = editor;
+  const liveEditor = useRef(editor);
+  const snapshot = useRef(restored?.source);
+  const version = useRef(restored?.version);
+  const warned = useRef(false);
+  const [journaled, setJournaled] = useState(Boolean(restored));
+  const [discarding, setDiscarding] = useState(false);
   const [working, setWorking] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [choosingPart, setChoosingPart] = useState(false);
   const controller = useRef<AbortController | null>(null);
   const pendingSave = useRef<symbol | null>(null);
   const material = useMemo(() => source?.parts?.[part]?.load() ?? source, [part, source]);
@@ -117,10 +132,34 @@ export function StudyFlashcardGenerator({
     [],
   );
 
+  function updateEditor(change: (current: FlashcardDraftState) => FlashcardDraftState) {
+    const next = change(liveEditor.current);
+    liveEditor.current = next;
+    setEditor(next);
+    if (source && !snapshot.current) snapshot.current = snapshotFlashcardSource(source);
+    const nextVersion = studyId();
+    const saved = writeFlashcardDraft({
+      key,
+      vaultId,
+      source: snapshot.current,
+      version: nextVersion,
+      editor: next,
+    }, version.current);
+    if (saved) {
+      version.current = nextVersion;
+      setJournaled(true);
+    } else if (!warned.current) {
+      warned.current = true;
+      toast.warning(t("study.capture.draftRecoveryUnavailable"));
+    }
+  }
+
   async function generate() {
+    if (controller.current) return;
     const request = new AbortController();
     controller.current = request;
     setWorking(true);
+    updateEditor((current) => current);
     try {
       const passages = material?.passages ?? await readFlashcardDraftPassages(material?.evidence ?? [], vaultId);
       request.signal.throwIfAborted();
@@ -140,6 +179,7 @@ export function StudyFlashcardGenerator({
             .map(({ front, back, citations }) => [
               front.trim().toLocaleLowerCase(),
               {
+                id: studyId(),
                 front,
                 back,
                 citations: material?.evidence?.length || material?.passages?.length
@@ -155,15 +195,18 @@ export function StudyFlashcardGenerator({
         if (!cards.length) toast.error("The model returned no flashcards.");
         else {
           if (answer.imageFallback) toast.info(t("study.capture.draftImageFallback"));
-          setBatches((current) => [
-            ...current.filter((entry) => entry.part !== part),
-            {
-              part,
-              origin: material?.origin,
-              drafts: cards,
-              excerpts: passages.map(({ text }) => text.slice(0, 280)),
-            },
-          ]);
+          updateEditor((current) => ({
+            ...current,
+            batches: [
+              ...current.batches.filter((entry) => entry.part !== part),
+              {
+                part,
+                origin: material?.origin,
+                drafts: cards,
+                excerpts: passages.map(({ text }) => text.slice(0, 280)),
+              },
+            ],
+          }));
         }
       }
     } catch (error) {
@@ -179,7 +222,7 @@ export function StudyFlashcardGenerator({
 
   async function save(review: boolean) {
     if (working || pendingSave.current) return;
-    const cards = pending.map(({ front, back, citations, origin }) =>
+    const cards = pending.map(({ id, front, back, citations, origin }) =>
       newStudyCard({
         front: front.trim(),
         back: back.trim(),
@@ -188,15 +231,16 @@ export function StudyFlashcardGenerator({
         origin,
         citations,
         tags: source?.tags ?? [],
-      }),
+      }, id),
     );
     if (!cards.length) return;
     const transaction = Symbol();
     pendingSave.current = transaction;
     setSaving(true);
     try {
-      await putStudyRecords(...cards);
+      await saveStudyDraftCards(cards);
       if (pendingSave.current !== transaction) return;
+      if (version.current) clearFlashcardDraft(key, version.current);
       close();
       if (review) {
         const note = source?.origin.kind === "note" ? source.origin.noteId : undefined;
@@ -217,9 +261,12 @@ export function StudyFlashcardGenerator({
   const canSave = !working && !saving && pending.length > 0;
 
   function changeDrafts(update: (current: Draft[]) => Draft[]) {
-    setBatches((current) =>
-      current.map((entry) => entry.part === part ? { ...entry, drafts: update(entry.drafts) } : entry),
-    );
+    updateEditor((current) => ({
+      ...current,
+      batches: current.batches.map((entry) =>
+        entry.part === part ? { ...entry, drafts: update(entry.drafts) } : entry,
+      ),
+    }));
   }
 
   function updateDraft(position: number, change: Partial<Draft>) {
@@ -234,6 +281,11 @@ export function StudyFlashcardGenerator({
       aria-label={source ? t("study.capture.draftCards") : undefined}
     >
       {!source ? <h3 className="text-base font-semibold">Generate from text</h3> : null}
+      {journaled ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {t(restored ? "study.capture.draftRestored" : "study.capture.draftCheckpoint")}
+        </p>
+      ) : null}
       <form
         hidden={Boolean(source && (!input.trim() || source.cards?.length))}
         onSubmit={(event) => {
@@ -243,21 +295,34 @@ export function StudyFlashcardGenerator({
         className="space-y-2"
       >
         {parts.length > 1 ? (
-          <Select
-            items={partOptions}
-            value={String(part)}
-            onValueChange={(value) => { if (value !== null) setPart(Number(value)); }}
-            disabled={working || saving}
+          <div
+            onKeyDownCapture={(event) => {
+              if (event.key !== "Escape" || !choosingPart) return;
+              event.preventDefault();
+              event.stopPropagation();
+              setChoosingPart(false);
+            }}
           >
-            <Select.Trigger aria-label={t("study.capture.materialPart")}>
-              <Select.Value />
-            </Select.Trigger>
-            <Select.Content alignItemWithTrigger={false} className="max-w-(--anchor-width)">
-              {partOptions.map(({ value, label, description }) => (
-                <Select.Item key={value} value={value} description={description}>{label}</Select.Item>
-              ))}
-            </Select.Content>
-          </Select>
+            <Select
+              items={partOptions}
+              open={choosingPart}
+              onOpenChange={setChoosingPart}
+              value={String(part)}
+              onValueChange={(value) => {
+                if (value !== null) updateEditor((current) => ({ ...current, part: Number(value) }));
+              }}
+              disabled={working || saving}
+            >
+              <Select.Trigger aria-label={t("study.capture.materialPart")}>
+                <Select.Value />
+              </Select.Trigger>
+              <Select.Content alignItemWithTrigger={false} className="max-w-(--anchor-width)">
+                {partOptions.map(({ value, label, description }) => (
+                  <Select.Item key={value} value={value} description={description}>{label}</Select.Item>
+                ))}
+              </Select.Content>
+            </Select>
+          </div>
         ) : null}
         <Textarea
           aria-label="Text for flashcards"
@@ -267,7 +332,10 @@ export function StudyFlashcardGenerator({
           value={input}
           disabled={working || saving}
           readOnly={Boolean(source)}
-          onChange={(event) => setFreeText(event.target.value)}
+          onChange={(event) => {
+            const freeText = event.target.value;
+            updateEditor((current) => ({ ...current, freeText }));
+          }}
           maxLength={flashcardMaterialLimit}
         />
         {material?.evidence?.some((origin) => origin.kind === "book" && origin.visual) ? (
@@ -284,7 +352,10 @@ export function StudyFlashcardGenerator({
               max={20}
               value={count}
               disabled={working || saving}
-              onChange={(event) => setCount(event.target.valueAsNumber || 1)}
+              onChange={(event) => {
+                const count = Math.max(1, Math.min(20, Math.trunc(event.target.valueAsNumber) || 1));
+                updateEditor((current) => ({ ...current, count }));
+              }}
               className="w-20"
             />
           </label>
@@ -410,6 +481,23 @@ export function StudyFlashcardGenerator({
           </div>
         </div>
       ) : null}
+      {journaled ? (
+        <Button type="button" size="sm" variant="ghost" disabled={working || saving} onClick={() => setDiscarding(true)}>
+          {t("study.capture.discardDraft")}
+        </Button>
+      ) : null}
+      <ConfirmDialog
+        open={discarding}
+        onOpenChange={setDiscarding}
+        title={t("study.capture.discardDraftTitle")}
+        body={t("study.capture.discardDraftBody")}
+        confirmLabel={t("study.capture.discardDraft")}
+        onConfirm={() => {
+          setDiscarding(false);
+          if (version.current) clearFlashcardDraft(key, version.current);
+          close();
+        }}
+      />
     </section>
   );
 }

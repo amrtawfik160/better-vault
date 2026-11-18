@@ -2,6 +2,7 @@ import { studyRecordSchema, type StudyRecord } from "@/lib/study/records";
 import { clearAllReviewCheckpoints } from "@/lib/study/review-session";
 import { clearAllTutorDraftRecovery } from "@/lib/study/tutor-draft-recovery";
 import { clearDocumentRecoveries } from "@/lib/study/document-drafts";
+import { clearFlashcardDrafts } from "@/lib/study/flashcard-draft-recovery";
 import { z } from "zod";
 import { conversationTitle } from "@/lib/chat/title";
 import { fromBase64, toBase64 } from "@/lib/base64";
@@ -226,5 +227,6 @@ export async function deleteAllData() {
   await store().clearAll();
   clearAllTutorDraftRecovery();
   clearDocumentRecoveries();
+  clearFlashcardDrafts();
   clearAllReviewCheckpoints();
 }

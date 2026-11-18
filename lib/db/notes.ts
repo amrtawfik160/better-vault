@@ -1,4 +1,5 @@
 import { generateId } from "ai";
+import { clearFlashcardDraftsFrom } from "@/lib/study/flashcard-draft-recovery";
 import { analyse, renameLinks, sameName } from "@/lib/notes/syntax";
 import { useStoreQuery } from "./live";
 import { store } from "./store";
@@ -116,4 +117,5 @@ export async function renameNote(id: string, wanted: string): Promise<string> {
 
 export async function deleteNote(id: string): Promise<void> {
   await store().deleteNote(id);
+  clearFlashcardDraftsFrom(({ origin }) => origin.kind === "note" && origin.noteId === id);
 }

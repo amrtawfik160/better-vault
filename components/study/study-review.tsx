@@ -14,6 +14,7 @@ import { textDirection } from "@/lib/text/direction";
 import { StudyCardChoices } from "./study-card-choices";
 import { StudyCardImage } from "./study-card-image";
 import { StudyFlashcardGenerator } from "./study-flashcard-generator";
+import { StudyFlashcardDrafts } from "./study-flashcard-drafts";
 import { StudyOriginLink } from "./study-origin-link";
 import { StudyText } from "./study-text";
 import { highlightColors } from "./study-highlight-colors";
@@ -684,9 +685,12 @@ export function CardLibrary({
             </Button>
           ) : null}
           {!filter && !generating ? (
-            <Button variant="outline" onClick={() => setGenerating(true)}>
-              Generate from text
-            </Button>
+            <>
+              <StudyFlashcardDrafts key={vaultId} vaultId={vaultId} />
+              <Button variant="outline" onClick={() => setGenerating(true)}>
+                Generate from text
+              </Button>
+            </>
           ) : null}
           {creation === false ? null : (
             <Button
@@ -706,7 +710,7 @@ export function CardLibrary({
         </div>
       </div>
       {generating && !filter ? (
-        <StudyFlashcardGenerator close={() => setGenerating(false)} vaultId={vaultId} />
+        <StudyFlashcardGenerator key={vaultId} close={() => setGenerating(false)} vaultId={vaultId} />
       ) : null}
       {filter ? <FilterCaption label={filter} clear={clearFilter} /> : null}
       {editing ? (
