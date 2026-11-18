@@ -8,10 +8,9 @@ import { Input } from "@/components/panelui/input";
 import { Textarea } from "@/components/panelui/textarea";
 import { textDirection } from "@/lib/text/direction";
 import { newStudyCard, putStudyRecords, readFlashcardDraftPassages } from "@/lib/db/study";
-import { flashcardCitationsFor, flashcardMaterialLimit } from "@/lib/study/ai";
+import { flashcardCitationsFor, flashcardMaterialLimit, maxDraftImages } from "@/lib/study/ai";
 import { askStudyModel } from "@/lib/study/client";
 import { studyHref } from "@/lib/study/links";
-import type { StudyPassage } from "@/lib/study/passages";
 import type { StudyCitation, StudyOrigin } from "@/lib/study/records";
 
 type Draft = { front: string; back: string; citations?: StudyCitation[] };
@@ -71,7 +70,7 @@ export function StudyFlashcardGenerator({
   const [input, setInput] = useState(source?.text.slice(0, flashcardMaterialLimit) ?? "");
   const [count, setCount] = useState(5);
   const [drafts, setDrafts] = useState<Draft[]>(source?.cards ?? []);
-  const [references, setReferences] = useState<StudyPassage[]>([]);
+  const [referenceExcerpts, setReferenceExcerpts] = useState<string[]>([]);
   const [working, setWorking] = useState(false);
   const [saving, setSaving] = useState(false);
   const controller = useRef<AbortController | null>(null);
@@ -92,10 +91,12 @@ export function StudyFlashcardGenerator({
     try {
       const passages = await readFlashcardDraftPassages(source?.evidence ?? [], vaultId);
       request.signal.throwIfAborted();
+      const draftImages = passages.flatMap(({ image }, index) => image ? [{ passage: index + 1, image }] : []);
       const answer = await askStudyModel({
         action: "cards",
         input: input.trim(),
         passages,
+        draftImages: draftImages.length ? draftImages : undefined,
         cardCount: count,
         signal: request.signal,
       });
@@ -109,7 +110,10 @@ export function StudyFlashcardGenerator({
                 front,
                 back,
                 citations: source?.evidence?.length
-                  ? flashcardCitationsFor(citations, passages)
+                  ? flashcardCitationsFor(
+                      answer.imageFallback ? citations?.filter((index) => !passages[index - 1]?.image) : citations,
+                      passages,
+                    )
                   : undefined,
               },
             ]),
@@ -117,8 +121,9 @@ export function StudyFlashcardGenerator({
         const cards = [...unique.values()];
         if (!cards.length) toast.error("The model returned no flashcards.");
         else {
+          if (answer.imageFallback) toast.info(t("study.capture.draftImageFallback"));
           setDrafts(cards);
-          setReferences(passages);
+          setReferenceExcerpts(passages.map(({ text }) => text.slice(0, 280)));
         }
       }
     } catch (error) {
@@ -204,6 +209,11 @@ export function StudyFlashcardGenerator({
           onChange={(event) => setInput(event.target.value)}
           maxLength={flashcardMaterialLimit}
         />
+        {source?.evidence?.some((origin) => origin.kind === "book" && origin.visual) ? (
+          <p className="text-xs text-muted-foreground">
+            {t("study.capture.draftUsesImages", { count: maxDraftImages })}
+          </p>
+        ) : null}
         <div className="flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-2 text-sm">
             Cards
@@ -269,7 +279,10 @@ export function StudyFlashcardGenerator({
                               [{citation.index}] {citation.title}
                             </p>
                             <p dir="auto" className="line-clamp-2 text-xs text-muted-foreground">
-                              {references[citation.index - 1]?.text.slice(0, 280)}
+                              {referenceExcerpts[citation.index - 1] ||
+                                ("origin" in citation && citation.origin.kind === "book" && citation.origin.visual
+                                  ? t("study.reader.imageContext")
+                                  : null)}
                             </p>
                           </div>
                           <Button

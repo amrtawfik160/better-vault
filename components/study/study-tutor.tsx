@@ -962,13 +962,14 @@ export function StudyTutor({
     }
   }
 
-  function saveNote(text: string, origin: StudyOrigin) {
+  function saveNote(text: string, origin: StudyOrigin, imageReferences?: StudyOrigin[]) {
     void saveStudyNote({
       notebookId: thread.notebookId,
       vaultId,
       title: thread.title,
       body: text,
       origin,
+      imageReferences,
     })
       .then((note) =>
         toast.success("Saved to Notes", {
@@ -1357,7 +1358,11 @@ export function StudyTutor({
                       variant="ghost"
                       size="sm"
                       onClick={() =>
-                        saveNote(entry.text, { kind: "tutor", threadId: thread.id, message: index })
+                        saveNote(
+                          entry.text,
+                          { kind: "tutor", threadId: thread.id, message: index },
+                          entry.citations?.map(studyCitationOrigin),
+                        )
                       }
                     >
                       Save to Notes

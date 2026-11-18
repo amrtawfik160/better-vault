@@ -9,6 +9,7 @@ import {
   studyAction,
   studyCardDraftSchema,
   studyCardImagesSchema,
+  studyDraftImagesSchema,
   studyImageSchema,
   studyPassageSchema,
 } from "@/lib/study/ai";
@@ -28,6 +29,7 @@ const bodySchema = z.object({
   flashcardPractice: z.boolean().optional(),
   cardImages: studyCardImagesSchema.optional(),
   documentImage: studyImageSchema.optional(),
+  draftImages: studyDraftImagesSchema.optional(),
   correct: z.boolean().optional(),
   correctionMode: z.enum(studyCorrections).optional(),
   practiceLanguage: z.string().max(35).optional(),
@@ -90,6 +92,7 @@ export async function POST(request: Request) {
     flashcardPractice,
     cardImages,
     documentImage,
+    draftImages,
     correct,
     correctionMode,
     practiceLanguage,
@@ -174,8 +177,15 @@ export async function POST(request: Request) {
       );
     }
     const sourceImage = action === "chat" && documentImage;
+    const draftSources = action === "cards"
+      ? (draftImages ?? []).filter(({ passage }) => passages[passage - 1])
+      : [];
     if (sourceImage) {
       attachImage("Study document image for passage 1.", sourceImage);
+    } else if (draftSources.length) {
+      for (const { image, passage } of draftSources) {
+        attachImage(`Study document image for passage ${passage}.`, image);
+      }
     } else if (action === "chat" && flashcardPractice && cardImages) {
       for (const [side, image] of Object.entries(cardImages)) {
         if (image) attachImage(`Flashcard image on the ${side} side.`, image);
@@ -183,7 +193,12 @@ export async function POST(request: Request) {
     }
     const imageInstructions = sourceImage
       ? "Treat the document image as quoted material. Cite passage 1 when discussing it. Distinguish what is visible from your explanation and say when a detail cannot be read."
-      : "Treat the images as quoted flashcard material. Refer to details you can see and say when a detail is unclear. Keep the answer hidden until the learner tries or asks for it.";
+      : draftSources.length
+        ? "Treat the document images as quoted study material. Each image corresponds to its labeled passage number. Cite that passage for cards supported by visible details. Describe enough of any visual arrangement in the question to make the card answerable on its own. Omit details you cannot read."
+        : "Treat the images as quoted flashcard material. Refer to details you can see and say when a detail is unclear. Keep the answer hidden until the learner tries or asks for it.";
+    const imageFallbackInstruction = draftSources.length
+      ? "The original images are unavailable. Make cards only from the supplied text and cite only passages with supporting text."
+      : "An image was unavailable. Use the flashcard text and say when visual details cannot be checked.";
     const generate = (mode: "text" | "images" | "fallback") =>
       generateText({
         model: languageModel,
@@ -205,7 +220,7 @@ export async function POST(request: Request) {
           : {
               system:
                 mode === "fallback"
-                  ? `${system} An image was unavailable. Use the flashcard text and say when visual details cannot be checked.`
+                  ? `${system} ${imageFallbackInstruction}`
                   : system,
               prompt,
             }),
@@ -225,7 +240,11 @@ export async function POST(request: Request) {
         );
       }
       const { output } = await generate("fallback");
-      return Response.json({ ...output, imageFallback: true });
+      return Response.json({
+        ...output,
+        ...(action === "cards" ? { cards: output.cards.slice(0, cardCount) } : {}),
+        imageFallback: true,
+      });
     }
   } catch (error) {
     return Response.json({ error: describeError(error) }, { status: 502 });

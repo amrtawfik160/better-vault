@@ -1,5 +1,5 @@
 import { generateId } from "ai";
-import { flashcardPassageSize, maxStudyImageBytes, studyImageSchema } from "@/lib/study/ai";
+import { flashcardPassageSize, maxDraftImages, maxStudyImageBytes, studyImageSchema } from "@/lib/study/ai";
 import { toBase64 } from "@/lib/base64";
 import type { PassageRef } from "@/lib/chat/types";
 import { notebookAnswerEvidence } from "@/lib/chat/study";
@@ -13,7 +13,7 @@ import {
 } from "@/lib/study/markdown-document";
 import { clearDocumentRecoveries } from "@/lib/study/document-drafts";
 import { locateStudyMark, resolveStudyRange, studyTextEdit, studyTextRevision } from "@/lib/study/text-edits";
-import { cardEvidenceLimit, type StudyPassage, type StudyTutorSources } from "@/lib/study/passages";
+import { cardEvidenceLimit, type StudyDraftPassage, type StudyPassage, type StudyTutorSources } from "@/lib/study/passages";
 import { locateCitedChunk } from "@/lib/study/locators";
 import { vocabularyOrigin } from "@/lib/study/vocabulary";
 import { recentPracticeCards, selectedStudyCards, studyHighlightPreview } from "@/lib/study/recall";
@@ -43,6 +43,7 @@ import type {
   StudyReadingPlace,
   StudyTutorDraftChange,
   StudyWord,
+  StudyVisualOrigin,
 } from "@/lib/study/records";
 import { createNote } from "./notes";
 import type { Note, StudioOutput } from "./types";
@@ -94,19 +95,21 @@ export function useSavedStudyBookForSource(notebookId: string, sourceId: string,
   );
 }
 
-async function studyDocumentImage(book: StudyBook | undefined, thread: StudyThread) {
-  const anchor = thread.imageContext?.anchor;
-  const section = thread.section;
-  if (
-    thread.scope !== "image" || !book || !anchor || anchor.kind !== book.format ||
-    section === undefined || !book.sections[section] || thread.bookId !== book.id
-  ) return;
+async function readDocumentSnapshot(book: StudyBook, section: number, anchor: StudyVisualOrigin) {
+  if (!book.sections[section] || anchor.kind !== book.format) return;
   const file = await store().getBlob(studyImageId(book.id, section, anchor));
   if (
     !file || file.notebookId !== book.notebookId || file.sourceId !== book.sourceId ||
     file.data.byteLength > maxStudyImageBytes
   ) return;
   return studyImageSchema.safeParse(`data:${file.mime};base64,${toBase64(file.data)}`).data;
+}
+
+async function studyDocumentImage(book: StudyBook | undefined, thread: StudyThread) {
+  const anchor = thread.imageContext?.anchor;
+  const section = thread.section;
+  if (thread.scope !== "image" || !book || !anchor || section === undefined || thread.bookId !== book.id) return;
+  return readDocumentSnapshot(book, section, anchor);
 }
 
 export function useStudyDocumentImage(book: StudyBook | undefined, thread: StudyThread) {
@@ -184,7 +187,7 @@ function highlightSources(rows: StudyRecord[], ids: string[]) {
   });
 }
 
-async function studyEvidenceReader(vaultId: string, limit = cardEvidenceLimit) {
+async function studyEvidenceReader(vaultId: string, limit = cardEvidenceLimit, includeImages = false) {
   const backend = store();
   const [notebooks, vaults] = await Promise.all([backend.listNotebooks(), listVaults()]);
   const ownership = { notebooks, vaults, rows: [], defaultVaultId: DEFAULT_VAULT };
@@ -199,7 +202,7 @@ async function studyEvidenceReader(vaultId: string, limit = cardEvidenceLimit) {
     return { source, chunks: await getChunks([source.id]) };
   }
 
-  async function readPassage(origin: StudyOrigin): Promise<StudyPassage | undefined> {
+  async function readPassage(origin: StudyOrigin): Promise<StudyDraftPassage | undefined> {
     if (origin.kind === "source") {
       if (notebookOwner(origin.notebookId) !== vaultId) return;
       const pending = sourceReads.get(origin.sourceId) ?? readNotebookSource(origin.sourceId);
@@ -264,6 +267,16 @@ async function studyEvidenceReader(vaultId: string, limit = cardEvidenceLimit) {
       const rows = await pending;
       const book = rows.find((row) => row.kind === "book" && row.id === origin.bookId);
       if (book?.kind !== "book") return;
+      if (origin.visual && includeImages && origin.section !== undefined) {
+        const image = await readDocumentSnapshot(book, origin.section, origin.visual);
+        if (!image) return;
+        return {
+          origin,
+          title: `${book.title} · ${book.sections[origin.section].title}`.slice(0, 500),
+          text: "",
+          image,
+        };
+      }
       const highlight = rows.find(
         (row) => row.kind === "highlight" && row.id === origin.highlightId,
       );
@@ -306,10 +319,11 @@ async function studyEvidenceReader(vaultId: string, limit = cardEvidenceLimit) {
 
 export async function readFlashcardDraftPassages(origins: readonly StudyOrigin[], vaultId: string) {
   if (!origins.length) return [];
-  const { readPassage } = await studyEvidenceReader(vaultId, flashcardPassageSize);
+  const { readPassage } = await studyEvidenceReader(vaultId, flashcardPassageSize, true);
   const distinct = new Map(origins.map((origin) => [JSON.stringify(origin), origin]));
   const passages = await Promise.all([...distinct.values()].slice(0, 8).map(readPassage));
-  return passages.filter((passage) => passage !== undefined);
+  let images = 0;
+  return passages.flatMap((passage) => passage && (!passage.image || ++images <= maxDraftImages) ? [passage] : []);
 }
 
 async function readFlashcardEvidence(cards: StudyCard[], vaultId: string) {
@@ -897,21 +911,27 @@ export async function saveStudyNote({
   title,
   body,
   origin,
+  imageReferences = [],
   notebookId,
   vaultId,
 }: {
   title: string;
   body: string;
   origin: StudyOrigin;
+  imageReferences?: readonly StudyOrigin[];
   notebookId?: string;
   vaultId?: string;
 }) {
   const notebook = notebookId ? await store().getNotebook(notebookId) : undefined;
+  const original = originHref(origin);
+  const imageLinks = [...new Set(imageReferences.flatMap((reference) =>
+    reference.kind === "book" && reference.visual ? [originHref(reference)] : [],
+  ))].filter((href) => href !== original);
   return createNote({
     title,
-    body: `${body.trim()}
-
-[Open original](${originHref(origin)})`,
+    body: [body.trim(), `[Open original](${original})`, ...imageLinks.map((href, index) =>
+      `[Open image source${imageLinks.length > 1 ? ` ${index + 1}` : ""}](${href})`,
+    )].join("\n\n"),
     notebookId: notebook?.id,
     vaultId: notebook ? vaultOf(notebook) : (vaultId ?? currentVaultId()),
   });

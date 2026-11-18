@@ -43,6 +43,18 @@ export const studyCardImagesSchema = z.object({
   answer: studyImageSchema.optional(),
 });
 
+export const maxDraftImages = 2;
+export const studyDraftImagesSchema = z
+  .array(
+    z.object({
+      passage: z.number().int().min(1).max(8),
+      image: studyImageSchema,
+    }),
+  )
+  .max(maxDraftImages)
+  .refine((images) => new Set(images.map(({ passage }) => passage)).size === images.length);
+export type StudyDraftImages = z.infer<typeof studyDraftImagesSchema>;
+
 export type StudyCardImages = z.infer<typeof studyCardImagesSchema>;
 
 export function studyPracticeImages(card: Pick<StudyCardEdit, "image" | "backImage"> | undefined) {

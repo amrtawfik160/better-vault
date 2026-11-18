@@ -468,6 +468,8 @@
       "saveDrafts": "Save drafts to flashcards",
       "tutorAnswerSources": "Sources cited in the Tutor answer",
       "cardSources": "Sources for this answer",
+      "draftUsesImages": "The selected model receives the text and up to {{count}} available source images.",
+      "draftImageFallback": "The model could not read the image. The cards were drafted from the text.",
       "removeCardSource": "Remove source {{number}}, {{title}}",
       "removeSource": "Remove",
       "saveAnswer": "Save answer to Notes",

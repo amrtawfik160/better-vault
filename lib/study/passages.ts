@@ -14,6 +14,8 @@ export type StudyPassage = {
   previousCitations?: number[];
 };
 
+export type StudyDraftPassage = StudyPassage & { image?: string };
+
 export type StudyTutorSources = {
   book?: StudyBook;
   documentImage?: string;

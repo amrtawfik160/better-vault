@@ -14,6 +14,7 @@ import {
   readFlashcardDraftPassages,
   removeStudyRecord,
   saveStudyCard,
+  saveStudyNote,
   saveStudyWord,
   saveStudyReadingPlace,
   saveStudyText,
@@ -208,11 +209,30 @@ describe.each(backends)("%s store", (name, create) => {
       expect((await startBookImageTutor(book, 0, snapshot)).id).not.toBe(tutor.id);
       const sources = await readStudyTutorSources(reopened, DEFAULT_VAULT);
       expect(sources.documentImage).toBe("data:image/png;base64,AQID");
-      expect(passagesFor(reopened, sources, "Explain the diagram.")).toEqual([{
-        origin: { kind: "book", bookId: book.id, section: 1, visual: anchor },
+      const visualOrigin = { kind: "book", bookId: book.id, section: 1, visual: anchor } as const;
+      const visualPassage = {
+        origin: visualOrigin,
         title: "Graphics · Page 2",
         text: "",
-      }]);
+      };
+      expect(passagesFor(reopened, sources, "Explain the diagram.")).toEqual([visualPassage]);
+      expect(await readFlashcardDraftPassages([visualOrigin, visualOrigin], DEFAULT_VAULT)).toEqual([
+        { ...visualPassage, image: sources.documentImage },
+      ]);
+      expect(await readFlashcardDraftPassages([visualOrigin], "another-vault")).toEqual([]);
+      const replyOrigin = { kind: "tutor", threadId: reopened.id, message: 0 } as const;
+      const note = await saveStudyNote({
+        title: "Diagram recap",
+        body: "The diagram is the example.",
+        notebookId: book.notebookId,
+        origin: replyOrigin,
+        imageReferences: [visualOrigin, visualOrigin],
+      });
+      expect(note.body).toBe([
+        "The diagram is the example.",
+        `[Open original](${originHref(replyOrigin)})`,
+        `[Open image source](${originHref(visualOrigin)})`,
+      ].join("\n\n"));
       expect((await readStudyTutorSources(reopened, "another-vault")).documentImage).toBeUndefined();
       expect((await readStudyTutorSources(reopened, DEFAULT_VAULT, "report")).documentImage).toBeUndefined();
 
@@ -224,6 +244,7 @@ describe.each(backends)("%s store", (name, create) => {
       expect((await readStudyTutorSources(restored, DEFAULT_VAULT)).documentImage).toBe(sources.documentImage);
       await deleteSource(book.sourceId);
       expect((await readStudyTutorSources(restored, DEFAULT_VAULT)).documentImage).toBeUndefined();
+      expect(await readFlashcardDraftPassages([visualOrigin], DEFAULT_VAULT)).toEqual([]);
     });
   });
 
