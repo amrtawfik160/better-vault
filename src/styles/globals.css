@@ -162,6 +162,23 @@ html[data-window-controls]
     min-width: 100%;
   }
 
+  .markdown.study-reading-text h1 {
+    font-size: 1.33em;
+    line-height: 1.33;
+  }
+  .markdown.study-reading-text h2 {
+    font-size: 1.11em;
+    line-height: 1.4;
+  }
+  .markdown.study-reading-text :is(h3, h4) {
+    font-size: 0.89em;
+    line-height: 1.5;
+  }
+  .markdown.study-reading-text :is(pre, table) {
+    font-size: 0.78em;
+    line-height: 1.7;
+  }
+
   /* A report read as a document: larger section headings and roomier text. */
   .markdown-document {
     @apply text-base leading-7;

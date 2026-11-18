@@ -136,7 +136,7 @@ export function patchedStudyBook(
   book: StudyBook,
   { change, updatedAt }: StudyBookWrite,
 ): StudyBook {
-  const { section: requestedSection, readingPlace, ...properties } = change;
+  const { section: requestedSection, readingPlace, readingAppearance, ...properties } = change;
   const fresh = updatedAt >= (book.lastReadAt ?? 0);
   const section = fresh && requestedSection !== undefined && book.sections[requestedSection]
     ? requestedSection : book.section;
@@ -145,6 +145,7 @@ export function patchedStudyBook(
   return {
     ...book,
     ...properties,
+    ...(readingAppearance && { readingAppearance: { ...book.readingAppearance, ...readingAppearance } }),
     section,
     readingPlace: position ?? (section === book.section ? book.readingPlace : undefined),
     updatedAt: Math.max(book.updatedAt, updatedAt),

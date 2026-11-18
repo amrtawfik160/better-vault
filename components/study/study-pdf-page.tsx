@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/panelui/button";
@@ -13,6 +13,7 @@ export function StudyPdfPage({
   sectionText,
   marks,
   zoom,
+  layoutVisit,
   onSelect,
   onReadingSurface,
   onVisual,
@@ -23,6 +24,7 @@ export function StudyPdfPage({
   sectionText: string;
   marks: readonly StudyTextMark[];
   zoom: number;
+  layoutVisit: string;
   onSelect: (root: HTMLElement) => void;
   onReadingSurface: (surface: { section: number; root: HTMLElement | null }) => void;
   onVisual: (capture: StudyImageCapture) => void;
@@ -32,10 +34,13 @@ export function StudyPdfPage({
   const paper = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const text = useRef<HTMLDivElement>(null);
+  const scaleTextLayer = useRef<() => void>(null);
   const [drawFailed, setDrawFailed] = useState(false);
   const [ready, setReady] = useState(false);
   const [capturing, setCapturing] = useState(false);
   useRenderedStudyMarks(text, ready, sectionText, marks);
+  // Scale the text layer before the reader restores its anchor after a routed layout change.
+  useLayoutEffect(() => scaleTextLayer.current?.(), [layoutVisit, zoom]);
   useEffect(() => {
     if (ready || drawFailed) onReadingSurface({ section: page, root: text.current });
   }, [drawFailed, onReadingSurface, page, ready]);
@@ -70,11 +75,11 @@ export function StudyPdfPage({
       image.width = Math.ceil(viewport.width);
       image.height = Math.ceil(viewport.height);
       frame.style.setProperty("--study-page-width", `${viewport.width}px`);
-      function scaleText() {
-        if (!frame || !overlay) return;
+      const scaleText = () => {
         const scale = (frame.clientWidth / viewport.width) * viewport.scale;
         overlay.style.setProperty("--total-scale-factor", String(scale));
-      }
+      };
+      scaleTextLayer.current = scaleText;
       size = new ResizeObserver(scaleText);
       size.observe(frame);
       scaleText();
@@ -98,6 +103,7 @@ export function StudyPdfPage({
 
     return () => {
       live = false;
+      scaleTextLayer.current = null;
       size?.disconnect();
       cancel?.();
       overlay.replaceChildren();

@@ -1925,6 +1925,10 @@ describe.each(backends)("%s store", (name, create) => {
       await saveStudyReadingPlace(book.id, previous, openedAt + 10);
       await store().patchStudyBook({ id: book.id, change: { section: 0 }, updatedAt: openedAt + 15 });
       await store().patchStudyBook({ id: book.id, change: { bookmarks: [0] }, updatedAt: openedAt + 40 });
+      await Promise.all([
+        updateStudyBook(book.id, { readingAppearance: { textSize: 24 } }),
+        updateStudyBook(book.id, { readingAppearance: { pdfZoom: 150 } }),
+      ]);
       const backup = JSON.parse(JSON.stringify(await exportBackup()));
       await deleteAllData();
       await importBackup(backup);
@@ -1933,6 +1937,7 @@ describe.each(backends)("%s store", (name, create) => {
         readingPlace: current,
         lastReadAt: openedAt + 30,
         preferredReadingSurface: "layout",
+        readingAppearance: { textSize: 24, pdfZoom: 150 },
         bookmarks: [0],
       });
     });

@@ -6,13 +6,14 @@ import { toast } from "sonner";
 import { StudyMarkdown, StudyText } from "./study-text";
 import { StudyDocumentEdits } from "./study-document-edits";
 import { StudyDocumentSearch } from "./study-document-search";
+import { StudyReaderSettings } from "./study-reader-settings";
 import { highlightColors } from "./study-highlight-colors";
 import { flashcardMaterialLimit, flashcardPassageSize } from "@/lib/study/ai";
 import { flashcardDraftRanges } from "@/lib/study/flashcard-material";
 import { directionalInline, DirectionalText } from "@/components/common/directional-text";
 import { Icon } from "@/components/icon";
 import { Button } from "@/components/panelui/button";
-import { StudyEpubChapter, type StudyEpubTheme } from "./study-epub-chapter";
+import { StudyEpubChapter } from "./study-epub-chapter";
 import { StudyPdfPage } from "./study-pdf-page";
 import { StudyVisualCard, type VisualFlashcard } from "./study-visual-card";
 import { StudyFlashcardDraftDialog, type FlashcardSource } from "./study-flashcard-generator";
@@ -39,10 +40,13 @@ import { textDirection, textLines } from "@/lib/text/direction";
 import { askStudyModel } from "@/lib/study/client";
 import { originHref, studyHref, studyNotesHref } from "@/lib/study/links";
 import {
+  defaultStudyReadingAppearance,
   studyHighlightColor,
   type StudyBook,
   type StudyHighlightColor,
   type StudyOrigin,
+  type StudyReadingAppearance,
+  type StudyReadingPlace,
   type StudyRecordOf,
   type StudyThread,
   type StudyVisualOrigin,
@@ -215,9 +219,9 @@ export function StudyReader({
   const [translating, setTranslating] = useState(false);
   const [color, setColor] = useState<StudyHighlightColor>("yellow");
   const [editingSection, setEditingSection] = useState<number>();
-  const [font, setFont] = useState(18);
-  const [zoom, setZoom] = useState(100);
-  const [epubTheme, setEpubTheme] = useState<StudyEpubTheme>("system");
+  const appearance = { ...defaultStudyReadingAppearance, ...book.readingAppearance };
+  const { textSize: font, pdfZoom: zoom, epubTheme } = appearance;
+  const appearanceCheckpoint = useRef<StudyReadingPlace | undefined>(undefined);
   const [surfaceChoice, setSurfaceChoice] = useState<{ visit: string; surface: "text" | "layout" }>();
   const [savingSurface, setSavingSurface] = useState(false);
   const previousPlace = book.readingPlace;
@@ -233,6 +237,10 @@ export function StudyReader({
   const viewPdf = showLayout && book.format === "pdf";
   const viewEpub = showLayout && book.format === "epub";
   const showingOriginal = Boolean((viewPdf || viewEpub) && fileId);
+  const canToggleLayout = !!fileId && book.format !== "text" && !needsOriginal;
+  const layoutLabel = book.format === "pdf"
+    ? t(showLayout ? "study.reader.hideOriginalPage" : "study.reader.showOriginalPage")
+    : t(showLayout ? "study.reader.hideBookLayout" : "study.reader.showBookLayout");
   const layout =
     showingOriginal && readingSurface?.section === index ? readingSurface.root : undefined;
   const loadingLayout = showingOriginal && layout === undefined;
@@ -243,11 +251,12 @@ export function StudyReader({
   const started = useRef(0);
   const [readingSessionId] = useState(studyId);
   const latestInteraction = useRef(0);
-  const restoredLayout = useStudyReadingPlace({
+  const { restoredLayout, captureLayout, prepareReflow } = useStudyReadingPlace({
     book,
     section: index,
     revision,
     visit: location.key,
+    layoutKey: `${showingOriginal}:${font}:${viewPdf ? zoom : ""}`,
     viewport,
     article: textBody,
     layout,
@@ -439,18 +448,31 @@ export function StudyReader({
     });
   }
 
-  async function toggleLayout(visible: boolean) {
+  async function toggleLayout(visible: boolean, checkpoint?: StudyReadingPlace) {
     if (savingSurface || visible === showLayout) return;
     const preferredReadingSurface = visible ? "layout" : "text";
+    const cancel = prepareReflow(checkpoint, preferredReadingSurface);
     setSavingSurface(true);
     try {
       await updateStudyBook(book.id, { preferredReadingSurface });
       if (!visible) setReadingSurface(undefined);
       setSurfaceChoice({ visit: location.key, surface: preferredReadingSurface });
     } catch (error) {
+      cancel();
       toast.error(error instanceof Error ? error.message : String(error));
     } finally {
       setSavingSurface(false);
+    }
+  }
+
+  async function changeAppearance(change: Partial<StudyReadingAppearance>) {
+    const changesSize = (change.textSize ?? font) !== font || (viewPdf && (change.pdfZoom ?? zoom) !== zoom);
+    const cancel = changesSize ? prepareReflow(appearanceCheckpoint.current) : undefined;
+    try {
+      await updateStudyBook(book.id, { readingAppearance: change });
+    } catch (error) {
+      cancel?.();
+      toast.error(error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -713,14 +735,9 @@ export function StudyReader({
               Download original
             </a>
           ) : null}
-          {book.format === "pdf" && fileId && !needsOriginal ? (
-            <Button variant="outline" disabled={savingSurface} onClick={() => void toggleLayout(!viewPdf)}>
-              {viewPdf ? "Hide original page" : "Show original page"}
-            </Button>
-          ) : null}
-          {book.format === "epub" && fileId && !needsOriginal ? (
-            <Button variant="outline" disabled={savingSurface} onClick={() => void toggleLayout(!viewEpub)}>
-              {viewEpub ? "Hide book layout" : "Show book layout"}
+          {canToggleLayout ? (
+            <Button variant="outline" disabled={savingSurface} onClick={() => void toggleLayout(!showLayout)}>
+              {layoutLabel}
             </Button>
           ) : null}
         </div>
@@ -769,7 +786,18 @@ export function StudyReader({
           >
             <Icon icon={ArrowRight01Icon} size={16} className="rtl:rotate-180" />
           </Button>
-          <Button size="icon-sm" variant="ghost" aria-label={focusLabel} title={focusLabel} onClick={toggleFocus} className="ms-auto">
+          <StudyReaderSettings
+            appearance={appearance}
+            original={showingOriginal && book.format !== "text" ? book.format : undefined}
+            layoutToggle={canToggleLayout ? {
+              label: layoutLabel,
+              disabled: savingSurface,
+              toggle: () => void toggleLayout(!showLayout, appearanceCheckpoint.current),
+            } : undefined}
+            onOpen={() => { appearanceCheckpoint.current = captureLayout(); }}
+            onChange={(change) => void changeAppearance(change)}
+          />
+          <Button size="icon-sm" variant="ghost" aria-label={focusLabel} title={focusLabel} onClick={toggleFocus}>
             <Icon icon={focused ? MinimizeScreenIcon : FullScreenIcon} size={17} />
           </Button>
         </div>
@@ -806,16 +834,6 @@ export function StudyReader({
           >
             {book.bookmarks.includes(index) ? "Remove bookmark" : "Bookmark"}
           </Button>
-          <label className="flex items-center gap-2 text-sm">
-            Text size{" "}
-            <input
-              type="range"
-              min={14}
-              max={28}
-              value={font}
-              onChange={(event) => setFont(Number(event.target.value))}
-            />
-          </label>
         </div>
         {book.bookmarks.length || bookmarkPlaces.length ? (
           <div className="flex flex-wrap gap-2 text-sm">
@@ -931,70 +949,42 @@ export function StudyReader({
       ) : null}
       <div className="space-y-4 rounded-2xl border bg-card p-5 sm:p-8">
         {viewPdf && fileId ? (
-          <>
-            <label className="flex items-center gap-2 text-sm">
-              PDF zoom
-              <input
-                type="range"
-                min={75}
-                max={200}
-                step={25}
-                value={zoom}
-                onChange={(event) => setZoom(Number(event.target.value))}
-              />
-              <span>{zoom}%</span>
-            </label>
-            <StudyPdfPage
-              key={index}
-              fileId={fileId}
-              page={index}
-              sectionText={section.text}
-              marks={renderedMarks}
-              zoom={zoom}
-              onSelect={captureRendered}
-              onReadingSurface={setReadingSurface}
-              onVisual={openVisualCard}
-              onDiscuss={(capture) => startImageChat(index, capture)}
-            />
-          </>
+          <StudyPdfPage
+            key={index}
+            fileId={fileId}
+            page={index}
+            sectionText={section.text}
+            marks={renderedMarks}
+            zoom={zoom}
+            layoutVisit={location.key}
+            onSelect={captureRendered}
+            onReadingSurface={setReadingSurface}
+            onVisual={openVisualCard}
+            onDiscuss={(capture) => startImageChat(index, capture)}
+          />
         ) : null}
         {viewEpub && fileId ? (
-          <>
-            <label className="flex items-center gap-2 text-sm">
-              Reading theme
-              <select
-                value={epubTheme}
-                className="rounded-lg border bg-background p-2"
-                onChange={(event) => setEpubTheme(event.target.value as StudyEpubTheme)}
-              >
-                <option value="system">System</option>
-                <option value="light">Light</option>
-                <option value="sepia">Sepia</option>
-                <option value="dark">Dark</option>
-              </select>
-            </label>
-            <StudyEpubChapter
-              key={index}
-              fileId={fileId}
-              section={section}
-              index={index}
-              sections={book.sections}
-              marks={renderedMarks}
-              font={font}
-              theme={epubTheme}
-              go={go}
-              onSelect={captureRendered}
-              onReadingSurface={setReadingSurface}
-              onVisual={openVisualCard}
-              onDiscuss={(capture) => startImageChat(index, capture)}
-            />
-          </>
+          <StudyEpubChapter
+            key={index}
+            fileId={fileId}
+            section={section}
+            index={index}
+            sections={book.sections}
+            marks={renderedMarks}
+            font={font}
+            theme={epubTheme}
+            go={go}
+            onSelect={captureRendered}
+            onReadingSurface={setReadingSurface}
+            onVisual={openVisualCard}
+            onDiscuss={(capture) => startImageChat(index, capture)}
+          />
         ) : null}
         <article
           ref={textBody}
           tabIndex={0}
           aria-label={section.title}
-          className={`mx-auto max-w-prose leading-relaxed wrap-break-word outline-none focus-visible:ring-2 focus-visible:ring-ring ${markdown === undefined ? "whitespace-pre-wrap" : "markdown study-math"}`}
+          className={`mx-auto max-w-prose leading-relaxed wrap-break-word outline-none focus-visible:ring-2 focus-visible:ring-ring ${markdown === undefined ? "whitespace-pre-wrap" : "markdown study-math study-reading-text"}`}
           style={{ fontSize: font }}
           onMouseUp={capture}
           onTouchEnd={capture}

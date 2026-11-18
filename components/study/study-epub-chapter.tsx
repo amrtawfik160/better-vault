@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/panelui/button";
 import { loadBlob } from "@/lib/db/blobs";
 import { epubPath, openStudyEpub } from "@/lib/study/epub";
-import type { StudySection } from "@/lib/study/records";
+import type { StudyReadingAppearance, StudySection } from "@/lib/study/records";
 import type { StudyImageCapture } from "@/lib/study/visual-card";
 import { textDirection, type TextDirection } from "@/lib/text/direction";
 import { directionalInline } from "@/components/common/directional-text";
@@ -14,8 +14,7 @@ const epubThemeClass = {
   light: "bg-white text-zinc-950",
   sepia: "bg-[#f5ead6] text-[#3d2a20]",
   dark: "bg-zinc-950 text-zinc-100",
-};
-export type StudyEpubTheme = keyof typeof epubThemeClass;
+} satisfies Record<StudyReadingAppearance["epubTheme"], string>;
 
 const retainedTags = new Set([
   "div",
@@ -254,7 +253,7 @@ function displayChapter(
     }
     if (heading)
       return (
-        <h3 key={key} dir={dir} lang={lang} className="my-2 text-xl font-semibold">
+        <h3 key={key} dir={dir} lang={lang} className="my-2 text-[1.11em] leading-snug font-semibold">
           {children}
         </h3>
       );
@@ -313,7 +312,7 @@ export function StudyEpubChapter({
   sections: StudySection[];
   marks: readonly StudyTextMark[];
   font: number;
-  theme: StudyEpubTheme;
+  theme: StudyReadingAppearance["epubTheme"];
   onSelect: (root: HTMLElement) => void;
   onReadingSurface: (surface: { section: number; root: HTMLElement | null }) => void;
   onVisual: (capture: StudyImageCapture) => void;

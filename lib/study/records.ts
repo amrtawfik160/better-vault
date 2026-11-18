@@ -24,6 +24,18 @@ const schedule = z.object({
 });
 const index = z.number().int().nonnegative();
 const readingSurface = z.enum(["text", "layout"]);
+export const studyEpubTheme = z.enum(["system", "light", "sepia", "dark"]);
+const readingAppearance = z.object({
+  textSize: z.number().int().min(14).max(28).optional(),
+  pdfZoom: z.number().int().min(75).max(200).multipleOf(25).optional(),
+  epubTheme: studyEpubTheme.optional(),
+});
+export type StudyReadingAppearance = Required<z.infer<typeof readingAppearance>>;
+export const defaultStudyReadingAppearance: StudyReadingAppearance = {
+  textSize: 18,
+  pdfZoom: 100,
+  epubTheme: "system",
+};
 const readingPlace = z.object({
   section: index,
   surface: readingSurface,
@@ -206,6 +218,7 @@ export const studyRecordSchema = z.discriminatedUnion("kind", [
     attachedToNotebook: z.literal(true).optional(),
     lastReadAt: z.number().optional(),
     preferredReadingSurface: readingSurface.optional(),
+    readingAppearance: readingAppearance.optional(),
     readingPlace: readingPlace.optional(),
   }),
   base.extend({
@@ -304,7 +317,7 @@ export type StudyBookWrite = {
   change: Partial<
     Pick<
       StudyBook,
-      "section" | "bookmarks" | "bookmarkPlaces" | "readingPlace" | "preferredReadingSurface"
+      "section" | "bookmarks" | "bookmarkPlaces" | "readingPlace" | "preferredReadingSurface" | "readingAppearance"
     >
   >;
   updatedAt: number;

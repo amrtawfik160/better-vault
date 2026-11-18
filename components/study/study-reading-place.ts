@@ -130,6 +130,7 @@ export function useStudyReadingPlace({
   section,
   revision,
   visit,
+  layoutKey,
   viewport,
   article,
   layout,
@@ -143,6 +144,7 @@ export function useStudyReadingPlace({
   section: number;
   revision: number;
   visit: string;
+  layoutKey: string;
   viewport: HTMLDivElement | null;
   article: RefObject<HTMLElement | null>;
   layout: HTMLElement | null | undefined;
@@ -155,6 +157,7 @@ export function useStudyReadingPlace({
   const currentBook = useRef(book);
   const restored = useRef<string | undefined>(undefined);
   const beforeLayoutChange = useRef<StudyReadingPlace | undefined>(undefined);
+  const reflow = useRef<{ visit: string; layoutKey: string; place: StudyReadingPlace } | undefined>(undefined);
   const restoredLayout = useRef<string | undefined>(undefined);
   const id = book.id;
   const canonical = book.sections[section]?.text ?? "";
@@ -163,28 +166,36 @@ export function useStudyReadingPlace({
     currentBook.current = book;
   }, [book]);
 
-  useImperativeHandle(
-    layoutCheckpoint,
-    () => () => {
-      if (viewport && !loadingLayout && article.current) {
-        beforeLayoutChange.current = capturePlace(
-          viewport,
-          article.current,
-          layout,
-          canonical,
-          section,
-          revision,
-          renderedArticle,
-        );
-      }
-    },
-    [article, canonical, layout, loadingLayout, renderedArticle, revision, section, viewport],
-  );
+  function captureLayout() {
+    if (viewport && !loadingLayout && article.current) {
+      return capturePlace(viewport, article.current, layout, canonical, section, revision, renderedArticle);
+    }
+  }
+  useImperativeHandle(layoutCheckpoint, () => () => {
+    beforeLayoutChange.current = captureLayout();
+  });
+
+  function prepareReflow(place = captureLayout(), surface = place?.surface) {
+    const checkpoint = place && surface ? { visit, layoutKey, place: { ...place, surface } } : undefined;
+    reflow.current = checkpoint;
+    return () => {
+      if (reflow.current === checkpoint) reflow.current = undefined;
+    };
+  }
 
   useLayoutEffect(() => {
     const root = article.current;
     const scroll = viewport;
     if (!root || !scroll) return;
+    const pending = reflow.current;
+    if (pending && pending.visit !== visit) reflow.current = undefined;
+    if (pending?.visit === visit && pending.layoutKey !== layoutKey && !loadingLayout) {
+      reflow.current = undefined;
+      restorePlace(scroll, root, layout, currentBook.current, pending.place, renderedArticle);
+      restored.current = visit;
+      restoredLayout.current = visit;
+      if (enabled) void saveStudyReadingPlace(id, pending.place, Date.now()).catch(console.error);
+    }
     if (restored.current !== visit) {
       const captured = beforeLayoutChange.current?.section === section ? beforeLayoutChange.current : undefined;
       if (!enabled && !captured) return;
@@ -241,7 +252,7 @@ export function useStudyReadingPlace({
       window.removeEventListener("pagehide", flush);
       flush();
     };
-  }, [activity, article, canonical, enabled, id, layout, loadingLayout, renderedArticle, revision, section, viewport, visit]);
+  }, [activity, article, canonical, enabled, id, layout, layoutKey, loadingLayout, renderedArticle, revision, section, viewport, visit]);
 
-  return restoredLayout;
+  return { restoredLayout, captureLayout, prepareReflow };
 }
