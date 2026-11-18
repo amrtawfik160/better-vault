@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ClipboardEvent,
@@ -126,10 +127,10 @@ export function StudyReview({
 
   useEffect(() => saveReviewSession(storageId, session), [storageId, session]);
 
-  useEffect(() => {
-    if (isRevealed) answer.current?.focus({ preventScroll: true });
-    else if (rated || practiced?.length) reveal.current?.focus({ preventScroll: true });
-  }, [isRevealed, item?.id, rated, practiced?.length]);
+  useLayoutEffect(() => {
+    const target = isRevealed ? answer.current : reveal.current;
+    target?.focus({ preventScroll: true });
+  }, [isRevealed, item?.id]);
 
   function keydown(event: KeyboardEvent) {
     if (!item || event.altKey || event.metaKey || event.ctrlKey || event.shiftKey || event.repeat)
