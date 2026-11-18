@@ -41,6 +41,7 @@ import {
   deleteConversation,
   latestConversation,
   loadChat,
+  loadNotebookChat,
   renameConversation,
   saveChat,
 } from "./messages";
@@ -518,9 +519,12 @@ describe.each(backends)("%s store", (name, create) => {
 
     it("keeps conversations apart, titled by their first question", async () => {
       const notebookId = await createNotebook("Test");
+      const otherNotebook = await createNotebook("Other notebook");
       await saveChat({ id: id("c1"), notebookId }, [userMessage("a", "What is a  cache?")]);
       await saveChat({ id: id("c2"), notebookId }, [userMessage("b", "Summarise the key ideas")]);
       expect((await loadChat(id("c1"))).map((m) => m.id)).toEqual(["a"]);
+      expect((await loadNotebookChat(notebookId, id("c1")))?.map(({ id }) => id)).toEqual(["a"]);
+      expect(await loadNotebookChat(otherNotebook, id("c1"))).toBeUndefined();
       expect((await store().getConversation(id("c1")))?.title).toBe("What is a cache?");
       expect((await latestConversation(notebookId))?.id).toBe(id("c2"));
     });

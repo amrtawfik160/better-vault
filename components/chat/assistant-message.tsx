@@ -1,10 +1,11 @@
-import { Globe02Icon, RepeatIcon } from "@hugeicons/core-free-icons";
+import { Cards01Icon, Globe02Icon, RepeatIcon } from "@hugeicons/core-free-icons";
 import { getToolName, isToolUIPart } from "ai";
-import { useMemo } from "react";
+import { useMemo, type Ref } from "react";
 import { useTranslation } from "react-i18next";
 import { Icon } from "@/components/icon";
 import { Message } from "@/components/panelui/message";
 import { sourceKindIcons } from "@/components/sources/source-kind";
+import { answerFlashcardMaterial } from "@/lib/chat/study";
 import type { ChatMessage, PassageRef } from "@/lib/chat/types";
 import { cleanText } from "@/lib/grounding/clean";
 import { citedNumbers, stripCitations } from "@/lib/grounding/passages";
@@ -28,6 +29,8 @@ interface AssistantMessageProps {
   isLast: boolean;
   onRetry: () => void;
   onOpenPassage: (passage: PassageRef) => void;
+  onMakeCards: (material: ReturnType<typeof answerFlashcardMaterial>) => void;
+  focusRef?: Ref<HTMLDivElement>;
 }
 
 /** An answer: the sources it read or searched, the text with citations, and actions. */
@@ -37,6 +40,8 @@ export function AssistantMessage({
   isLast,
   onRetry,
   onOpenPassage,
+  onMakeCards,
+  focusRef,
 }: AssistantMessageProps) {
   const { t } = useTranslation("chat");
   const { t: tSources } = useTranslation("sources");
@@ -44,6 +49,11 @@ export function AssistantMessage({
   const text = message.parts
     .flatMap((part) => (part.type === "text" ? [part.text] : []))
     .join("\n\n");
+  const material = useMemo(
+    () => (streaming ? undefined : answerFlashcardMaterial(message)),
+    [streaming, message],
+  );
+  const canMakeCards = Boolean(material?.text || material?.cards.length);
   // Text and visuals in the order the model wrote them; runs of text join up.
   const blocks = useMemo(() => {
     const out: (
@@ -136,7 +146,18 @@ export function AssistantMessage({
     .join(" · ");
 
   return (
-    <Message from="assistant" streaming={streaming && text !== ""}>
+    <Message
+      from="assistant"
+      streaming={streaming && text !== ""}
+      ref={focusRef}
+      tabIndex={focusRef ? -1 : undefined}
+      data-notebook-answer={message.id}
+      className={
+        focusRef
+          ? "rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+          : undefined
+      }
+    >
       <Message.Content className="gap-3">
         {message.metadata?.mode === "web" && web.searching ? (
           <SearchStatus
@@ -168,21 +189,28 @@ export function AssistantMessage({
             {passages.length > 0 ? t("status.reading") : t("status.thinking")}
           </Message.Status>
         ) : null}
-        {text && (showNotebook || showWeb) ? (
+        {(text || hasVisual) && (showNotebook || showWeb) ? (
           <AnswerReferences
             notebook={showNotebook ? notebook.references : []}
             web={showWeb ? web.references : []}
             summary={summary}
           />
         ) : null}
-        {!streaming && text ? (
+        {!streaming && (text || canMakeCards) ? (
           <Message.Actions aria-label={t("actions.label")} reveal={isLast ? "always" : "hover"}>
-            <Message.Action
-              label={t("actions.copy")}
-              copiedLabel={t("actions.copied")}
-              copy={() => stripCitations(text)}
-            />
-            {isLast ? (
+            {text ? (
+              <Message.Action
+                label={t("actions.copy")}
+                copiedLabel={t("actions.copied")}
+                copy={() => stripCitations(text)}
+              />
+            ) : null}
+            {material && canMakeCards ? (
+              <Message.Action label={t("actions.flashcards")} onClick={() => onMakeCards(material)}>
+                <Icon icon={Cards01Icon} />
+              </Message.Action>
+            ) : null}
+            {isLast && text ? (
               <Message.Action label={t("actions.retry")} onClick={onRetry}>
                 <Icon icon={RepeatIcon} />
               </Message.Action>

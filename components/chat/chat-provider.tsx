@@ -9,10 +9,12 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useLocation, useSearchParams } from "react-router";
+import { toast } from "sonner";
 import { stableContext } from "@/lib/context";
 import { providers } from "@/lib/ai/catalog";
 import type { ChatMessage, ChatMode } from "@/lib/chat/types";
-import { latestConversation, loadChat, saveChat } from "@/lib/db/messages";
+import { latestConversation, loadChat, loadNotebookChat, saveChat } from "@/lib/db/messages";
 import {
   activeModel,
   contextCharsFor,
@@ -24,6 +26,7 @@ import { getChunks, listSources } from "@/lib/db/sources";
 import { selectPassages } from "@/lib/grounding/passages";
 import { listSkills } from "@/lib/db/skills";
 import { getStudioSettings } from "@/lib/studio/settings";
+import { reviewReturnState } from "@/lib/study/review-session";
 
 /** How many earlier messages are sent with each question. */
 const HISTORY = 24;
@@ -71,6 +74,8 @@ function chatFor(notebookId: string, conversationId: string, messages: ChatMessa
   });
 }
 
+type ActiveChat = { notebookId: string; chat: Chat<ChatMessage>; requested?: string };
+
 /** Opens the notebook's most recent conversation (or a new one), and runs it. */
 export function ChatProvider({
   notebookId,
@@ -79,48 +84,101 @@ export function ChatProvider({
   notebookId: string;
   children: ReactNode;
 }) {
-  const [current, setCurrent] = useState<{ notebookId: string; chat: Chat<ChatMessage> } | null>(
-    null,
-  );
+  const [current, setCurrent] = useState<ActiveChat | null>(null);
   const [mode, setMode] = useState<ChatMode>("sources");
   const [skills, setSkills] = useState<string[]>([]);
+  const [params, setParams] = useSearchParams();
+  const { state } = useLocation();
+  const requested = params.has("answer") ? params.get("conversation") : null;
+  const shown = useRef<ActiveChat | null>(null);
+  const sequence = useRef(0);
 
-  useEffect(() => {
-    let alive = true;
-    void (async () => {
-      const latest = await latestConversation(notebookId);
-      const id = latest?.id ?? generateId();
-      const messages = latest ? await loadChat(id) : [];
-      if (alive) setCurrent({ notebookId, chat: chatFor(notebookId, id, messages) });
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [notebookId]);
+  const show = useCallback((next: ActiveChat) => {
+    void shown.current?.chat.stop();
+    shown.current = next;
+    setCurrent(next);
+  }, []);
 
-  // The chat shown, so switching can stop its answer first. That answer is
-  // still saved, into its own conversation.
-  const shown = useRef<Chat<ChatMessage> | null>(null);
-  useEffect(() => {
-    shown.current = current?.chat ?? null;
-  }, [current]);
-
-  const startNew = useCallback(() => {
-    void shown.current?.stop();
-    setCurrent({ notebookId, chat: chatFor(notebookId, generateId(), []) });
-  }, [notebookId]);
-
-  const open = useCallback(
-    async (conversationId: string) => {
-      if (shown.current?.id === conversationId) return;
-      const messages = await loadChat(conversationId);
-      void shown.current?.stop();
-      setCurrent({ notebookId, chat: chatFor(notebookId, conversationId, messages) });
+  useEffect(
+    () => () => {
+      sequence.current++;
     },
     [notebookId],
   );
 
+  useEffect(() => {
+    const active = shown.current;
+    if (
+      active?.notebookId === notebookId &&
+      (!requested || active.chat.id === requested || active.requested === requested)
+    )
+      return;
+    let alive = true;
+    const attempt = ++sequence.current;
+    void (async () => {
+      try {
+        const opened = requested ? await loadNotebookChat(notebookId, requested) : undefined;
+        const latest = opened ? undefined : await latestConversation(notebookId);
+        const id = opened && requested ? requested : (latest?.id ?? generateId());
+        const messages = opened ?? (latest ? await loadChat(id) : []);
+        if (alive && attempt === sequence.current)
+          show({
+            notebookId,
+            chat: chatFor(notebookId, id, messages),
+            requested: requested ?? undefined,
+          });
+      } catch (error) {
+        if (alive && attempt === sequence.current) {
+          toast.error(error instanceof Error ? error.message : String(error));
+          show({
+            notebookId,
+            chat: chatFor(notebookId, generateId(), []),
+            requested: requested ?? undefined,
+          });
+        }
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [notebookId, requested, show]);
+
+  const clearAnswer = useCallback(() => {
+    if (!params.has("answer")) return;
+    const remaining = new URLSearchParams(params);
+    remaining.delete("answer");
+    remaining.delete("conversation");
+    setParams(remaining, { replace: true, state: reviewReturnState(state) });
+  }, [params, setParams, state]);
+
+  const startNew = useCallback(() => {
+    sequence.current++;
+    show({ notebookId, chat: chatFor(notebookId, generateId(), []) });
+    clearAnswer();
+  }, [clearAnswer, notebookId, show]);
+
+  const open = useCallback(
+    async (conversationId: string) => {
+      const attempt = ++sequence.current;
+      if (shown.current?.chat.id === conversationId) {
+        clearAnswer();
+        return;
+      }
+      try {
+        const messages = await loadNotebookChat(notebookId, conversationId);
+        if (!messages || attempt !== sequence.current) return;
+        show({ notebookId, chat: chatFor(notebookId, conversationId, messages) });
+        clearAnswer();
+      } catch (error) {
+        if (attempt === sequence.current)
+          toast.error(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [clearAnswer, notebookId, show],
+  );
+
   if (!current || current.notebookId !== notebookId) return null;
+  if (requested && current.chat.id !== requested && current.requested !== requested) return null;
   return (
     <ChatRunner
       notebookId={notebookId}

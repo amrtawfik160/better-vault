@@ -58,6 +58,7 @@ export function studyVaultIndex({
         case "note":
           return liveVault(noteVaults.get(origin.noteId));
         case "studio":
+        case "notebook-answer":
         case "source":
           return notebookOwner(origin.notebookId);
         default:

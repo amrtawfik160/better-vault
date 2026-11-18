@@ -59,6 +59,12 @@ export function originHref(origin: StudyOrigin) {
       });
     case "tutor":
       return studyHref("tutor", { thread: origin.threadId, message: origin.message });
+    case "notebook-answer":
+      return withQuery(routes.notebook(origin.notebookId), {
+        tab: "chat",
+        conversation: origin.conversationId,
+        answer: origin.messageId,
+      });
     case "report":
       return studyHref("tutor", {
         thread: origin.threadId,
@@ -84,6 +90,8 @@ export function originLabel(origin: StudyOrigin) {
       return "Open passage";
     case "tutor":
       return "Open conversation";
+    case "notebook-answer":
+      return "Open notebook answer";
     case "report":
       return "Open session report";
     case "studio":

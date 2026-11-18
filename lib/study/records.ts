@@ -45,6 +45,12 @@ export const studyOriginSchema = z.discriminatedUnion("kind", [
     chunkId: z.string(),
   }),
   z.object({ kind: z.literal("tutor"), threadId: z.string(), message: index.optional() }),
+  z.object({
+    kind: z.literal("notebook-answer"),
+    notebookId: z.string(),
+    conversationId: z.string(),
+    messageId: z.string(),
+  }),
   z.object({ kind: z.literal("report"), threadId: z.string(), reportId: z.string().optional() }),
   z.object({ kind: z.literal("studio"), notebookId: z.string(), outputId: z.string() }),
   z.object({ kind: z.literal("card"), cardId: z.string() }),

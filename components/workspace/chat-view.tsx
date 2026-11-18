@@ -1,15 +1,22 @@
 import { Book02Icon, Idea01Icon } from "@hugeicons/core-free-icons";
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { AssistantMessage } from "@/components/chat/assistant-message";
 import { useChatSession } from "@/components/chat/chat-provider";
 import { Icon } from "@/components/icon";
 import { Message } from "@/components/panelui/message";
+import {
+  StudyFlashcardDraftDialog,
+  type FlashcardSource,
+} from "@/components/study/study-flashcard-generator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { providers } from "@/lib/ai/catalog";
 import { activeModel, useSettings } from "@/lib/db/settings";
 import { useSources } from "@/lib/db/sources";
+import { vaultOf } from "@/lib/db/vaults";
+import { studyHref } from "@/lib/study/links";
 import { useWorkspace } from "./workspace-context";
 
 const SUGGESTIONS = ["summary", "questions", "terms", "plan"] as const;
@@ -17,10 +24,32 @@ const SUGGESTIONS = ["summary", "questions", "terms", "plan"] as const;
 /** The conversation with the notebook. */
 export function ChatView() {
   const { t } = useTranslation("chat");
+  const { t: tHome } = useTranslation("home");
+  const location = useLocation();
+  const navigate = useNavigate();
   const chat = useChatSession();
-  const { readSource } = useWorkspace();
+  const { notebook, readSource, tab } = useWorkspace();
   const scroller = useRef<HTMLDivElement>(null);
+  const focusedAnswer = useRef<HTMLDivElement>(null);
+  const [draft, setDraft] = useState<FlashcardSource | null>(null);
   const last = chat.messages.at(-1);
+  const params = new URLSearchParams(location.search);
+  const answer = params.get("answer");
+  const focusId =
+    answer &&
+    params.get("conversation") === chat.conversationId &&
+    chat.messages.some((message) => message.id === answer && message.role === "assistant")
+      ? answer
+      : null;
+  const missingAnswer = Boolean(answer && !focusId);
+  const vaultId = vaultOf(notebook);
+
+  useLayoutEffect(() => {
+    if (focusId && tab === "chat") {
+      focusedAnswer.current?.scrollIntoView({ block: "start" });
+      focusedAnswer.current?.focus({ preventScroll: true });
+    }
+  }, [focusId, location.key, tab]);
 
   // Follows the answer as it is written, unless the reader has scrolled up.
   useEffect(() => {
@@ -31,7 +60,7 @@ export function ChatView() {
     }
   }, [chat.messages]);
 
-  if (chat.messages.length === 0) return <EmptyChat />;
+  if (chat.messages.length === 0) return <EmptyChat missingAnswer={missingAnswer} />;
 
   const retry = () =>
     chat
@@ -43,6 +72,7 @@ export function ChatView() {
   return (
     <ScrollArea className="h-full" viewportRef={scroller}>
       <div className="mx-auto flex max-w-3xl flex-col gap-8 px-4 pt-4 pb-56 sm:px-6">
+        {missingAnswer ? <AnswerUnavailable /> : null}
         {chat.messages.map((message, at) =>
           message.role === "user" ? (
             <Message key={message.id} from="user">
@@ -65,6 +95,22 @@ export function ChatView() {
               onRetry={retry}
               onOpenPassage={(passage) =>
                 readSource(passage.sourceId, passage.chunkId, passage.snippet)
+              }
+              focusRef={focusId === message.id ? focusedAnswer : undefined}
+              onMakeCards={({ text, cards }) =>
+                setDraft({
+                  title: notebook.title,
+                  text,
+                  cards,
+                  origin: {
+                    kind: "notebook-answer",
+                    notebookId: notebook.id,
+                    conversationId: chat.conversationId,
+                    messageId: message.id,
+                  },
+                  notebookId: notebook.id,
+                  tags: [notebook.title],
+                })
               }
             />
           ),
@@ -92,11 +138,38 @@ export function ChatView() {
           </div>
         ) : null}
       </div>
+      {draft ? (
+        <StudyFlashcardDraftDialog
+          source={draft}
+          vaultId={vaultId}
+          onClose={() => setDraft(null)}
+          onSave={(count) =>
+            toast.success(tHome("study.capture.cardsSaved", { count }), {
+              action: {
+                label: tHome("study.capture.viewCards"),
+                onClick: () => void navigate(studyHref("cards", { notebook: notebook.id })),
+              },
+            })
+          }
+        />
+      ) : null}
     </ScrollArea>
   );
 }
 
-function EmptyChat() {
+function AnswerUnavailable() {
+  const { t } = useTranslation("chat");
+  return (
+    <p
+      role="status"
+      className="rounded-xl border bg-muted/40 px-4 py-3 text-sm text-muted-foreground"
+    >
+      {t("answerUnavailable")}
+    </p>
+  );
+}
+
+function EmptyChat({ missingAnswer }: { missingAnswer: boolean }) {
   const { t } = useTranslation("chat");
   const chat = useChatSession();
   const { notebook, setAddSourceOpen } = useWorkspace();
@@ -109,6 +182,11 @@ function EmptyChat() {
   return (
     <ScrollArea className="h-full">
       <div className="flex min-h-full flex-col items-center justify-center px-4 pt-6 pb-48 text-center">
+        {missingAnswer ? (
+          <div className="mb-4">
+            <AnswerUnavailable />
+          </div>
+        ) : null}
         <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">{t("empty.title")}</h2>
         {sources && selected === 0 ? (
           <>

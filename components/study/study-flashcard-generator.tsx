@@ -19,6 +19,7 @@ export type FlashcardSource = {
   origin: StudyOrigin;
   notebookId?: string;
   tags: string[];
+  cards?: Draft[];
 };
 
 export function StudyFlashcardDraftDialog({
@@ -39,7 +40,12 @@ export function StudyFlashcardDraftDialog({
       <Dialog.Content closeLabel={common("actions.close")}>
         <Dialog.Header title={t("study.capture.draftCards")} description={source.title} />
         <Dialog.Body>
-          <StudyFlashcardGenerator close={onClose} source={source} vaultId={vaultId} onSave={onSave} />
+          <StudyFlashcardGenerator
+            close={onClose}
+            source={source}
+            vaultId={vaultId}
+            onSave={onSave}
+          />
         </Dialog.Body>
       </Dialog.Content>
     </Dialog>
@@ -61,7 +67,7 @@ export function StudyFlashcardGenerator({
   const navigate = useNavigate();
   const [input, setInput] = useState(source?.text.slice(0, flashcardMaterialLimit) ?? "");
   const [count, setCount] = useState(5);
-  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [drafts, setDrafts] = useState<Draft[]>(source?.cards ?? []);
   const [working, setWorking] = useState(false);
   const [saving, setSaving] = useState(false);
   const controller = useRef<AbortController | null>(null);
@@ -144,7 +150,8 @@ export function StudyFlashcardGenerator({
     }
   }
 
-  const canSave = !working && !saving && drafts.some(({ front, back }) => front.trim() && back.trim());
+  const canSave =
+    !working && !saving && drafts.some(({ front, back }) => front.trim() && back.trim());
 
   return (
     <section
@@ -153,6 +160,7 @@ export function StudyFlashcardGenerator({
     >
       {!source ? <h3 className="text-base font-semibold">Generate from text</h3> : null}
       <form
+        hidden={Boolean(source && (!input.trim() || source.cards?.length))}
         onSubmit={(event) => {
           event.preventDefault();
           if (input.trim() && !working && !saving) void generate();

@@ -16,6 +16,11 @@ export async function loadChat(conversationId: string): Promise<ChatMessage[]> {
   return rows.map((row) => row.message);
 }
 
+export async function loadNotebookChat(notebookId: string, conversationId: string) {
+  const conversation = await store().getConversation(conversationId);
+  if (conversation?.notebookId === notebookId) return loadChat(conversationId);
+}
+
 /**
  * Replaces a conversation's saved messages, creating the conversation on its
  * first answer. Its title is the first question until the user renames it.

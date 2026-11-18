@@ -59,9 +59,11 @@
     "label": "Message actions",
     "copy": "Copy",
     "copied": "Copied",
+    "flashcards": "Make flashcards",
     "retry": "Try again"
   },
   "error": "The answer could not be completed: {{error}}",
+  "answerUnavailable": "This notebook answer is no longer available.",
   "newChat": "New chat",
   "history": {
     "open": "History",
