@@ -11,7 +11,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { StudyFlashcardGenerator } from "./study-flashcard-generator";
 import { StudyOriginLink } from "./study-origin-link";
-import { originHref, studyHref } from "@/lib/study/links";
+import { originHref, studyCitationOrigin, studyHref } from "@/lib/study/links";
 import { loadReviewSession, reviewSelection, saveReviewSession } from "@/lib/study/review-session";
 import { toast } from "sonner";
 import { Button } from "@/components/panelui/button";
@@ -32,6 +32,7 @@ import {
   type StudyBook,
   type StudyRating,
   type StudyRecordOf,
+  type StudyThread,
 } from "@/lib/study/records";
 
 type Card = StudyRecordOf<"card">;
@@ -59,6 +60,7 @@ export function StudyReview({
   highlights,
   useHighlights,
   books,
+  threads,
   collection,
   initialPractice,
   vaultId,
@@ -68,6 +70,7 @@ export function StudyReview({
   highlights: Highlight[];
   useHighlights: boolean;
   books: StudyBook[];
+  threads: StudyThread[];
   collection?: string;
   initialPractice?: boolean;
   vaultId: string;
@@ -158,6 +161,18 @@ export function StudyReview({
           highlightId: item.id,
         }
       : item?.origin;
+  const message =
+    origin?.kind === "tutor" && origin.message !== undefined
+      ? threads.find(({ id }) => id === origin.threadId)?.messages[origin.message]
+      : undefined;
+  const citations = message?.role === "assistant" ? (message.citations ?? []) : [];
+  const returnState = {
+    studyReturn: {
+      path,
+      state: { ...selection, studyReviewSession: sessionId, studyReviewVault: vaultId },
+    },
+  };
+  const rememberReview = () => saveReviewSession(storageId, session);
 
   return (
     <section className="space-y-5">
@@ -217,20 +232,25 @@ export function StudyReview({
               {origin && !busy ? (
                 <StudyOriginLink
                   origin={origin}
-                  state={{
-                    studyReturn: {
-                      path,
-                      state: {
-                        ...selection,
-                        studyReviewSession: sessionId,
-                        studyReviewVault: vaultId,
-                      },
-                    },
-                  }}
-                  onClick={() => {
-                    saveReviewSession(storageId, session);
-                  }}
+                  state={returnState}
+                  onClick={rememberReview}
                 />
+              ) : null}
+              {citations.length && !busy ? (
+                <div>
+                  <p className="text-sm text-muted-foreground">{t("study.capture.tutorAnswerSources")}</p>
+                  <div className="flex flex-wrap gap-1">
+                    {citations.map((citation) => (
+                      <StudyOriginLink
+                        key={citation.index}
+                        origin={studyCitationOrigin(citation)}
+                        label={`[${citation.index}] ${citation.title}`}
+                        state={returnState}
+                        onClick={rememberReview}
+                      />
+                    ))}
+                  </div>
+                </div>
               ) : null}
               {practiced ? (
                 <Button
@@ -354,12 +374,14 @@ function ImagePicker({
 
 export function CardLibrary({
   cards,
+  vaultId,
   filter,
   clearFilter,
   review,
   creation,
 }: {
   cards: Card[];
+  vaultId: string;
   filter?: string;
   clearFilter: () => void;
   review: (ids?: string[]) => void;
@@ -500,7 +522,7 @@ export function CardLibrary({
         </div>
       </div>
       {generating && !filter ? (
-        <StudyFlashcardGenerator close={() => setGenerating(false)} />
+        <StudyFlashcardGenerator close={() => setGenerating(false)} vaultId={vaultId} />
       ) : null}
       {filter ? <FilterCaption label={filter} clear={clearFilter} /> : null}
       {editing ? (

@@ -1,5 +1,5 @@
 import { routes } from "@/lib/routes";
-import type { StudyOrigin } from "./records";
+import type { StudyCitation, StudyOrigin } from "./records";
 
 function withQuery(path: string, values: Record<string, string | number | undefined>) {
   const params = new URLSearchParams();
@@ -23,6 +23,11 @@ export function isStudyHref(href: string) {
 
 export function studyNotesHref(notebookId: string) {
   return withQuery(routes.home, { view: "notes", notebook: notebookId });
+}
+
+export function studyCitationOrigin(citation: StudyCitation): StudyOrigin {
+  if ("origin" in citation) return citation.origin;
+  return { kind: "book", bookId: citation.bookId, section: citation.section };
 }
 
 export function originHref(origin: StudyOrigin) {

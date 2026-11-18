@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/panelui/button";
 import { Dialog } from "@/components/panelui/dialog";
 import { Input } from "@/components/panelui/input";
 import { Textarea } from "@/components/panelui/textarea";
 import { newStudyCard, putStudyRecords } from "@/lib/db/study";
+import { flashcardMaterialLimit } from "@/lib/study/ai";
 import { askStudyModel } from "@/lib/study/client";
+import { studyHref } from "@/lib/study/links";
 import type { StudyOrigin } from "@/lib/study/records";
 
 type Draft = { front: string; back: string };
@@ -20,10 +23,12 @@ export type FlashcardSource = {
 
 export function StudyFlashcardDraftDialog({
   source,
+  vaultId,
   onClose,
   onSave,
 }: {
   source: FlashcardSource;
+  vaultId: string;
   onClose: () => void;
   onSave: (count: number) => void;
 }) {
@@ -34,7 +39,7 @@ export function StudyFlashcardDraftDialog({
       <Dialog.Content closeLabel={common("actions.close")}>
         <Dialog.Header title={t("study.capture.draftCards")} description={source.title} />
         <Dialog.Body>
-          <StudyFlashcardGenerator close={onClose} source={source} onSave={onSave} />
+          <StudyFlashcardGenerator close={onClose} source={source} vaultId={vaultId} onSave={onSave} />
         </Dialog.Body>
       </Dialog.Content>
     </Dialog>
@@ -44,21 +49,31 @@ export function StudyFlashcardDraftDialog({
 export function StudyFlashcardGenerator({
   close,
   source,
+  vaultId,
   onSave,
 }: {
   close: () => void;
   source?: FlashcardSource;
+  vaultId: string;
   onSave?: (count: number) => void;
 }) {
   const { t } = useTranslation("home");
-  const [input, setInput] = useState(source?.text.slice(0, 12000) ?? "");
+  const navigate = useNavigate();
+  const [input, setInput] = useState(source?.text.slice(0, flashcardMaterialLimit) ?? "");
   const [count, setCount] = useState(5);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [working, setWorking] = useState(false);
   const [saving, setSaving] = useState(false);
   const controller = useRef<AbortController | null>(null);
+  const pendingSave = useRef<symbol | null>(null);
 
-  useEffect(() => () => controller.current?.abort(), []);
+  useEffect(
+    () => () => {
+      controller.current?.abort();
+      pendingSave.current = null;
+    },
+    [],
+  );
 
   async function generate() {
     const request = new AbortController();
@@ -92,7 +107,8 @@ export function StudyFlashcardGenerator({
     }
   }
 
-  async function save() {
+  async function save(review: boolean) {
+    if (working || pendingSave.current) return;
     const cards = drafts
       .filter(({ front, back }) => front.trim() && back.trim())
       .map(({ front, back }) =>
@@ -100,22 +116,35 @@ export function StudyFlashcardGenerator({
           front: front.trim(),
           back: back.trim(),
           notebookId: source?.notebookId,
+          vaultId,
           origin: source?.origin,
           tags: source?.tags ?? [],
         }),
       );
     if (!cards.length) return;
+    const transaction = Symbol();
+    pendingSave.current = transaction;
     setSaving(true);
     try {
       await putStudyRecords(...cards);
-      onSave?.(cards.length);
+      if (pendingSave.current !== transaction) return;
       close();
+      if (review) {
+        navigate(studyHref("review", { vault: vaultId }), {
+          state: { studyReviewVault: vaultId, studyReviewIds: cards.map(({ id }) => id) },
+        });
+      } else onSave?.(cards.length);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     } finally {
-      setSaving(false);
+      if (pendingSave.current === transaction) {
+        pendingSave.current = null;
+        setSaving(false);
+      }
     }
   }
+
+  const canSave = !working && !saving && drafts.some(({ front, back }) => front.trim() && back.trim());
 
   return (
     <section
@@ -126,7 +155,7 @@ export function StudyFlashcardGenerator({
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          if (input.trim() && !working) void generate();
+          if (input.trim() && !working && !saving) void generate();
         }}
         className="space-y-2"
       >
@@ -139,7 +168,7 @@ export function StudyFlashcardGenerator({
           disabled={working || saving}
           readOnly={Boolean(source)}
           onChange={(event) => setInput(event.target.value)}
-          maxLength={12000}
+          maxLength={flashcardMaterialLimit}
         />
         <div className="flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-2 text-sm">
@@ -218,15 +247,20 @@ export function StudyFlashcardGenerator({
               </li>
             ))}
           </ul>
-          <Button
-            size="sm"
-            disabled={
-              working || saving || !drafts.some(({ front, back }) => front.trim() && back.trim())
-            }
-            onClick={() => void save()}
-          >
-            Save drafts to flashcards
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" disabled={!canSave} onClick={() => void save(true)}>
+              {t("study.capture.saveAndReview")}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!canSave}
+              onClick={() => void save(false)}
+            >
+              {t("study.capture.saveDrafts")}
+            </Button>
+          </div>
         </div>
       ) : null}
     </section>

@@ -14,7 +14,7 @@ import {
   type TutorMaterialSelection,
 } from "./tutor-material-picker";
 import { StudyFlashcardDraftDialog, type FlashcardSource } from "./study-flashcard-generator";
-import { originHref, studyHref } from "@/lib/study/links";
+import { originHref, studyCitationOrigin, studyHref } from "@/lib/study/links";
 import { Button, buttonVariants } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
 import { modelKey, parseModelKey } from "@/lib/ai/catalog";
@@ -42,6 +42,7 @@ import {
   updateStudyReport,
 } from "@/lib/db/study";
 import { askStudyModel } from "@/lib/study/client";
+import { studyConversationExcerpt } from "@/lib/study/ai";
 import { passagesFor, tutorBookOrigin } from "@/lib/study/passages";
 import { matchesStudyReport, studyReportKey, studyReports } from "@/lib/study/reports";
 import { Markdown } from "@/components/chat/markdown";
@@ -440,6 +441,7 @@ export function StudyTutor({
     ...thread.messages.map((entry, index) => ({ entry, index })),
     ...temporaryTurns.map((entry) => ({ entry, index: undefined })),
   ].sort((a, b) => (a.entry.at ?? 0) - (b.entry.at ?? 0));
+  const hasSavedAnswer = thread.messages.some(({ role, text }) => role === "assistant" && text.trim());
 
   useEffect(() => {
     const probe = new AbortController();
@@ -465,8 +467,11 @@ export function StudyTutor({
   }, []);
 
   useEffect(() => {
-    if (focusMessage !== undefined)
-      document.getElementById(`study-message-${focusMessage}`)?.scrollIntoView({ block: "center" });
+    if (focusMessage !== undefined) {
+      const message = document.getElementById(`study-message-${focusMessage}`);
+      message?.scrollIntoView({ block: "center" });
+      message?.focus({ preventScroll: true });
+    }
     if (showReport)
       document.getElementById("study-session-report")?.scrollIntoView({ block: "start" });
   }, [focusMessage, reportId, showReport]);
@@ -746,7 +751,7 @@ export function StudyTutor({
       text,
       origin,
       notebookId: thread.notebookId,
-      tags: book ? [book.title] : [],
+      tags: book && book.title !== thread.title ? [book.title, thread.title] : [thread.title],
     });
   }
 
@@ -807,6 +812,24 @@ export function StudyTutor({
         )}
         <div className="flex flex-wrap gap-2">
           {book && <StudyOriginLink origin={tutorBookOrigin(thread, book)} />}
+          {hasSavedAnswer ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={workPending || !model}
+              onClick={() =>
+                draftCards(
+                  studyConversationExcerpt(thread.messages, {
+                    learner: t("study.capture.learner"),
+                    tutor: t("study.capture.tutor"),
+                  }),
+                  { kind: "tutor", threadId: thread.id },
+                )
+              }
+            >
+              {t("study.capture.cardsFromConversation")}
+            </Button>
+          ) : null}
           <Button variant="ghost" size="sm" disabled={busy} onClick={() => setRenaming(!renaming)}>
             Rename
           </Button>
@@ -912,6 +935,7 @@ export function StudyTutor({
             <div
               key={index === undefined ? `temporary-${entry.at}-${entry.role}` : index}
               id={index === undefined ? undefined : `study-message-${index}`}
+              tabIndex={index === focusMessage && index !== undefined ? -1 : undefined}
               className={`max-w-3xl scroll-mt-32 space-y-2 rounded-2xl border p-4 ${entry.role === "user" ? "ms-auto w-fit bg-muted" : "bg-card"}`}
             >
               <p className="text-xs font-semibold text-muted-foreground">
@@ -928,11 +952,7 @@ export function StudyTutor({
                 {entry.citations?.map((citation) => (
                   <StudyOriginLink
                     key={citation.index}
-                    origin={
-                      "origin" in citation
-                        ? citation.origin
-                        : { kind: "book", bookId: citation.bookId, section: citation.section }
-                    }
+                    origin={studyCitationOrigin(citation)}
                     label={`[${citation.index}] ${citation.title}`}
                   />
                 ))}
@@ -1319,6 +1339,7 @@ export function StudyTutor({
       {draftSource ? (
         <StudyFlashcardDraftDialog
           source={draftSource}
+          vaultId={vaultId}
           onClose={() => setDraftSource(null)}
           onSave={(count) =>
             toast.success(t("study.capture.cardsSaved", { count }), {

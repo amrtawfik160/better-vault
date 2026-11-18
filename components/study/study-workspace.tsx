@@ -502,6 +502,7 @@ export default function StudyWorkspace({
           <StudyReader
             key={book.id}
             book={book}
+            vaultId={studyVaultId}
             requestedPage={page}
             focusedHighlight={params.get("highlight") ?? undefined}
             focusedRange={focusedRange}
@@ -534,6 +535,7 @@ export default function StudyWorkspace({
       {ready && !unavailableBook && tab === "cards" ? (
         <CardLibrary
           cards={filteredCards}
+          vaultId={studyVaultId}
           filter={
             reportCollection ??
             book?.title ??
@@ -581,6 +583,7 @@ export default function StudyWorkspace({
           highlights={filteredHighlights}
           useHighlights={params.get("kind") === "highlights"}
           books={books}
+          threads={threads}
           initialPractice={weakMode}
           libraryHref={reportFilter ? studyHref("cards", reportFilter) : undefined}
           collection={

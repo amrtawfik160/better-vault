@@ -91,6 +91,7 @@ function highlighted(
 
 export function StudyReader({
   book,
+  vaultId,
   requestedPage,
   focusedHighlight,
   focusedRange,
@@ -101,6 +102,7 @@ export function StudyReader({
   back,
 }: {
   book: StudyBook;
+  vaultId: string;
   requestedPage?: number;
   focusedHighlight?: string;
   focusedRange?: { offset: number; length: number; revision?: number };
@@ -995,6 +997,7 @@ export function StudyReader({
       {draftSource ? (
         <StudyFlashcardDraftDialog
           source={draftSource}
+          vaultId={vaultId}
           onClose={() => setDraftSource(null)}
           onSave={(count) =>
             toast.success(t("study.capture.cardsSaved", { count }), {
