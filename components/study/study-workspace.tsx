@@ -534,6 +534,11 @@ export default function StudyWorkspace({
         }
       : undefined;
   const cardId = params.get("card");
+  const noteId = params.get("note");
+  const noteFilter = noteId ? { note: noteId } : undefined;
+  const noteCollection = noteId
+    ? (vaultNotes.find(({ id }) => id === noteId)?.title ?? t("study.recall.noteCards"))
+    : undefined;
   const notebookId = params.get("notebook");
   const requestedReview = selection?.studyReviewIds;
   const reviewingHighlights = params.get("kind") === "highlights";
@@ -825,6 +830,7 @@ export default function StudyWorkspace({
           openingPractice={openingPractice}
           filter={
             reportCollection ??
+            noteCollection ??
             book?.title ??
             (output
               ? "Studio flashcards"
@@ -836,7 +842,7 @@ export default function StudyWorkspace({
           }
           clearFilter={() => go("cards")}
           creation={
-            output || cardId || fromReport
+            output || cardId || fromReport || noteId
               ? false
               : book
                 ? {
@@ -853,6 +859,7 @@ export default function StudyWorkspace({
               {
                 ...bookFilter,
                 ...reportFilter,
+                ...noteFilter,
                 ...(notebookId ? { notebook: notebookId } : {}),
                 ...(output ? { output } : {}),
                 ...(cardId ? { card: cardId } : {}),
@@ -887,8 +894,8 @@ export default function StudyWorkspace({
               ? studyHref("highlights", { book: book.id })
               : reportFilter
                 ? studyHref("cards", reportFilter)
-                : output
-                  ? studyHref("cards", { output, vault: studyVaultId })
+                : noteFilter || output
+                  ? studyHref("cards", { ...noteFilter, output: output ?? undefined, vault: studyVaultId })
                   : undefined
           }
           libraryLabel={reviewingVocabulary ? t("study.vocabulary.open") : undefined}
@@ -904,7 +911,7 @@ export default function StudyWorkspace({
                       : "study.recall.cardSelection",
                     { count: new Set(requestedReview).size },
                   )
-                : (reportCollection ?? book?.title)
+                : (reportCollection ?? noteCollection ?? book?.title)
           }
         />
       ) : null}

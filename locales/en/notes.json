@@ -1,5 +1,9 @@
 {
   "askTutor": "Ask Tutor",
+  "flashcards": {
+    "fromNote": "Draft cards from note",
+    "make": "Make flashcard"
+  },
   "title": "Notes",
   "skillsTitle": "Skills",
   "new": "New note",

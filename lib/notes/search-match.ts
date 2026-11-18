@@ -1,13 +1,18 @@
 import { z } from "zod";
+import { locateStudyQuote } from "@/lib/study/locators";
 
-const noteMatch = z.object({
+const noteMatchSchema = z.object({
   offset: z.number().int().nonnegative(),
   quote: z.string().min(1),
 });
 
-export type NoteMatch = z.infer<typeof noteMatch>;
+export type NoteMatch = z.infer<typeof noteMatchSchema>;
 
-const noteMatchState = z.object({ noteMatch });
+const noteMatchState = z.object({ noteMatch: noteMatchSchema });
+export const noteCaptureLimit = 3000;
+export const notePassageSchema = noteMatchSchema.extend({
+  quote: noteMatchSchema.shape.quote.max(noteCaptureLimit),
+});
 
 export function readNoteMatch(state: unknown): NoteMatch | undefined {
   return noteMatchState.safeParse(state).data?.noteMatch;
@@ -19,9 +24,6 @@ export function noteEditorText(body: string) {
 }
 
 export function locateNoteMatch(text: string, { offset, quote }: NoteMatch): number | undefined {
-  if (text.startsWith(quote, offset)) return offset;
-  const before = text.lastIndexOf(quote, offset);
-  const after = text.indexOf(quote, offset);
-  if (after < 0) return before < 0 ? undefined : before;
-  return before >= 0 && offset - before <= after - offset ? before : after;
+  const at = locateStudyQuote(text, quote, offset);
+  return at < 0 ? undefined : at;
 }

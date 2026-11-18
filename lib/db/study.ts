@@ -26,6 +26,7 @@ import { studyImageId, type StudyImageSnapshot } from "@/lib/study/visual-card";
 import { flashcardsData } from "@/studio/tools/flashcards/definition";
 import { quizData } from "@/studio/tools/quiz/definition";
 import { normaliseText } from "@/lib/grounding/chunk";
+import { locateNoteMatch, noteEditorText } from "@/lib/notes/search-match";
 import { sectionOf } from "@/lib/notes/syntax";
 import type {
   StudyFollowUp,
@@ -255,6 +256,16 @@ async function studyEvidenceReader(vaultId: string, limit = cardEvidenceLimit, i
       const note = await backend.getNote(origin.noteId);
       if (!note || studyVaultIndex({ ...ownership, notes: [note] }).noteOwner(note.id) !== vaultId)
         return;
+      if (origin.passage) {
+        const offset = locateNoteMatch(noteEditorText(note.body), origin.passage);
+        if (offset === undefined) return;
+        const quote = origin.passage.quote.slice(0, limit);
+        return {
+          origin: { ...origin, passage: { offset, quote } },
+          title: note.title.slice(0, 500),
+          text: quote,
+        };
+      }
       const body = origin.heading ? sectionOf(note.body, origin.heading) : note.body;
       const text = body?.trim().slice(0, limit);
       if (text) return { origin, title: note.title.slice(0, 500), text };

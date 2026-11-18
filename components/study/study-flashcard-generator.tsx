@@ -11,6 +11,7 @@ import { newStudyCard, putStudyRecords, readFlashcardDraftPassages } from "@/lib
 import { flashcardCitationsFor, flashcardMaterialLimit, maxDraftImages } from "@/lib/study/ai";
 import { askStudyModel } from "@/lib/study/client";
 import { studyHref } from "@/lib/study/links";
+import type { StudyDraftPassage } from "@/lib/study/passages";
 import type { StudyCitation, StudyOrigin } from "@/lib/study/records";
 
 type Draft = { front: string; back: string; citations?: StudyCitation[] };
@@ -19,6 +20,7 @@ export type FlashcardSource = {
   text: string;
   origin: StudyOrigin;
   evidence?: StudyOrigin[];
+  passages?: StudyDraftPassage[];
   notebookId?: string;
   tags: string[];
   cards?: Draft[];
@@ -27,11 +29,13 @@ export type FlashcardSource = {
 export function StudyFlashcardDraftDialog({
   source,
   vaultId,
+  title,
   onClose,
   onSave,
 }: {
   source: FlashcardSource;
   vaultId: string;
+  title?: string;
   onClose: () => void;
   onSave: (count: number) => void;
 }) {
@@ -40,7 +44,7 @@ export function StudyFlashcardDraftDialog({
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <Dialog.Content closeLabel={common("actions.close")}>
-        <Dialog.Header title={t("study.capture.draftCards")} description={source.title} />
+        <Dialog.Header title={title ?? t("study.capture.draftCards")} description={source.title} />
         <Dialog.Body>
           <StudyFlashcardGenerator
             close={onClose}
@@ -89,7 +93,7 @@ export function StudyFlashcardGenerator({
     controller.current = request;
     setWorking(true);
     try {
-      const passages = await readFlashcardDraftPassages(source?.evidence ?? [], vaultId);
+      const passages = source?.passages ?? await readFlashcardDraftPassages(source?.evidence ?? [], vaultId);
       request.signal.throwIfAborted();
       const draftImages = passages.flatMap(({ image }, index) => image ? [{ passage: index + 1, image }] : []);
       const answer = await askStudyModel({
@@ -109,7 +113,7 @@ export function StudyFlashcardGenerator({
               {
                 front,
                 back,
-                citations: source?.evidence?.length
+                citations: source?.evidence?.length || source?.passages?.length
                   ? flashcardCitationsFor(
                       answer.imageFallback ? citations?.filter((index) => !passages[index - 1]?.image) : citations,
                       passages,
@@ -161,7 +165,8 @@ export function StudyFlashcardGenerator({
       if (pendingSave.current !== transaction) return;
       close();
       if (review) {
-        navigate(studyHref("review", { vault: vaultId }), {
+        const note = source?.origin.kind === "note" ? source.origin.noteId : undefined;
+        navigate(studyHref("review", { vault: vaultId, note }), {
           state: { studyReviewVault: vaultId, studyReviewIds: cards.map(({ id }) => id) },
         });
       } else onSave?.(cards.length);

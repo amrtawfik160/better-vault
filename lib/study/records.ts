@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { notePassageSchema } from "@/lib/notes/search-match";
 
 const base = z.object({
   id: z.string(),
@@ -49,7 +50,12 @@ export const studyOriginSchema = z.discriminatedUnion("kind", [
     revision: index.optional(),
     visual: studyVisualOrigin.optional(),
   }),
-  z.object({ kind: z.literal("note"), noteId: z.string(), heading: z.string().optional() }),
+  z.object({
+    kind: z.literal("note"),
+    noteId: z.string(),
+    heading: z.string().optional(),
+    passage: notePassageSchema.optional(),
+  }),
   z.object({
     kind: z.literal("source"),
     notebookId: z.string(),

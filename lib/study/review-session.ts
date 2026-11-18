@@ -59,6 +59,7 @@ export function studyCardsInScope(
   const outputId = params.get("output");
   const cardId = params.get("card");
   const notebookId = params.get("notebook");
+  const noteId = params.get("note");
   return cards.filter(
     (card) =>
       (!book ||
@@ -66,6 +67,7 @@ export function studyCardsInScope(
           ? card.origin.bookId === book.id
           : card.notebookId === book.notebookId)) &&
       (!notebookId || card.notebookId === notebookId) &&
+      (!noteId || (card.origin?.kind === "note" && card.origin.noteId === noteId)) &&
       (!outputId || (card.origin?.kind === "studio" && card.origin.outputId === outputId)) &&
       (!fromReport || matchesStudyReport(card.origin, threadId, fromReport)) &&
       (!cardId || card.id === cardId),

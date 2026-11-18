@@ -31,14 +31,16 @@ export function StudyOriginLink({
     tutorFocus && !sameReader
       ? returnToTutor(location.pathname + location.search, current, tutorFocus)
       : studyReturnState(current);
+  const sourceState =
+    origin.kind === "source" && origin.snippet
+      ? { ...returnState, studySourceSnippet: origin.snippet }
+      : origin.kind === "note" && origin.passage
+        ? { ...returnState, noteMatch: origin.passage }
+        : returnState;
   return (
     <Link
       to={destination}
-      state={
-        origin.kind === "source" && origin.snippet
-          ? { ...returnState, studySourceSnippet: origin.snippet }
-          : returnState
-      }
+      state={sourceState}
       onClick={onClick}
       className="inline-flex rounded-lg px-2 py-1 text-sm text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring"
     >

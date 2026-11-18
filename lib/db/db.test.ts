@@ -1535,6 +1535,27 @@ describe.each(backends)("%s store", (name, create) => {
       expect(await store().getStudy(own.id)).toMatchObject({ schedule: own.schedule });
     });
 
+    it("restores note passages in flashcards after edits and backup", async () => {
+      const vault = await createVault({ name: "Thermodynamics" });
+      const quote = "Entropy increases for a spontaneous process in an isolated system.";
+      const prefix = "## Direction of change\n\n";
+      const note = await createNote({ title: "Entropy notes", body: prefix + quote, vaultId: vault });
+      const origin = { kind: "note" as const, noteId: note.id, passage: { offset: prefix.length, quote } };
+      const card = await saveStudyCard({ front: "What increases?", back: "Entropy.", tags: [], origin });
+      const editedPrefix = "Earlier material\n\n" + prefix;
+      await saveNoteBody(note.id, editedPrefix + quote);
+      const backup = JSON.parse(JSON.stringify(await exportBackup()));
+      await deleteAllData();
+      await importBackup(backup);
+      expect(await store().getStudy(card.id)).toMatchObject({ origin });
+      expect(await readFlashcardDraftPassages([origin], vault)).toEqual([
+        { origin: { ...origin, passage: { offset: editedPrefix.length, quote } }, title: note.title, text: quote },
+      ]);
+      expect(await readFlashcardDraftPassages([origin], DEFAULT_VAULT)).toEqual([]);
+      await saveNoteBody(note.id, "A different topic.");
+      expect(await readFlashcardDraftPassages([origin], vault)).toEqual([]);
+    });
+
     it("grounds flashcard practice in live excerpts and drops stale or cross-vault citations", async () => {
       const work = await createVault({ name: "Engineering" });
       const other = await createVault({ name: "Private" });

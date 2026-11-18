@@ -299,8 +299,12 @@ export function passagesFor(
           : [];
     const evidence = new Map<string, StudyPassage>();
     for (const card of material)
-      for (const passage of cardEvidence?.get(card.id) ?? [])
-        evidence.set(originHref(passage.origin), passage);
+      for (const passage of cardEvidence?.get(card.id) ?? []) {
+        const { origin } = passage;
+        const href = originHref(origin);
+        const key = origin.kind === "note" && origin.passage ? `${href}#${origin.passage.offset}` : href;
+        evidence.set(key, passage);
+      }
     const sources = [...evidence.values()].slice(0, Math.min(3, 8 - material.length));
     const limit =
       purpose === "report"

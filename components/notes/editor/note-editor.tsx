@@ -17,7 +17,8 @@ import {
 } from "@codemirror/view";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import type { NoteLink } from "@/lib/db/types";
-import { locateNoteMatch, type NoteMatch } from "@/lib/notes/search-match";
+import { locateNoteMatch, noteCaptureLimit, type NoteMatch } from "@/lib/notes/search-match";
+import type { NoteStudySnapshot } from "@/lib/study/note-flashcards";
 import { linkCompletion, tagCompletion, type CompletionWorld } from "./completion";
 import { notesKeymap } from "./keymap";
 import { livePreview } from "./live-preview";
@@ -28,6 +29,7 @@ export interface NoteEditorHandle {
   /** Puts the cursor at a character offset and scrolls it into view. */
   reveal: (offset: number) => void;
   revealMatch: (match: NoteMatch) => void;
+  studySnapshot: () => NoteStudySnapshot | undefined;
 }
 
 interface NoteEditorProps {
@@ -60,6 +62,19 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
 
   useImperativeHandle(ref, () => ({
     focus: () => view.current?.focus(),
+    studySnapshot: () => {
+      const state = view.current?.state;
+      if (!state) return;
+      const { from, to } = state.selection.main;
+      const raw = state.sliceDoc(from, Math.min(to, from + noteCaptureLimit));
+      const text = raw.trim();
+      return {
+        body: state.doc.toString(),
+        selection: text
+          ? { text, match: { offset: from + raw.length - raw.trimStart().length, quote: text } }
+          : undefined,
+      };
+    },
     reveal: (offset) => {
       const current = view.current;
       if (!current) return;
