@@ -157,7 +157,14 @@
       "restart": "Start over",
       "finished": "Done! You knew {{known}} of {{total}}.",
       "practiceMissed_one": "Practise the card you missed",
-      "practiceMissed_other": "Practise the {{count}} you missed"
+      "practiceMissed_other": "Practise the {{count}} you missed",
+      "practiceUnrated_one": "Practise {{count}} unrated card",
+      "practiceUnrated_other": "Practise {{count}} unrated cards",
+      "reviewMissed_one": "Review {{count}} missed card in Study",
+      "reviewMissed_other": "Review {{count}} missed cards in Study",
+      "missedAlreadySaved": "These cards are already in Study",
+      "practiceChanged": "Your practice round changed. Continue from the latest card.",
+      "savePracticeFailed": "Could not save your flashcard practice. Try again."
     }
   },
   "quiz": {

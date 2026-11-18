@@ -20,7 +20,7 @@ import { useWorkspace } from "@/components/workspace/workspace-context";
 import { addQuizMissesToStudy, addStudioFlashcards } from "@/lib/db/study";
 import { vaultOf } from "@/lib/db/vaults";
 import { studyHref } from "@/lib/study/links";
-import { saveQuizAttempt, updateOutputData, useOutput } from "@/lib/db/outputs";
+import { saveFlashcardPractice, saveQuizAttempt, updateOutputData, useOutput } from "@/lib/db/outputs";
 import { formatRelativeTime } from "@/lib/format";
 import { storageIds, storages } from "@/lib/storage/catalog";
 import { isStorageReady, useStorageSettings } from "@/lib/storage/settings";
@@ -84,6 +84,28 @@ export function OutputViewer({ id }: { id: string }) {
       state: { studyReviewIds: cardIds, studyReviewVault: vault },
     });
   }
+
+  const reviewMissed =
+    output.toolId === "quiz" || output.toolId === "flashcards"
+      ? async (positions: readonly number[]) => {
+          try {
+            const quiz = output.toolId === "quiz";
+            const { added, cardIds } = await (quiz
+              ? addQuizMissesToStudy(output, positions)
+              : addStudioFlashcards(output, positions));
+            if (cardIds.length) {
+              toast.success(
+                added
+                  ? t(quiz ? "quiz.viewer.savedMissed" : "viewer.studyCardsAdded", { count: added })
+                  : t(quiz ? "quiz.viewer.missedAlreadySaved" : "flashcards.viewer.missedAlreadySaved"),
+              );
+            }
+            openStudyReview(output.id, cardIds);
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : String(error));
+          }
+        }
+      : undefined;
 
   // Annotate: the output's picture, locked on a new whiteboard, to draw over it.
   const annotate =
@@ -284,27 +306,17 @@ export function OutputViewer({ id }: { id: string }) {
               outputId={output.id}
               onDataChange={saveData}
               onAnnotate={annotate ? () => void annotate() : undefined}
-              onReviewMissed={
-                output.toolId === "quiz"
-                  ? async (positions) => {
-                      try {
-                        const { added, cardIds } = await addQuizMissesToStudy(output, positions);
-                        toast.success(
-                          added
-                            ? t("quiz.viewer.savedMissed", { count: added })
-                            : t("quiz.viewer.missedAlreadySaved"),
-                        );
-                        openStudyReview(output.id, cardIds);
-                      } catch (error) {
-                        toast.error(error instanceof Error ? error.message : String(error));
-                      }
-                    }
-                  : undefined
-              }
+              onReviewMissed={reviewMissed}
               quizAttempt={output.quizAttempt}
               onQuizAction={
                 output.toolId === "quiz"
                   ? (revision, action) => saveQuizAttempt(output.id, revision, action)
+                  : undefined
+              }
+              flashcardPractice={output.flashcardPractice}
+              onFlashcardAction={
+                output.toolId === "flashcards"
+                  ? (revision, action) => saveFlashcardPractice(output.id, revision, action)
                   : undefined
               }
               chrome={chrome}

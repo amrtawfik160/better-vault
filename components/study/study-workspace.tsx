@@ -532,11 +532,20 @@ export default function StudyWorkspace({
   const focusedRange = at !== undefined && length ? { offset: at, length, revision } : undefined;
   const output = params.get("output");
   const studioOutput = useOutput(tab === "review" ? output : null);
-  const quizHref =
+  const studioReturn =
     studioOutput?.id === output &&
-    studioOutput.toolId === "quiz" &&
+    (studioOutput.toolId === "quiz" || studioOutput.toolId === "flashcards") &&
     scope.notebookOwner(studioOutput.notebookId) === studyVaultId
-      ? originHref({ kind: "studio", notebookId: studioOutput.notebookId, outputId: studioOutput.id })
+      ? {
+          href: originHref({
+            kind: "studio",
+            notebookId: studioOutput.notebookId,
+            outputId: studioOutput.id,
+          }),
+          label: t(
+            studioOutput.toolId === "quiz" ? "study.recall.backToQuiz" : "study.recall.backToStudioCards",
+          ),
+        }
       : undefined;
   const cardId = params.get("card");
   const notebookId = params.get("notebook");
@@ -874,7 +883,7 @@ export default function StudyWorkspace({
           initialPractice={weakMode}
           sessionId={reviewSessionId}
           history={rows.filter((row) => row.kind === "session")}
-          quizHref={quizHref}
+          studioReturn={studioReturn}
           libraryHref={
             reviewingVocabulary
               ? studyHref("vocabulary", { vault: studyVaultId })

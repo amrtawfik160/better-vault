@@ -2,7 +2,7 @@ import type { StudyRecord } from "@/lib/study/records";
 import { patchedStudyThread } from "@/lib/study/reports";
 import { patchedStudyBook, revisedStudyBook } from "@/lib/study/text-edits";
 import { detachedVocabularyCard, vocabularyCardId, vocabularyChanges } from "@/lib/study/vocabulary";
-import { updatedQuizAttempt } from "@/studio/tools/quiz/attempt";
+import { updatedStudioPractice } from "@/studio/shared/practice";
 import type { Backend } from "./backend";
 import { BetterVaultDatabase } from "./database";
 import type { Source, StudioOutput } from "./types";
@@ -210,12 +210,12 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
         .modify(patch);
       return changed > 0;
     },
-    saveQuizAttempt: (id, revision, action) =>
+    saveStudioPractice: (id, change) =>
       db.transaction("rw", db.outputs, async () => {
-        const attempt = updatedQuizAttempt(await db.outputs.get(id), revision, action);
-        if (!attempt) return;
-        await db.outputs.update(id, { quizAttempt: attempt });
-        return attempt;
+        const update = updatedStudioPractice(await db.outputs.get(id), change);
+        if (!update) return;
+        await db.outputs.update(id, update);
+        return update;
       }),
     interruptOutputs: async (running, error) => {
       const keep = new Set(running);

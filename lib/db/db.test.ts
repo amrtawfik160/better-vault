@@ -41,6 +41,7 @@ import {
   createReadyOutput,
   deleteOutput,
   markInterruptedOutputs,
+  saveFlashcardPractice,
   saveQuizAttempt,
 } from "./outputs";
 import { asBackend, createSqliteStore, schemaVersion } from "./sqlite/store";
@@ -639,6 +640,59 @@ describe.each(backends)("%s store", (name, create) => {
       });
       await deleteOutput(id);
       expect(await saveQuizAttempt(id, 3, { kind: "answer", option: 0 })).toBeUndefined();
+    });
+
+    it("restores flashcard practice and sends only the original missed card to Study", async () => {
+      const notebookId = await createNotebook("Consensus notes");
+      const id = await createReadyOutput({
+        notebookId,
+        toolId: "flashcards",
+        title: "Recall consensus",
+        options: {},
+        sourceIds: [],
+        data: {
+          cards: [
+            { front: "Known", back: "Answer one" },
+            { front: "Skipped", back: "Answer two" },
+            { front: "Missed", back: "Answer three" },
+          ],
+        },
+      });
+      await saveFlashcardPractice(id, 0, { kind: "grade", grade: "known" });
+      expect(await saveFlashcardPractice(id, 0, { kind: "grade", grade: "missed" })).toBeUndefined();
+      await saveFlashcardPractice(id, 1, { kind: "move", offset: 1 });
+      await saveFlashcardPractice(id, 2, { kind: "flip" });
+      expect((await store().getOutput(id))?.flashcardPractice).toMatchObject({
+        position: 2,
+        flipped: true,
+      });
+      const results = await saveFlashcardPractice(id, 3, { kind: "grade", grade: "missed" });
+      expect(results).toMatchObject({
+        position: 3,
+        flipped: false,
+        grades: { 0: "known", 2: "missed" },
+      });
+
+      const backup = JSON.parse(JSON.stringify(await exportBackup()));
+      await deleteAllData();
+      await importBackup(backup);
+      const restored = await store().getOutput(id);
+      expect(restored?.flashcardPractice).toEqual(results);
+      expect(await saveFlashcardPractice(id, 4, { kind: "restart", mode: "missed" })).toMatchObject({
+        order: [2],
+        position: 0,
+        grades: {},
+      });
+
+      if (!restored) throw new Error("Expected the restored flashcards");
+      const selection = await addStudioFlashcards(restored, [2, 2, 8]);
+      expect(selection).toEqual({ added: 1, cardIds: [`studio-${id}-2`] });
+      expect((await store().listStudy()).map((row) => row.id)).toEqual(selection.cardIds);
+      const cardId = selection.cardIds[0];
+      expect(await rateStudyItem(cardId, "easy", 3)).toBe(true);
+      const reviewed = await store().getStudy(cardId);
+      expect(await addStudioFlashcards(restored, [2])).toEqual({ added: 0, cardIds: [cardId] });
+      expect(await store().getStudy(cardId)).toEqual(reviewed);
     });
   });
 

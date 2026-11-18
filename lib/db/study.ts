@@ -547,24 +547,29 @@ async function saveStudioReviewCards(cards: StudyCard[]) {
   return { added, cardIds: cards.map(({ id }) => id) };
 }
 
-export async function addStudioFlashcards(output: StudioOutput) {
+export async function addStudioFlashcards(output: StudioOutput, positions?: readonly number[]) {
   if (output.status !== "ready" || output.toolId !== "flashcards")
     throw new Error("Open a completed Studio flashcard set first.");
   const parsed = flashcardsData.parse(output.data);
+  const selected = positions ? [...new Set(positions)] : parsed.cards.map((_, position) => position);
   return saveStudioReviewCards(
-    parsed.cards.map(({ front, back, sources }, position) =>
-      newStudyCard(
-        {
-          front,
-          back,
-          tags: [output.title],
-          notebookId: output.notebookId,
-          origin: { kind: "studio", notebookId: output.notebookId, outputId: output.id },
-          citations: studioCardCitations(output.notebookId, sources),
-        },
-        `studio-${output.id}-${position}`,
-      ),
-    ),
+    selected.flatMap((position) => {
+      const card = parsed.cards[position];
+      if (!card) return [];
+      return [
+        newStudyCard(
+          {
+            front: card.front,
+            back: card.back,
+            tags: [output.title],
+            notebookId: output.notebookId,
+            origin: { kind: "studio", notebookId: output.notebookId, outputId: output.id },
+            citations: studioCardCitations(output.notebookId, card.sources),
+          },
+          `studio-${output.id}-${position}`,
+        ),
+      ];
+    }),
   );
 }
 

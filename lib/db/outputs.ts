@@ -1,5 +1,6 @@
 import { generateId } from "ai";
 import type { ModelRef } from "@/lib/ai/catalog";
+import type { FlashcardAction } from "@/studio/tools/flashcards/practice";
 import type { QuizAction } from "@/studio/tools/quiz/attempt";
 import { useStoreQuery } from "./live";
 import { store } from "./store";
@@ -37,8 +38,14 @@ export async function updateOutputData(id: string, data: unknown): Promise<boole
   return store().patchReadyOutput(id, { data, updatedAt: Date.now() });
 }
 
-export function saveQuizAttempt(id: string, revision: number, action: QuizAction) {
-  return store().saveQuizAttempt(id, revision, action);
+export async function saveQuizAttempt(id: string, revision: number, action: QuizAction) {
+  const updated = await store().saveStudioPractice(id, { tool: "quiz", revision, action });
+  return updated?.quizAttempt;
+}
+
+export async function saveFlashcardPractice(id: string, revision: number, action: FlashcardAction) {
+  const updated = await store().saveStudioPractice(id, { tool: "flashcards", revision, action });
+  return updated?.flashcardPractice;
 }
 
 export async function finishOutput(id: string, result: { title: string; data: unknown }) {
@@ -47,6 +54,7 @@ export async function finishOutput(id: string, result: { title: string; data: un
     title: result.title,
     data: result.data,
     quizAttempt: undefined,
+    flashcardPractice: undefined,
     error: undefined,
     updatedAt: Date.now(),
   });

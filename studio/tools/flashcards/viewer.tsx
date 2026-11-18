@@ -6,8 +6,9 @@ import {
   RotateLeft01Icon,
   ShuffleIcon,
 } from "@hugeicons/core-free-icons";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { Icon } from "@/components/icon";
 import { DirectionalText } from "@/components/common/directional-text";
 import { Button } from "@/components/panelui/button";
@@ -15,100 +16,153 @@ import { cn } from "@/lib/utils";
 import type { ToolViewerProps } from "@/studio/shared/form";
 import { StudioStudySources } from "@/studio/shared/study-sources";
 import type { FlashcardsData } from "./definition";
-
-const range = (n: number) => Array.from({ length: n }, (_, i) => i);
-
-function shuffled(list: number[]): number[] {
-  const out = [...list];
-  for (let i = out.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [out[i], out[j]] = [out[j], out[i]];
-  }
-  return out;
-}
+import {
+  nextFlashcardPractice,
+  readFlashcardPractice,
+  type FlashcardAction,
+  type FlashcardPractice,
+} from "./practice";
 
 /** Cards one at a time: flip to see the answer, then mark whether you knew it. */
-export function FlashcardsViewer({ data, onOpenPassage }: ToolViewerProps<FlashcardsData>) {
-  const { t } = useTranslation("studio");
-  const [order, setOrder] = useState(() => range(data.cards.length));
-  const [position, setPosition] = useState(0);
-  const [flipped, setFlipped] = useState(false);
-  const [known, setKnown] = useState<Set<number>>(new Set());
-  const [missed, setMissed] = useState<Set<number>>(new Set());
+export function FlashcardsViewer({
+  data,
+  flashcardPractice,
+  onFlashcardAction,
+  onOpenPassage,
+  onReviewMissed,
+}: ToolViewerProps<FlashcardsData>) {
+  const { t, i18n } = useTranslation("studio");
+  const size = data.cards.length;
+  const saved = readFlashcardPractice(size, flashcardPractice);
+  const [localPractice, setLocalPractice] = useState<FlashcardPractice>();
+  const practice = localPractice && localPractice.revision > saved.revision ? localPractice : saved;
+  const { order, position, flipped, grades } = practice;
+  const [committing, setCommitting] = useState(false);
+  const [saving, setSaving] = useState(false);
   const finished = position >= order.length;
   const card = data.cards[order[position]];
+  const known = order.filter((index) => grades[index] === "known").length;
+  const missed = order.filter((index) => grades[index] === "missed");
+  const unrated = order.length - known - missed.length;
+  const sideId = useId();
+  const flipButton = useRef<HTMLButtonElement>(null);
+  const results = useRef<HTMLHeadingElement>(null);
+  const moveFocus = useRef(false);
 
-  const go = useCallback(
-    (to: number) => {
-      setPosition(Math.max(0, Math.min(order.length, to)));
-      setFlipped(false);
+  const apply = useCallback(
+    async (action: FlashcardAction) => {
+      if (committing || saving) return;
+      setCommitting(true);
+      try {
+        const next = onFlashcardAction
+          ? await onFlashcardAction(practice.revision, action)
+          : nextFlashcardPractice(size, practice, action);
+        if (!next) {
+          toast.info(t("flashcards.viewer.practiceChanged"));
+          return;
+        }
+        moveFocus.current = action.kind === "grade" || action.kind === "restart";
+        setLocalPractice(next);
+      } catch {
+        toast.error(t("flashcards.viewer.savePracticeFailed"));
+      } finally {
+        setCommitting(false);
+      }
     },
-    [order.length],
+    [committing, onFlashcardAction, practice, saving, size, t],
   );
 
-  const mark = useCallback(
-    (knewIt: boolean) => {
-      const index = order[position];
-      setKnown((set) => {
-        const next = new Set(set);
-        if (knewIt) next.add(index);
-        else next.delete(index);
-        return next;
-      });
-      setMissed((set) => {
-        const next = new Set(set);
-        if (knewIt) next.delete(index);
-        else next.add(index);
-        return next;
-      });
-      go(position + 1);
-    },
-    [order, position, go],
-  );
+  useEffect(() => {
+    if (!moveFocus.current) return;
+    moveFocus.current = false;
+    (finished ? results.current : flipButton.current)?.focus({ preventScroll: true });
+  }, [finished, localPractice]);
 
-  const restart = (cards: number[]) => {
-    setOrder(cards);
-    setKnown(new Set());
-    setMissed(new Set());
-    setPosition(0);
-    setFlipped(false);
-  };
+  const rtl = i18n.dir() === "rtl";
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (
-        event.target instanceof HTMLElement &&
-        event.target.closest("input, textarea, [contenteditable], [role=dialog]")
+        event.defaultPrevented ||
+        event.repeat ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey
+      )
+        return;
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        target.closest(
+          "input, textarea, select, [contenteditable], [role=dialog], [role=alertdialog], [role=menu], [role=tablist]",
+        )
       )
         return;
       if (event.key === " ") {
-        if (event.target instanceof HTMLElement && event.target.closest("button, a")) return;
+        if (finished || (target instanceof HTMLElement && target.closest("button, a"))) return;
         event.preventDefault();
-        if (!finished) setFlipped((value) => !value);
-      } else if (event.key === "ArrowRight") go(position + 1);
-      else if (event.key === "ArrowLeft") go(position - 1);
+        void apply({ kind: "flip" });
+      } else if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+        const offset = (event.key === "ArrowRight") !== rtl ? 1 : -1;
+        if (position + offset < 0 || position + offset > order.length) return;
+        event.preventDefault();
+        void apply({ kind: "move", offset });
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [finished, go, position]);
+  }, [apply, finished, order.length, position, rtl]);
 
   if (finished) {
-    const missedList = [...missed];
     return (
       <div className="mx-auto flex w-full max-w-md flex-col items-center gap-4 py-16 text-center">
-        <p className="text-xl font-semibold">
-          {t("flashcards.viewer.finished", { known: known.size, total: order.length })}
-        </p>
+        <h3 ref={results} tabIndex={-1} className="text-xl font-semibold outline-none">
+          {t("flashcards.viewer.finished", { known, total: order.length })}
+        </h3>
         <div className="flex flex-wrap justify-center gap-2">
-          {missedList.length > 0 ? (
-            <Button shape="pill" onClick={() => restart(missedList)}>
-              {t("flashcards.viewer.practiceMissed", { count: missedList.length })}
+          {onReviewMissed && missed.length ? (
+            <Button
+              shape="pill"
+              disabled={committing}
+              loading={saving}
+              onClick={async () => {
+                setSaving(true);
+                try {
+                  await onReviewMissed(missed);
+                } finally {
+                  setSaving(false);
+                }
+              }}
+            >
+              {t("flashcards.viewer.reviewMissed", { count: missed.length })}
+            </Button>
+          ) : null}
+          {missed.length ? (
+            <Button
+              shape="pill"
+              variant={onReviewMissed ? "outline" : "default"}
+              disabled={committing || saving}
+              onClick={() => void apply({ kind: "restart", mode: "missed" })}
+            >
+              {t("flashcards.viewer.practiceMissed", { count: missed.length })}
+            </Button>
+          ) : null}
+          {unrated ? (
+            <Button
+              shape="pill"
+              variant="outline"
+              disabled={committing || saving}
+              onClick={() => void apply({ kind: "restart", mode: "unrated" })}
+            >
+              {t("flashcards.viewer.practiceUnrated", { count: unrated })}
             </Button>
           ) : null}
           <Button
             shape="pill"
             variant="secondary"
-            onClick={() => restart(range(data.cards.length))}
+            disabled={!size || committing || saving}
+            onClick={() => void apply({ kind: "restart", mode: "all" })}
           >
             <Icon icon={RotateLeft01Icon} size={16} />
             {t("flashcards.viewer.restart")}
@@ -128,12 +182,18 @@ export function FlashcardsViewer({ data, onOpenPassage }: ToolViewerProps<Flashc
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => restart(shuffled(range(data.cards.length)))}
+            disabled={committing}
+            onClick={() => void apply({ kind: "restart", mode: "shuffle" })}
           >
             <Icon icon={ShuffleIcon} size={16} />
             {t("flashcards.viewer.shuffle")}
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => restart(range(data.cards.length))}>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={committing}
+            onClick={() => void apply({ kind: "restart", mode: "all" })}
+          >
             <Icon icon={RotateLeft01Icon} size={16} />
             {t("flashcards.viewer.restart")}
           </Button>
@@ -148,9 +208,12 @@ export function FlashcardsViewer({ data, onOpenPassage }: ToolViewerProps<Flashc
       </div>
 
       <button
+        ref={flipButton}
         type="button"
-        onClick={() => setFlipped((value) => !value)}
+        onClick={() => void apply({ kind: "flip" })}
+        aria-disabled={committing}
         aria-label={flipped ? t("flashcards.viewer.flipBack") : t("flashcards.viewer.flip")}
+        aria-describedby={`${sideId}-${flipped ? "back" : "front"}`}
         className="group w-full cursor-pointer outline-none [perspective:1600px]"
       >
         <div
@@ -159,37 +222,65 @@ export function FlashcardsViewer({ data, onOpenPassage }: ToolViewerProps<Flashc
             flipped && "rotate-y-180",
           )}
         >
-          <div className="col-start-1 row-start-1 flex items-center justify-center rounded-3xl bg-card p-8 text-center text-xl leading-snug font-semibold text-card-foreground shadow-sm ring-1 ring-border backface-hidden group-focus-visible:ring-2 group-focus-visible:ring-ring sm:text-2xl">
-            <DirectionalText as="span" text={card.front} multiline />
+          <div
+            aria-hidden={flipped}
+            className="col-start-1 row-start-1 flex min-w-0 items-center justify-center rounded-3xl bg-card p-8 text-center text-xl leading-snug font-semibold text-card-foreground shadow-sm ring-1 ring-border backface-hidden group-focus-visible:ring-2 group-focus-visible:ring-ring sm:text-2xl"
+          >
+            <DirectionalText
+              id={`${sideId}-front`}
+              as="span"
+              text={card.front}
+              multiline
+              className="min-w-0 wrap-break-word"
+            />
           </div>
-          <div className="col-start-1 row-start-1 flex rotate-y-180 items-center justify-center rounded-3xl bg-muted p-8 text-center text-lg leading-relaxed backface-hidden">
-            <DirectionalText as="span" text={card.back} multiline />
+          <div
+            aria-hidden={!flipped}
+            className="col-start-1 row-start-1 flex min-w-0 rotate-y-180 items-center justify-center rounded-3xl bg-muted p-8 text-center text-lg leading-relaxed backface-hidden"
+          >
+            <DirectionalText
+              id={`${sideId}-back`}
+              as="span"
+              text={card.back}
+              multiline
+              className="min-w-0 wrap-break-word"
+            />
           </div>
         </div>
       </button>
       {flipped ? <StudioStudySources sources={card.sources} open={onOpenPassage} /> : null}
 
-      <div className="flex w-full items-center justify-between gap-2">
+      <div className="flex w-full flex-wrap items-center justify-between gap-2">
         <Button
           variant="outline"
           shape="pill"
           size="icon"
           aria-label={t("flashcards.viewer.previous")}
-          disabled={position === 0}
-          onClick={() => go(position - 1)}
+          disabled={position === 0 || committing}
+          onClick={() => void apply({ kind: "move", offset: -1 })}
         >
           <Icon icon={ArrowLeft01Icon} className="rtl:rotate-180" />
         </Button>
-        <div className="flex gap-2">
-          <Button variant="outline" shape="pill" onClick={() => mark(false)}>
+        <div className="order-last flex w-full flex-wrap justify-center gap-2 sm:order-none sm:w-auto">
+          <Button
+            variant="outline"
+            shape="pill"
+            disabled={committing}
+            onClick={() => void apply({ kind: "grade", grade: "missed" })}
+          >
             <Icon icon={CancelCircleIcon} size={16} className="text-destructive" />
             {t("flashcards.viewer.missed")}
-            <span className="text-muted-foreground tabular-nums">{missed.size}</span>
+            <span className="text-muted-foreground tabular-nums">{missed.length}</span>
           </Button>
-          <Button variant="outline" shape="pill" onClick={() => mark(true)}>
+          <Button
+            variant="outline"
+            shape="pill"
+            disabled={committing}
+            onClick={() => void apply({ kind: "grade", grade: "known" })}
+          >
             <Icon icon={CheckmarkCircle02Icon} size={16} className="text-success" />
             {t("flashcards.viewer.knew")}
-            <span className="text-muted-foreground tabular-nums">{known.size}</span>
+            <span className="text-muted-foreground tabular-nums">{known}</span>
           </Button>
         </div>
         <Button
@@ -197,7 +288,8 @@ export function FlashcardsViewer({ data, onOpenPassage }: ToolViewerProps<Flashc
           shape="pill"
           size="icon"
           aria-label={t("flashcards.viewer.next")}
-          onClick={() => go(position + 1)}
+          disabled={committing}
+          onClick={() => void apply({ kind: "move", offset: 1 })}
         >
           <Icon icon={ArrowRight01Icon} className="rtl:rotate-180" />
         </Button>

@@ -177,6 +177,7 @@
     "recall": {
       "backToReview": "Back to review",
       "backToQuiz": "Back to quiz",
+      "backToStudioCards": "Back to Studio flashcards",
       "backToToday": "Back to Today",
       "savingRating": "Saving your rating…",
       "learningWaiting_one": "{{count}} item will return in this session.",

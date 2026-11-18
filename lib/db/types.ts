@@ -2,6 +2,7 @@
 
 import type { ModelRef } from "@/lib/ai/catalog";
 import type { ChatMessage } from "@/lib/chat/types";
+import type { FlashcardPractice } from "@/studio/tools/flashcards/practice";
 import type { QuizAttempt } from "@/studio/tools/quiz/attempt";
 
 export interface Notebook {
@@ -271,6 +272,7 @@ export interface StudioOutput {
   /** The tool's output, shaped by its schema. Set when `status` is `ready`. */
   data?: unknown;
   quizAttempt?: QuizAttempt;
+  flashcardPractice?: FlashcardPractice;
   error?: string;
   model?: ModelRef;
   createdAt: number;
