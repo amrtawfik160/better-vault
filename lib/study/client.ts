@@ -1,5 +1,5 @@
 import { activeModel, credentialsFor, getSettings } from "@/lib/db/settings";
-import { studyAnswerSchema, type StudyAction, type StudyCardImages, type StudyDraftImages } from "./ai";
+import { studyAnswerSchema, studyMessageText, type StudyAction, type StudyCardImages, type StudyDraftImages } from "./ai";
 import type { StudyThread } from "./records";
 import type { StudyPassage } from "./passages";
 
@@ -46,7 +46,7 @@ export async function askStudyModel({
         })),
       history: thread?.messages
         .slice(-16)
-        .map(({ role, text }) => ({ role, text: text.slice(0, 12_000) })),
+        .map((message) => ({ role: message.role, text: studyMessageText(message).slice(0, 12_000) })),
       goal: thread?.goal,
       followUp: thread?.followUp?.text.slice(0, 20_000),
       flashcardPractice: thread?.scope === "cards" || undefined,

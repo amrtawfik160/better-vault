@@ -1,6 +1,8 @@
 import { z } from "zod";
+import { visualText } from "@/lib/chat/visual-text";
 import {
   studyReportReplySchema,
+  studyVisualSchema,
   type StudyCardEdit,
   type StudyCitation,
   type StudyThread,
@@ -8,7 +10,7 @@ import {
 import type { StudyDraftPassage } from "./passages";
 import { studyCitationOrigin } from "./links";
 
-export const studyAction = z.enum(["chat", "explain", "translate", "cards", "report"]);
+export const studyAction = z.enum(["chat", "explain", "translate", "cards", "report", "visual"]);
 export type StudyAction = z.infer<typeof studyAction>;
 
 export const studyCardDraftSchema = z.object({
@@ -23,7 +25,26 @@ export const studyAnswerSchema = z.object({
   cards: z.array(studyCardDraftSchema).optional(),
   report: studyReportReplySchema.optional(),
   imageFallback: z.boolean().optional(),
+  visual: studyVisualSchema.optional(),
 });
+
+/** The kinds the Tutor may draw to explain an answer, in the order it should prefer them. */
+export const studyExplanationVisuals = [
+  "diagram",
+  "steps",
+  "comparison",
+  "timeline",
+  "table",
+  "chart",
+] as const;
+
+/** A thread message as text, with its visual written out (Mermaid, steps, rows…) when it has one. */
+export function studyMessageText(message: Pick<StudyThread["messages"][number], "text" | "visual">) {
+  if (!message.visual) return message.text;
+  return [message.text.trim(), visualText(message.visual.kind, message.visual.data)]
+    .filter(Boolean)
+    .join("\n\n");
+}
 
 export const maxStudyImageBytes = 2 * 1024 * 1024;
 export const studyImageSchema = z
@@ -96,8 +117,9 @@ export function studyConversationMaterial(
   let remaining = flashcardMaterialLimit;
   for (let index = messages.length - 1; index >= 0 && remaining > 0; index--) {
     const message = messages[index];
-    if (message.role !== "assistant" || !message.text.trim()) continue;
-    const answer = `${labels.tutor}: ${message.text.trim()}`;
+    const body = studyMessageText(message).trim();
+    if (message.role !== "assistant" || !body) continue;
+    const answer = `${labels.tutor}: ${body}`;
     if (exchanges.length && answer.length > remaining) break;
     const preceding = messages[index - 1];
     const question = preceding?.role === "user" ? preceding.text.trim() : "";

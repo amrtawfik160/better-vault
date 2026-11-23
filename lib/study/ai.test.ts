@@ -67,6 +67,28 @@ describe("studyConversationMaterial", () => {
     expect(excerpt.text).toBe("Tutor: Prioritize this recent answer.");
   });
 
+  it("writes out a visual answer so its content can become flashcards", () => {
+    expect(
+      studyConversationMaterial(
+        [
+          { role: "user", text: "Show it as a diagram." },
+          {
+            role: "assistant",
+            text: "Here is a diagram.",
+            visual: {
+              kind: "steps",
+              data: { title: "Elections", steps: [{ title: "Time out" }, { title: "Vote" }] },
+            },
+          },
+        ],
+        labels,
+      ).text,
+    ).toBe(
+      "Learner: Show it as a diagram.\n\nTutor: Here is a diagram.\n\n" +
+        "## Elections\n1. **Time out**\n2. **Vote**",
+    );
+  });
+
   it("carries citations for included answers and leaves the excluded exchanges out", () => {
     const cited = { kind: "note" as const, noteId: "included" };
     const excerpt = studyConversationMaterial(
