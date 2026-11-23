@@ -84,7 +84,7 @@ export async function generateStudyVisual({
   for (let repair = 1; !("visual" in outcome); repair++) {
     if (repair > studyVisualRepairs)
       throw new StudyVisualError(
-        `The Tutor could not draw a visual for this answer: ${outcome.problem} Try again or choose another model.`,
+        `The AI could not draw a visual for this answer: ${outcome.problem} Try again or choose another model.`,
       );
     outcome = await attemptVisual(
       options,

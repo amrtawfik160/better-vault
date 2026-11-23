@@ -141,7 +141,7 @@ export function putStudyRecords(...rows: StudyRecord[]) {
 
 export async function readStudyThread(id: string): Promise<StudyThread> {
   const thread = await store().getStudy(id);
-  if (thread?.kind !== "thread") throw new Error("This Tutor conversation is no longer available.");
+  if (thread?.kind !== "thread") throw new Error("This conversation is no longer available.");
   return thread;
 }
 
@@ -542,7 +542,7 @@ export async function updateStudyThread(
   draft?: StudyTutorDraftChange,
 ) {
   if (!(await store().patchStudyThread({ id, change, append, draft, updatedAt: Date.now() })))
-    throw new Error("This Tutor conversation is no longer available.");
+    throw new Error("This conversation is no longer available.");
 }
 
 export function updateStudyReport(id: string, report: StudyReportChange) {
@@ -859,7 +859,7 @@ async function openScopedTutor(thread: StudyThread) {
   if (await backend.insertStudy([thread])) return thread;
   const saved = await backend.getStudy(thread.id);
   if (saved?.kind === "thread" && saved.vaultId === thread.vaultId) return saved;
-  throw new Error("This Tutor conversation is no longer available.");
+  throw new Error("This conversation is no longer available.");
 }
 
 export async function startCardTutor(ids: string[], vaultId: string, title: string, draft?: StudyTutorDraft, id = studyId()) {
