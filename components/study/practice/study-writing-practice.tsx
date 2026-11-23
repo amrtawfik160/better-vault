@@ -167,7 +167,13 @@ export function StudyWritingPractice({
     onActiveChange?.(active);
   }, [active, onActiveChange]);
   useEffect(() => {
-    if (previousScreen.current !== screen) top.current?.scrollIntoView({ block: "start" });
+    // Only the page's own scroll area moves: scrollIntoView would also shift the tab's fixed frame.
+    const section = top.current;
+    const viewport = section?.closest<HTMLElement>('[data-slot="scroll-area-viewport"]');
+    if (previousScreen.current !== screen && section && viewport) {
+      const offset = section.getBoundingClientRect().top - viewport.getBoundingClientRect().top;
+      if (offset < 0) viewport.scrollTo({ top: viewport.scrollTop + offset - 16 });
+    }
     previousScreen.current = screen;
   }, [screen]);
 
@@ -275,7 +281,7 @@ export function StudyWritingPractice({
   }
 
   return (
-    <section ref={top} aria-label={t("study.writingPractice.home.title")} className="scroll-mt-4">
+    <section ref={top} aria-label={t("study.writingPractice.home.title")}>
       {content}
       <ConfirmDialog
         open={deleting !== null}
