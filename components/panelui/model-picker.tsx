@@ -862,8 +862,13 @@ function ModelPickerContent({
   const slots = useMemo(() => pickerVariants({ variant }), [variant]);
   const input = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
+  // better-vault: the rail opens on the chosen model's provider, so the choice is in view.
+  const chosenProvider = picker.items.find((item) => item.value === picker.value)?.provider;
   const firstFilter = (): Filter =>
-    variant === 'rail' ? (picker.favorites.size > 0 ? 'favorites' : (picker.providerList[0]?.value ?? 'all')) : 'all';
+    variant === 'rail'
+      ? (chosenProvider ?? (picker.favorites.size > 0 ? 'favorites' : (picker.providerList[0]?.value ?? 'all')))
+      : 'all';
+  const main = useRef<HTMLDivElement>(null);
   const [filter, setFilter] = useState<Filter>(firstFilter);
   const [highlighted, setHighlighted] = useState<ModelPickerItem | undefined>(undefined);
 
@@ -873,6 +878,11 @@ function ModelPickerContent({
     setQuery('');
     setFilter(firstFilter());
     setHighlighted(undefined);
+    // better-vault: and scrolls to the chosen model once its rows are drawn.
+    const frame = requestAnimationFrame(() =>
+      main.current?.querySelector('[data-selected]')?.scrollIntoView({ block: 'nearest' })
+    );
+    return () => cancelAnimationFrame(frame);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [picker.open]);
 
@@ -1004,7 +1014,7 @@ function ModelPickerContent({
               </div>
             ) : null}
 
-            <div className={slots.main()}>
+            <div ref={main} className={slots.main()}>
               <div className={slots.searchRow()}>
                 <Autocomplete.InputGroup className={slots.search()}>
                   <SearchIcon />
