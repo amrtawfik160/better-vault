@@ -12,6 +12,10 @@ function withQuery(path: string, values: Record<string, string | number | undefi
 
 export const studyTabs = ["today", "library", "review", "collection", "practice"] as const;
 export type StudyTab = (typeof studyTabs)[number];
+/** The parts of Study the vault sidebar opens. Collection is reached from Review, as its Browse mode. */
+export const studySections = ["today", "library", "review", "practice"] as const;
+export type StudySection = (typeof studySections)[number];
+export const studySectionOf = (tab: StudyTab): StudySection => (tab === "collection" ? "review" : tab);
 export const studyCollectionFilters = ["all", "highlights", "cards", "words"] as const;
 export type StudyCollectionFilter = (typeof studyCollectionFilters)[number];
 

@@ -126,7 +126,8 @@
     "emptyFolder": "Nothing here yet",
     "itemCount_one": "{{count}} item",
     "itemCount_other": "{{count}} items",
-    "study": "Study"
+    "study": "Study",
+    "sections": "Go to"
   },
   "toolbar": {
     "back": "Back",
@@ -971,7 +972,9 @@
       "practiceDifficult_other": "Practice {{count}} difficult items",
       "weakItems": "Items you found difficult",
       "selection_one": "{{count}} chosen item",
-      "selection_other": "{{count}} chosen items"
+      "selection_other": "{{count}} chosen items",
+      "modes": "Review or browse",
+      "browse": "Browse"
     },
     "collection": {
       "title": "Everything you kept",

@@ -56,7 +56,7 @@ import { shortcutKeys } from "@/lib/platform";
 import { routes } from "@/lib/routes";
 import { ACCEPTED_FILES, IngestError, ingestFile } from "@/lib/sources/ingest";
 import { sourceHasText } from "@/lib/db/source-text";
-import { isFocusedStudyReader } from "@/lib/study/links";
+import { isFocusedStudyReader, studyLocation, studySectionOf } from "@/lib/study/links";
 import { cn } from "@/lib/utils";
 import { FolderDialog } from "./folder-dialogs";
 import {
@@ -147,6 +147,9 @@ export function NotebookHome() {
       ? viewParam
       : "all";
   const studying = section === "study";
+  const studyTab = studying ? studyLocation(params).tab : undefined;
+  // Collection is Review's Browse mode, so the sidebar and the title say Review.
+  const studySection = studyTab && studySectionOf(studyTab);
   const focusedReader = isFocusedStudyReader(params);
   // The calendar, bot, notes and skills supply their own desktop toolbar.
   const fullPage =
@@ -171,8 +174,8 @@ export function NotebookHome() {
           ? t("calendar.title")
           : section === "bot"
             ? t("bot.title")
-            : studying
-              ? t("vaults.study")
+            : studySection
+              ? t(`study.tabs.${studySection}`)
               : section === "recents"
                 ? t("vaults.recent")
                 : (currentFolder?.name ?? (vault ? vaultName(vault) : ""));
@@ -244,7 +247,14 @@ export function NotebookHome() {
     });
   const showSection = (next: HomeSection, selectedVault?: string) =>
     setParams(
-      next === "all" ? {} : { view: next, ...(selectedVault ? { vault: selectedVault } : {}) },
+      next === "all"
+        ? {}
+        : {
+            view: next,
+            // Another vault keeps the part of Study that is open.
+            ...(next === "study" && studyTab ? { tab: studyTab } : {}),
+            ...(selectedVault ? { vault: selectedVault } : {}),
+          },
     );
 
   const order = <T extends { updatedAt: number }>(items: T[], name: (item: T) => string) =>
@@ -331,6 +341,7 @@ export function NotebookHome() {
           vault={vault}
           pinned={pinned}
           section={section}
+          studySection={studySection}
           onSection={showSection}
           onDropCards={(event) => void dropCards(event, null)}
         />

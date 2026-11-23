@@ -1,7 +1,7 @@
 import {
   Add01Icon,
   BotIcon,
-  Book02Icon,
+  Books01Icon,
   Calendar03Icon,
   Clock01Icon,
   Note01Icon,
@@ -11,6 +11,9 @@ import {
   GridViewIcon,
   MoreHorizontalIcon,
   PencilEdit01Icon,
+  RepeatIcon,
+  Sun03Icon,
+  Target02Icon,
 } from "@hugeicons/core-free-icons";
 import { useState, type DragEvent, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -32,6 +35,7 @@ import {
 import { itemColor } from "@/lib/notebooks/colors";
 import { notebookIcon } from "@/lib/notebooks/icons";
 import { routes } from "@/lib/routes";
+import { studyHref, type StudySection } from "@/lib/study/links";
 import { cn } from "@/lib/utils";
 import { MenuActions, type MenuAction } from "@/components/common/action-menu";
 import { ContextMenu, ContextMenuTrigger } from "@/components/common/context-menu";
@@ -47,12 +51,21 @@ import { useVaultName } from "./vault-name";
 export type HomeSection =
   "all" | "vault" | "recents" | "calendar" | "bot" | "notes" | "skills" | "study";
 
+const studyIcons = {
+  today: Sun03Icon,
+  library: Books01Icon,
+  review: RepeatIcon,
+  practice: Target02Icon,
+} as const;
+
 interface VaultSidebarProps {
   vaults: Vault[];
   vault: Vault;
   /** The current vault's pinned notebooks. */
   pinned: Notebook[];
   section: HomeSection;
+  /** The part of Study shown, while `section` is "study". */
+  studySection?: StudySection;
   onSection: (section: HomeSection, vaultId?: string) => void;
   /** Moves dropped notebooks to the top of the vault. */
   onDropCards: (event: DragEvent) => void;
@@ -71,6 +84,7 @@ export function VaultSidebar({
   vault,
   pinned,
   section,
+  studySection,
   onSection,
   onDropCards,
 }: VaultSidebarProps) {
@@ -78,6 +92,20 @@ export function VaultSidebar({
   const { t: tNotes } = useTranslation("notes");
   const [creating, setCreating] = useState(false);
   const drop = useDropTarget(onDropCards);
+  const studyRow = (entry: StudySection) => {
+    const active = section === "study" && studySection === entry;
+    return (
+      <Link
+        key={entry}
+        to={studyHref(entry)}
+        aria-current={active ? "page" : undefined}
+        className={cn(row, active && "bg-foreground/10 font-medium")}
+      >
+        <Icon icon={studyIcons[entry]} size={18} className="text-muted-foreground" />
+        {t(`study.tabs.${entry}`)}
+      </Link>
+    );
+  };
 
   function chooseVault(id: string) {
     if (section === "study") onSection("study", id);
@@ -100,16 +128,8 @@ export function VaultSidebar({
 
       <ScrollArea className="min-h-0 flex-1">
         <nav className="flex flex-col gap-5 px-2 pb-3">
-          <Group title={t("vaults.library")}>
-            <button
-              type="button"
-              aria-current={section === "recents" ? "page" : undefined}
-              onClick={() => onSection("recents")}
-              className={cn(row, section === "recents" && "bg-foreground/10 font-medium")}
-            >
-              <Icon icon={Clock01Icon} size={18} className="text-muted-foreground" />
-              {t("vaults.recent")}
-            </button>
+          <Group title={t("vaults.sections")} hideTitle>
+            {studyRow("today")}
             <button
               type="button"
               aria-current={section === "all" ? "page" : undefined}
@@ -124,14 +144,18 @@ export function VaultSidebar({
               <Icon icon={GridViewIcon} size={18} className="text-muted-foreground" />
               {t("vaults.all")}
             </button>
-            <Link
-              to={routes.study}
-              aria-current={section === "study" ? "page" : undefined}
-              className={cn(row, section === "study" && "bg-foreground/10 font-medium")}
+            <button
+              type="button"
+              aria-current={section === "recents" ? "page" : undefined}
+              onClick={() => onSection("recents")}
+              className={cn(row, section === "recents" && "bg-foreground/10 font-medium")}
             >
-              <Icon icon={Book02Icon} size={18} className="text-muted-foreground" />
-              {t("vaults.study")}
-            </Link>
+              <Icon icon={Clock01Icon} size={18} className="text-muted-foreground" />
+              {t("vaults.recent")}
+            </button>
+            {studyRow("library")}
+            {studyRow("review")}
+            {studyRow("practice")}
             <button
               type="button"
               aria-current={section === "notes" ? "page" : undefined}
@@ -237,10 +261,21 @@ export function VaultSidebar({
   );
 }
 
-function Group({ title, children }: { title: string; children: ReactNode }) {
+function Group({
+  title,
+  hideTitle = false,
+  children,
+}: {
+  title: string;
+  /** Kept for screen readers only. */
+  hideTitle?: boolean;
+  children: ReactNode;
+}) {
   return (
     <section aria-label={title} className="flex flex-col gap-0.5">
-      <h2 className="px-2.5 pb-1 text-xs font-medium text-muted-foreground">{title}</h2>
+      <h2 className={cn("px-2.5 pb-1 text-xs font-medium text-muted-foreground", hideTitle && "sr-only")}>
+        {title}
+      </h2>
       {children}
     </section>
   );

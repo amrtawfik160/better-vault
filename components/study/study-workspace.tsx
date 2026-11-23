@@ -9,7 +9,8 @@ import {
   studyCollectionHref,
   studyHref,
   studyLocation,
-  studyTabs as tabs,
+  studySectionOf,
+  studySections,
   studyVisualFromReader,
   type StudyTab as Tab,
 } from "@/lib/study/links";
@@ -29,6 +30,7 @@ import { studyReturnState, tutorReturnState } from "@/lib/study/return-links";
 import { studyVaultIndex } from "@/lib/study/vault";
 import { studyTextRevision } from "@/lib/study/text-edits";
 import { cn } from "@/lib/utils";
+import { Segmented } from "@/components/common/segmented";
 import { Button, buttonVariants } from "@/components/panelui/button";
 import { Tabs } from "@/components/panelui/tabs";
 import { SettingsSheet } from "@/components/settings/settings-sheet";
@@ -94,6 +96,7 @@ export default function StudyWorkspace({
   const saved = useStudyRecords();
   const notes = useNotes();
   const { tab, filter: collectionFilter } = studyLocation(params);
+  const section = studySectionOf(tab);
   const requestedReaderTutor = tab === "library" ? params.get("readerTutor") : null;
   const tutoring = tab === "practice" || Boolean(requestedReaderTutor);
   const [directReviewId] = useState(() => {
@@ -592,6 +595,34 @@ export default function StudyWorkspace({
           />
         )
       ) : null}
+      {ready && !unavailableBook && section === "review" ? (
+        <div className={cn("mb-5 flex", tab === "review" && "mx-auto max-w-2xl")}>
+          <Segmented
+            aria-label={t("study.review.modes")}
+            size="sm"
+            value={tab === "collection" ? "collection" : "review"}
+            // Switching keeps what the list is narrowed to: a notebook, a document…
+            onValueChange={(next) => go(next, reviewScope)}
+            options={[
+              {
+                value: "review",
+                label: (
+                  <>
+                    {t("study.tabs.review")}
+                    {dueNow ? (
+                      <span className="text-xs text-muted-foreground tabular-nums">
+                        <span aria-hidden="true">{dueNow}</span>
+                        <span className="sr-only">{t("study.tabs.dueCount", { count: dueNow })}</span>
+                      </span>
+                    ) : null}
+                  </>
+                ),
+              },
+              { value: "collection", label: t("study.review.browse") },
+            ]}
+          />
+        </div>
+      ) : null}
       {ready && !unavailableBook && collected ? (
         <StudyCollection
           key={studyVaultId}
@@ -755,9 +786,9 @@ export default function StudyWorkspace({
 
   return (
     <Tabs
-      value={tab}
+      value={section}
       onValueChange={(value) => {
-        const selected = tabs.find((entry) => entry === value);
+        const selected = studySections.find((entry) => entry === value);
         if (selected) go(selected);
       }}
       variant="underline"
@@ -774,8 +805,9 @@ export default function StudyWorkspace({
         !focusedReader && "rounded-3xl ring-1 ring-border",
       )}
     >
-      <Tabs.List aria-label={t("study.sections")} className={cn("shrink-0 px-2 sm:px-4", (readingBook || (focusedReader && !unavailableBook)) && "hidden")}>
-        {tabs.map((entry) => (
+      {/* The vault sidebar moves between these on wider screens; phones, which have none, keep the tabs. */}
+      <Tabs.List aria-label={t("study.sections")} className={cn("shrink-0 px-2 sm:px-4 md:hidden", (readingBook || (focusedReader && !unavailableBook)) && "hidden")}>
+        {studySections.map((entry) => (
           <Tabs.Trigger key={entry} value={entry}>
             {t(`study.tabs.${entry}`)}
             {entry === "review" && dueNow ? (
@@ -787,9 +819,9 @@ export default function StudyWorkspace({
           </Tabs.Trigger>
         ))}
       </Tabs.List>
-      {tabs.map((entry) => (
+      {studySections.map((entry) => (
         <Tabs.Content key={entry} value={entry} className="flex min-h-0 flex-col">
-          {entry === tab ? (
+          {entry === section ? (
             readingBook ? (
               // The reader fills the card with its own bars, scrolling and side panel.
               <div className="relative flex min-h-0 flex-1">{content}</div>
