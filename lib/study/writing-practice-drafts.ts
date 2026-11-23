@@ -45,6 +45,7 @@ const setupDraft = z.object({
   learned: z.string().max(maxPracticeLearned),
   bookId: z.string().optional(),
   section: z.number().int().nonnegative().optional(),
+  sectionEnd: z.number().int().nonnegative().optional(),
   ids: z.array(z.string()),
   audience: z.enum(studyPracticeAudiences),
   scenario: z.string().max(maxPracticeScenario),
