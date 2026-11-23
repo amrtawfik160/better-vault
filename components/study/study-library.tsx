@@ -4,9 +4,7 @@ import {
   Delete02Icon,
   FileImportIcon,
   MoreHorizontalIcon,
-  Pdf01Icon,
   PencilEdit01Icon,
-  TextIcon,
 } from "@hugeicons/core-free-icons";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -28,26 +26,35 @@ import { currentVaultId } from "@/lib/db/vaults";
 import { routes } from "@/lib/routes";
 import { studyHref } from "@/lib/study/links";
 import { readStudyFile } from "@/lib/study/read-file";
+import { studyReadingProgress } from "@/lib/study/reading-progress";
 import { studyDocumentContent } from "@/lib/study/markdown-document";
 import { studyDocumentDraftId } from "@/lib/study/document-drafts";
-import type { StudyBook, StudyDocumentRecovery, StudyDocumentSnapshot } from "@/lib/study/records";
+import type { StudyBook, StudyDocumentRecovery, StudyDocumentSnapshot, StudyRecordOf } from "@/lib/study/records";
+import { cn } from "@/lib/utils";
+import { StudyBookCover, StudyProgressBar } from "./study-book-cover";
 import { StudyDocumentEditor } from "./study-document-editor";
 import { useStudyDocumentRecovery } from "./study-document-recovery";
 
-const formatIcons = { pdf: Pdf01Icon, epub: Book02Icon, text: TextIcon };
+const studyFileTypes = /\.(pdf|epub|txt|text|md|markdown|mdx)$/i;
+const studyMimeTypes = new Set(["application/pdf", "application/epub+zip", "text/plain", "text/markdown"]);
+const isStudyFile = (file: File) => studyFileTypes.test(file.name) || studyMimeTypes.has(file.type);
 
 export function StudyLibrary({
   books,
+  highlights,
+  notebookTitles,
   notebookId,
   vaultId,
   openBook,
 }: {
   books: StudyBook[];
+  highlights: StudyRecordOf<"highlight">[];
+  notebookTitles: ReadonlyMap<string, string>;
   notebookId: string | null;
   vaultId: string;
   openBook: (book: StudyBook) => void;
 }) {
-  const { t } = useTranslation("home");
+  const { t, i18n } = useTranslation("home");
   const { t: tNotes } = useTranslation("notes");
   const { t: tCommon } = useTranslation();
   const { t: tSources } = useTranslation("sources");
@@ -59,6 +66,7 @@ export function StudyLibrary({
   const [deleting, setDeleting] = useState<StudyBook | null>(null);
   const [editing, setEditing] = useState<StudyBook | null>(null);
   const [drafting, setDrafting] = useState<string>();
+  const [dragging, setDragging] = useState(false);
   const recovery = useStudyDocumentRecovery({ id: studyDocumentDraftId({ vaultId }), vaultId });
   const sources = useSources(notebookId ?? "");
   const studied = new Set(books.map(({ sourceId }) => sourceId));
@@ -107,12 +115,46 @@ export function StudyLibrary({
     if (last && currentVaultId() === vaultId) openBook(last);
   }
 
+  function dropFiles(list: FileList) {
+    const files = Array.from(list);
+    const accepted = files.filter(isStudyFile);
+    for (const file of files)
+      if (!accepted.includes(file)) toast.error(t("study.library.unsupported", { name: file.name }));
+    if (accepted.length) void importBooks(accepted);
+  }
+
+  const canImport = !notebookId;
+  const percent = new Intl.NumberFormat(i18n.language, { style: "percent" });
+  const highlightCounts = new Map<string, number>();
+  for (const { bookId } of highlights) highlightCounts.set(bookId, (highlightCounts.get(bookId) ?? 0) + 1);
+
   return (
-    <section className="space-y-5" aria-labelledby="study-library">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 id="study-library" className="text-xl font-semibold tracking-tight">
-          {t("study.tabs.library")}
-        </h2>
+    <section
+      className="space-y-5"
+      aria-labelledby="study-library"
+      onDragOver={(event) => {
+        if (!canImport || loading || !event.dataTransfer.types.includes("Files")) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+        setDragging(true);
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+      }}
+      onDrop={(event) => {
+        if (!canImport || loading || !event.dataTransfer.files.length) return;
+        event.preventDefault();
+        setDragging(false);
+        dropFiles(event.dataTransfer.files);
+      }}
+    >
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">{t("study.tabs.library")}</p>
+          <h2 id="study-library" className="text-2xl font-semibold tracking-tight">
+            {t("study.library.shelfTitle")}
+          </h2>
+        </div>
         {notebookId ? null : (
           <div className="flex flex-wrap gap-2">
             <Link
@@ -140,7 +182,7 @@ export function StudyLibrary({
             </Button>
             <Button shape="pill" onClick={() => input.current?.click()} disabled={loading}>
               <Icon icon={FileImportIcon} />
-              {t(loading ? "study.library.importing" : "study.library.import")}
+              {t(loading ? "study.library.importing" : "study.library.addBook")}
             </Button>
             <input
               ref={input}
@@ -168,29 +210,39 @@ export function StudyLibrary({
           aria-label={t("study.library.search")}
         />
       ) : null}
-      {matches.length ? (
-        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {matches.map((book) => (
-            <Card as="li" size="sm" key={book.id} className="min-w-0 shadow-none">
-              <Card.Header>
-                <Card.Title as="h3">
-                  <button
-                    type="button"
-                    className="flex w-full min-w-0 cursor-pointer items-center gap-3 rounded-xl text-start outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-                    onClick={() => openBook(book)}
-                  >
-                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground">
-                      <Icon icon={formatIcons[book.format]} size={18} />
-                    </span>
-                    <span className="truncate" dir="auto">
+      {matches.length || (canImport && !query) ? (
+        <ul className="grid grid-cols-2 gap-x-5 gap-y-7 sm:grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]">
+          {matches.map((book) => {
+            const byline = notebookTitles.get(book.notebookId);
+            const shownByline = byline && byline.trim() !== book.title.trim() ? byline : undefined;
+            const position = studyReadingProgress(book);
+            const shown = position < 1 ? Math.min(0.99, position) : 1;
+            const count = highlightCounts.get(book.id) ?? 0;
+            return (
+              <li key={book.id} className="flex min-w-0 flex-col gap-2">
+                <button
+                  type="button"
+                  aria-label={t("study.today.openBook", { title: book.title })}
+                  className="cursor-pointer rounded-e-xl outline-none transition-transform hover:-translate-y-1 focus-visible:ring-[3px] focus-visible:ring-ring/40 motion-reduce:transition-none"
+                  onClick={() => openBook(book)}
+                >
+                  <StudyBookCover book={book} byline={shownByline} className="w-full" />
+                </button>
+                <div className="flex min-w-0 items-start gap-1">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="truncate text-sm font-semibold" dir="auto">
                       {book.title}
-                    </span>
-                  </button>
-                </Card.Title>
-                <Card.Action>
+                    </h3>
+                    <p className="truncate text-xs text-muted-foreground" dir="auto">
+                      {shownByline ??
+                        (book.sections.some((section) => section.markdown !== undefined)
+                          ? "Markdown"
+                          : book.format.toUpperCase())}
+                    </p>
+                  </div>
                   <Menu>
                     <Menu.Trigger
-                      render={<Button variant="ghost" shape="pill" size="icon-sm" />}
+                      render={<Button variant="ghost" shape="pill" size="icon-sm" className="-me-1.5 shrink-0" />}
                       aria-label={t("study.library.options", { title: book.title })}
                     >
                       <Icon icon={MoreHorizontalIcon} />
@@ -206,29 +258,42 @@ export function StudyLibrary({
                       </Menu.Item>
                     </Menu.Content>
                   </Menu>
-                </Card.Action>
-              </Card.Header>
-              <Card.Content className="flex flex-col gap-2">
+                </div>
+                <StudyProgressBar className="h-1" value={shown} label={t("study.library.progress")} />
                 <p className="text-xs text-muted-foreground">
-                  {t("study.library.position", {
-                    format: book.sections.some((section) => section.markdown !== undefined)
-                      ? "Markdown"
-                      : book.format.toUpperCase(),
-                    current: book.section + 1,
-                    total: book.sections.length,
-                  })}
+                  {position > 0
+                    ? t("study.library.shelfMeta", {
+                        percent: percent.format(shown),
+                        highlights: t("study.today.counts.highlights", { count }),
+                      })
+                    : count
+                      ? t("study.library.notStartedWithHighlights", {
+                          highlights: t("study.today.counts.highlights", { count }),
+                        })
+                      : t("study.library.notStarted")}
                 </p>
-                {book.sections.length > 1 ? (
-                  <progress
-                    className="h-1 w-full appearance-none overflow-hidden rounded-full bg-muted [&::-moz-progress-bar]:bg-primary/70 [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-primary/70"
-                    max={book.sections.length}
-                    value={book.section + 1}
-                    aria-label={t("study.library.progress")}
-                  />
-                ) : null}
-              </Card.Content>
-            </Card>
-          ))}
+              </li>
+            );
+          })}
+          {canImport && !query ? (
+            <li className="min-w-0">
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => input.current?.click()}
+                className={cn(
+                  "flex aspect-[2/3] w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-4 text-center text-muted-foreground outline-none transition-colors hover:border-foreground/40 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:cursor-progress",
+                  dragging && "border-primary bg-muted/60 text-foreground",
+                )}
+              >
+                <Icon icon={FileImportIcon} size={22} />
+                <span className="text-sm font-medium">
+                  {t(loading ? "study.library.importing" : dragging ? "study.library.dropHere" : "study.library.addBook")}
+                </span>
+                <span className="text-xs">{t("study.library.formats")}</span>
+              </button>
+            </li>
+          ) : null}
         </ul>
       ) : null}
       {unreadMatches.length ? (
@@ -271,6 +336,8 @@ export function StudyLibrary({
         <p role="status" className="text-sm text-muted-foreground">
           {tCommon("status.loading")}
         </p>
+      ) : !matches.length && !unreadMatches.length && canImport && !query ? (
+        <p className="text-sm text-muted-foreground">{t("study.library.emptyDescription")}</p>
       ) : !matches.length && !unreadMatches.length ? (
         <div className="flex flex-col items-center gap-3 px-6 py-14 text-center">
           <span className="grid size-14 place-items-center rounded-2xl bg-muted text-muted-foreground">

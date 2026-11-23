@@ -1,26 +1,28 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
+import { Link, useLocation, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { StudyOriginLink } from "./study-origin-link";
-import { StudyFollowUps } from "./study-follow-ups";
-import { StudyActivity } from "./study-activity";
-import { isFocusedStudyReader, originHref, queryIndex, studyHighlightOrigin, studyHref, studyVisualFromReader } from "@/lib/study/links";
+import {
+  isFocusedStudyReader,
+  originHref,
+  queryIndex,
+  studyCollectionHref,
+  studyHref,
+  studyLocation,
+  studyTabs as tabs,
+  studyVisualFromReader,
+  type StudyTab as Tab,
+} from "@/lib/study/links";
 import { tutorBookOrigin } from "@/lib/study/passages";
 import { captureStudyImage, type StudyImageCapture } from "@/lib/study/visual-card";
-import { difficultStudyItems, studyHighlightPreview, studyReviewFeedback } from "@/lib/study/recall";
-import { studyReadingProgress } from "@/lib/study/reading-progress";
-import { studyActivityGroups } from "@/lib/study/activity";
-import { studyReportKey } from "@/lib/study/reports";
+import { studyHighlightPreview } from "@/lib/study/recall";
 import { scanDraftId } from "@/lib/study/ocr-write";
+import { studyCollection } from "@/lib/study/collection";
 import {
+  dailyReview,
   directReviewSession,
-  pendingReviewLearning,
   reviewCollection,
-  reviewQueue,
   reviewSelection,
-  savedReview,
-  studyCardsInScope,
   type ReviewTutorFeedback,
 } from "@/lib/study/review-session";
 import { studyReturnState, tutorReturnState } from "@/lib/study/return-links";
@@ -28,7 +30,6 @@ import { studyVaultIndex } from "@/lib/study/vault";
 import { studyTextRevision } from "@/lib/study/text-edits";
 import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/panelui/button";
-import { Card } from "@/components/panelui/card";
 import { Tabs } from "@/components/panelui/tabs";
 import { SettingsSheet } from "@/components/settings/settings-sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -45,22 +46,16 @@ import { useOutput } from "@/lib/db/outputs";
 import { useSourceTitles } from "@/lib/db/sources";
 import { currentVaultId, DEFAULT_VAULT, setCurrentVault } from "@/lib/db/vaults";
 import type { Notebook, Vault } from "@/lib/db/types";
-import {
-  studyRatings,
-  type StudyBook,
-  type StudyRecord,
-  type StudyThread,
-} from "@/lib/study/records";
+import { studyHighlightColor, type StudyBook, type StudyThread } from "@/lib/study/records";
+import { StudyCollection, type StudyCollectionChip } from "./study-collection";
 import { StudyLibrary } from "./study-library";
+import { StudyOriginLink } from "./study-origin-link";
 import { StudyReader } from "./study-reader";
-import { CardLibrary, HighlightsLibrary, StudyReview } from "./study-review";
-import { VocabularyLibrary } from "./study-vocabulary";
+import { StudyReview } from "./study-review";
+import { DailyStudy } from "./study-today";
 import { StudyTutor, TutorIndex } from "./study-tutor";
 import { useStudyClock } from "./use-study-clock";
 import { useStudyReaderFullscreen } from "./use-study-reader-fullscreen";
-
-const tabs = ["today", "library", "cards", "review", "highlights", "vocabulary", "tutor"] as const;
-type Tab = (typeof tabs)[number];
 
 const wideReaderQuery = "(min-width: 64rem)";
 const wideReader = () => window.matchMedia(wideReaderQuery).matches;
@@ -68,375 +63,6 @@ function subscribeReaderWidth(listener: () => void) {
   const query = window.matchMedia(wideReaderQuery);
   query.addEventListener("change", listener);
   return () => query.removeEventListener("change", listener);
-}
-
-function DailyStudy({
-  rows,
-  books,
-  vaultId,
-  go,
-  read,
-  teachBack,
-  practice,
-  openingPractice,
-}: {
-  rows: StudyRecord[];
-  books: StudyBook[];
-  vaultId: string;
-  go: (tab: Tab, params?: Record<string, string>) => void;
-  read: (book: StudyBook) => void;
-  teachBack: (book: StudyBook) => void;
-  practice: (kind: "card" | "highlight", ids: string[], feedback?: ReviewTutorFeedback) => void;
-  openingPractice: boolean;
-}) {
-  const { t } = useTranslation("home");
-  const navigate = useNavigate();
-  const [expanded, setExpanded] = useState({ card: false, highlight: false });
-  const reviewable = rows.filter((row) => row.kind === "card" || row.kind === "highlight");
-  const now = useStudyClock(reviewable);
-  const today = new Date(now);
-  today.setHours(0, 0, 0, 0);
-  const sessions = rows.filter((item) => item.kind === "session");
-  const threads = rows.filter((item) => item.kind === "thread");
-  const threadIds = new Set(threads.map(({ id }) => id));
-  const recentReport = threads
-    .flatMap((thread) => (thread.report ? [{ thread, report: thread.report }] : []))
-    .sort(
-      (a, b) =>
-        (b.report.generatedAt ?? b.thread.updatedAt) - (a.report.generatedAt ?? a.thread.updatedAt),
-    )[0];
-  const activity = sessions.filter((item) => item.updatedAt >= today.getTime());
-  const dueCards = rows.filter((item) => item.kind === "card" && item.schedule.dueAt <= now).length;
-  const dueHighlights = rows.filter(
-    (item) => item.kind === "highlight" && item.schedule.dueAt <= now,
-  ).length;
-  const difficult = difficultStudyItems(reviewable, sessions);
-  const paused = savedReview(vaultId);
-  const pausedItems = paused
-    ? reviewCollection(
-        rows,
-        new URLSearchParams(paused.path.split("?", 2)[1]),
-        paused.state.studyReviewIds,
-      )
-    : [];
-  const resume =
-    paused &&
-    (reviewQueue(pausedItems, paused.snapshot.practiced, now).length > 0 ||
-      (!paused.snapshot.practiced &&
-        pendingReviewLearning(pausedItems, sessions, paused.state.studyReviewSession, now).length > 0))
-      ? paused
-      : undefined;
-  const lastRead =
-    books
-      .filter((entry) => entry.lastReadAt !== undefined)
-      .toSorted((a, b) => (b.lastReadAt ?? 0) - (a.lastReadAt ?? 0))[0] ?? books[0];
-  const dates = new Set(sessions.map((item) => new Date(item.updatedAt).toDateString()));
-  let streak = 0;
-  const cursor = new Date(today);
-  if (!dates.has(cursor.toDateString())) cursor.setDate(cursor.getDate() - 1);
-  while (dates.has(cursor.toDateString())) {
-    streak++;
-    cursor.setDate(cursor.getDate() - 1);
-  }
-
-  return (
-    <section className="max-w-4xl space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-semibold">Today</h2>
-          <p className="text-sm text-muted-foreground">
-            {new Intl.DateTimeFormat(undefined, { dateStyle: "full" }).format(today)}
-          </p>
-        </div>
-        {streak ? (
-          <p className="text-sm font-medium">{t("study.today.streak", { count: streak })}</p>
-        ) : null}
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {resume ? (
-          <Button onClick={() => void navigate(resume.path, { state: resume.state })}>
-            {t("study.today.resumeReview")}
-          </Button>
-        ) : null}
-        {dueCards ? (
-          <Button variant={resume ? "outline" : "default"} onClick={() => go("review")}>
-            {t("study.today.cardsDue", { count: dueCards })}
-          </Button>
-        ) : null}
-        {dueHighlights ? (
-          <Button
-            variant={resume || dueCards ? "outline" : "default"}
-            onClick={() => go("review", { kind: "highlights" })}
-          >
-            {t("study.today.highlightsDue", { count: dueHighlights })}
-          </Button>
-        ) : null}
-        <Button
-          variant={resume || dueCards || dueHighlights ? "outline" : "default"}
-          onClick={() => (lastRead ? read(lastRead) : go("library"))}
-        >
-          {lastRead ? t("study.today.resumeReading") : "Add a document"}
-        </Button>
-        {lastRead?.sections[lastRead.section]?.text.trim() ? (
-          <Button variant="outline" onClick={() => teachBack(lastRead)}>
-            Teach it back
-          </Button>
-        ) : null}
-        {recentReport ? (
-          <StudyOriginLink
-            label={t("study.followUps.lastReport")}
-            origin={{
-              kind: "report",
-              threadId: recentReport.thread.id,
-              reportId: studyReportKey(recentReport.report),
-            }}
-          />
-        ) : null}
-      </div>
-      <StudyFollowUps threads={threads} today={today.getTime()} vaultId={vaultId} />
-      {activity.length ? (
-        <div className="grid gap-3 sm:grid-cols-3">
-          {(["reading", "review", "speaking"] as const).map((key) => {
-            const seconds = activity
-              .filter((item) => item.activity === key)
-              .reduce((n, item) => n + item.seconds, 0);
-            return (
-              <Card size="sm" key={key}>
-                <Card.Content>
-                  <p className="text-sm text-muted-foreground">{t(`study.today.activity.${key}`)}</p>
-                  <p className="mt-1 text-xl font-semibold tabular-nums">
-                    {seconds > 0 && seconds < 60
-                      ? t("study.today.underMinute")
-                      : t("study.today.minutes", { count: Math.floor(seconds / 60) })}
-                  </p>
-                </Card.Content>
-              </Card>
-            );
-          })}
-        </div>
-      ) : null}
-      {lastRead ? (
-        <div className="rounded-2xl border p-4">
-          <p className="text-sm text-muted-foreground">Last opened</p>
-          <p className="mt-1 font-medium" dir="auto">
-            {lastRead.title}
-          </p>
-          <p className="text-sm text-muted-foreground">
-            {lastRead.sections[lastRead.section]?.title}
-          </p>
-        </div>
-      ) : null}
-      {difficult.length ? (
-        <Card size="sm">
-          <Card.Header>
-            <Card.Title>{t("study.recall.needsPractice")}</Card.Title>
-          </Card.Header>
-          <Card.Content className="space-y-3 divide-y">
-            {(["card", "highlight"] as const).map((kind) => {
-              const entries = difficult.filter(({ item }) => item.kind === kind);
-              if (!entries.length) return null;
-              const isHighlight = kind === "highlight";
-              return (
-                <div key={kind} className="space-y-2 pb-3 last:pb-0">
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => go("review", isHighlight ? { mode: "weak", kind: "highlights" } : { mode: "weak" })}
-                    >
-                      {t(
-                        isHighlight ? "study.recall.practiceWeakHighlights" : "study.recall.practiceWeakCards",
-                        { count: entries.length },
-                      )}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={openingPractice}
-                      onClick={() => practice(kind, entries.map(({ item }) => item.id))}
-                    >
-                      {isHighlight
-                        ? t("study.highlights.discuss", { count: entries.length })
-                        : t("study.recall.tutorAction")}
-                    </Button>
-                  </div>
-                  <ul className="divide-y">
-                    {(expanded[kind] ? entries : entries.slice(0, 3)).map(({ item, rating, attempt }) => {
-                      const origin = item.kind === "highlight" ? studyHighlightOrigin(item) : item.origin;
-                      const prompt = item.kind === "highlight"
-                        ? item.cue || studyHighlightPreview(item.quote)
-                        : item.front;
-                      const feedbackLabel = attempt && t(threadIds.has(attempt.threadId)
-                        ? "study.recall.continueTutorFeedback" : "study.recall.tutorFeedback");
-                      return (
-                        <li
-                          key={item.id}
-                          className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 py-2 text-sm"
-                        >
-                          <span dir="auto" className="min-w-0 flex-1 wrap-break-word">
-                            {prompt}
-                          </span>
-                          <span className="text-muted-foreground">{t(`study.recall.rating.${rating}`)}</span>
-                          {origin ? <StudyOriginLink origin={origin} /> : null}
-                          {attempt && feedbackLabel ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              disabled={openingPractice}
-                              aria-label={t("study.recall.feedbackFor", { action: feedbackLabel, prompt })}
-                              onClick={() => practice(kind, [item.id], studyReviewFeedback(t, item, attempt))}
-                            >
-                              {feedbackLabel}
-                            </Button>
-                          ) : null}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  {entries.length > 3 ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      aria-expanded={expanded[kind]}
-                      onClick={() => setExpanded((value) => ({ ...value, [kind]: !value[kind] }))}
-                    >
-                      {t(expanded[kind] ? "study.recall.showFewerDifficult" : "study.recall.showMoreDifficult", {
-                        count: entries.length - 3,
-                      })}
-                    </Button>
-                  ) : null}
-                </div>
-              );
-            })}
-          </Card.Content>
-        </Card>
-      ) : null}
-      {rows.length ? <StudyProgress rows={rows} books={books} now={now} vaultId={vaultId} /> : null}
-      <StudyActivity rows={rows} sessions={sessions} />
-    </section>
-  );
-}
-
-function StudyProgress({
-  rows,
-  books,
-  now,
-  vaultId,
-}: {
-  rows: StudyRecord[];
-  books: StudyBook[];
-  now: number;
-  vaultId: string;
-}) {
-  const { t, i18n } = useTranslation("home");
-  const cutoff = new Date(now);
-  cutoff.setHours(0, 0, 0, 0);
-  cutoff.setDate(cutoff.getDate() - 29);
-  const cards = rows.filter((item) => item.kind === "card");
-  const currentCards = new Set(cards.map((item) => item.id));
-  const sessions = rows
-    .filter((item) => item.kind === "session")
-    .filter((item) => item.updatedAt >= cutoff.getTime());
-  const reviews = sessions.filter((item) => item.activity === "review");
-  const speaking = sessions.filter((item) => item.activity === "speaking");
-  const recentRecall = reviews
-    .filter((item) => item.rating && item.itemId && currentCards.has(item.itemId))
-    .slice(0, 20);
-  const totals = [
-    { label: "Flashcards", value: cards.length, tab: "cards" },
-    { label: "Documents", value: books.length, tab: "library" },
-    {
-      label: "Highlights",
-      value: rows.filter((item) => item.kind === "highlight").length,
-      tab: "highlights",
-    },
-    {
-      label: "Reviews",
-      value: reviews.reduce((total, item) => total + item.count, 0),
-      tab: "review",
-    },
-    {
-      label: "Speaking sessions",
-      value: studyActivityGroups(speaking).length,
-      tab: "tutor",
-    },
-    {
-      label: "Speaking minutes",
-      value: Math.round(speaking.reduce((total, item) => total + item.seconds, 0) / 60),
-      tab: "tutor",
-    },
-  ];
-  const reading = books
-    .filter((book) => book.lastReadAt !== undefined || book.readingPlace || book.section > 0)
-    .toSorted((a, b) => (b.lastReadAt ?? 0) - (a.lastReadAt ?? 0));
-  const percent = new Intl.NumberFormat(i18n.language, { style: "percent" });
-  return (
-    <section className="space-y-3" aria-label="Study progress">
-      <h3 className="font-semibold">Study progress</h3>
-      <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border bg-border sm:grid-cols-3">
-        {totals.map(({ label, value, tab }, index) => (
-          <div key={label} className="space-y-1 bg-card p-3">
-            <dt className="text-sm text-muted-foreground">
-              <Link to={studyHref(tab, { vault: vaultId })} className="hover:underline">
-                {label}
-              </Link>
-            </dt>
-            <dd className="text-lg font-semibold tabular-nums">{value}</dd>
-            {index >= 3 ? <p className="text-xs text-muted-foreground">Last 30 days</p> : null}
-          </div>
-        ))}
-      </dl>
-      {recentRecall.length ? (
-        <div className="space-y-2 rounded-xl border p-3 text-sm">
-          <h4 className="font-medium">
-            {t("study.today.recentRecall", { count: recentRecall.length })}
-          </h4>
-          <ul className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
-            {studyRatings.map((rating) => (
-              <li key={rating}>
-                {recentRecall.filter((item) => item.rating === rating).length} {rating}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-      {reading.length ? (
-        <div className="space-y-2 rounded-xl border p-3">
-          <h4 className="text-sm font-medium">{t("study.today.readingProgress")}</h4>
-          <ul className="space-y-3">
-            {reading.map((book) => {
-              const position = studyReadingProgress(book);
-              const display = position < 1 ? Math.min(0.99, position) : 1;
-              const progress = percent.format(display);
-              return (
-                <li key={book.id} className="space-y-1">
-                  <div className="flex items-center justify-between gap-2 text-sm">
-                    <Link
-                      dir="auto"
-                      to={studyHref("library", { book: book.id, vault: vaultId })}
-                      className="min-w-0 wrap-break-word hover:underline"
-                    >
-                      {book.title}
-                    </Link>
-                    <span aria-hidden="true" className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                      {progress}
-                    </span>
-                  </div>
-                  <progress
-                    max={1}
-                    value={display}
-                    aria-label={t("study.today.readingProgressFor", { title: book.title })}
-                    aria-valuetext={progress}
-                    className="block h-1 w-full accent-primary"
-                  />
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ) : null}
-    </section>
-  );
 }
 
 export default function StudyWorkspace({
@@ -466,7 +92,7 @@ export default function StudyWorkspace({
   const sideBySide = useSyncExternalStore(subscribeReaderWidth, wideReader, () => false);
   const saved = useStudyRecords();
   const notes = useNotes();
-  const tab: Tab = tabs.find((entry) => entry === params.get("tab")) ?? "today";
+  const { tab, filter: collectionFilter } = studyLocation(params);
   const requestedReaderTutor = tab === "library" ? params.get("readerTutor") : null;
   const tutoring = tab === "tutor" || Boolean(requestedReaderTutor);
   const [directReviewId] = useState(() => {
@@ -583,13 +209,45 @@ export default function StudyWorkspace({
   const reviewingVocabulary = params.get("kind") === "vocabulary";
   const weakMode = tab === "review" && params.get("mode") === "weak";
   const practiceMode = tab === "review" && params.get("mode") === "practice";
-  const filteredCards = studyCardsInScope(cards, params, book, thread?.id ?? null);
   const reviewSessionId =
     selection?.studyReviewSession ?? (location.key === "default" ? directReviewId : location.key);
-  const filteredHighlights = book
-    ? highlights.filter((item) => item.bookId === book.id)
-    : highlights;
+  const now = useStudyClock([...cards, ...highlights]);
+  const dueNow = dailyReview(rows, now).due.length;
+  const collected = tab === "collection" ? studyCollection(rows, params) : undefined;
+  const lastRead =
+    books.filter((entry) => entry.lastReadAt !== undefined).toSorted((a, b) => (b.lastReadAt ?? 0) - (a.lastReadAt ?? 0))[0];
   const bookFilter = book ? { book: book.id } : undefined;
+  const reviewKind = params.get("kind");
+  const reviewScope: Record<string, string> = {
+    ...bookFilter,
+    ...reportFilter,
+    ...answerFilter,
+    ...noteFilter,
+    ...(notebookId ? { notebook: notebookId } : {}),
+    ...(output ? { output } : {}),
+    ...(cardId ? { card: cardId } : {}),
+  };
+  const highlightColor = studyHighlightColor.safeParse(params.get("color")).data;
+  const collectionChips: StudyCollectionChip[] = [
+    book ? { key: "book", label: book.title } : undefined,
+    notebookId
+      ? { key: "notebook", label: notebookTitles.get(notebookId) ?? t("study.recall.notebookCards") }
+      : undefined,
+    noteCollection ? { key: "note", label: noteCollection } : undefined,
+    output ? { key: "output", label: t("study.collection.scopes.output") } : undefined,
+    cardId ? { key: "card", label: t("study.collection.scopes.card") } : undefined,
+    reportCollection ? { key: "fromReport", label: reportCollection } : undefined,
+    answerCollection ? { key: fromAnswer !== null ? "fromAnswer" : "fromThread", label: answerCollection } : undefined,
+    highlightColor ? { key: "color", label: t(`study.highlights.colors.${highlightColor}`) } : undefined,
+  ].filter((chip) => chip !== undefined);
+  function changeCollection(update: (query: URLSearchParams) => void) {
+    const query = new URLSearchParams(params);
+    query.set("tab", "collection");
+    if (collectionFilter === "all") query.delete("filter");
+    else query.set("filter", collectionFilter);
+    update(query);
+    setParams(query, { replace: true, state: studyReturnState(location.state) });
+  }
   const libraryScope = notebookId ? { notebook: notebookId } : undefined;
   const readerScope = {
     ...libraryScope,
@@ -828,9 +486,11 @@ export default function StudyWorkspace({
         <DailyStudy
           rows={rows}
           books={books}
+          notebookTitles={notebookTitles}
           vaultId={studyVaultId}
           go={go}
           read={read}
+          askChapter={(item) => void createThread(item, "chapter", item.section)}
           teachBack={(item) =>
             void createThread(item, "chapter", item.section, undefined, "teach-back")
           }
@@ -887,34 +547,49 @@ export default function StudyWorkspace({
         ) : (
           <StudyLibrary
             books={notebookId ? books.filter((item) => item.notebookId === notebookId) : books}
+            highlights={highlights}
+            notebookTitles={notebookTitles}
             notebookId={notebookId}
             vaultId={studyVaultId}
             openBook={read}
           />
         )
       ) : null}
-      {ready && !unavailableBook && tab === "cards" ? (
-        <CardLibrary
-          cards={filteredCards}
-          noteId={collectionNote?.id}
-          tutorAnswer={tutorAnswer}
-          vaultId={studyVaultId}
-          practice={(ids) => void openTutorSelection("card", ids)}
-          openingPractice={openingPractice}
-          filter={
-            answerCollection ??
-            reportCollection ??
-            noteCollection ??
-            book?.title ??
-            (output
-              ? "Studio flashcards"
-              : cardId
-                ? "Selected flashcard"
-                : notebookId
-                  ? t("study.recall.notebookCards")
-                  : undefined)
+      {ready && !unavailableBook && collected ? (
+        <StudyCollection
+          key={studyVaultId}
+          filter={collectionFilter}
+          onFilterChange={(next) =>
+            changeCollection((query) => {
+              if (next === "all") query.delete("filter");
+              else query.set("filter", next);
+            })
           }
-          clearFilter={() => go("cards")}
+          cards={collected.cards}
+          highlights={collected.highlights}
+          words={collected.words}
+          allCards={cards}
+          books={books}
+          vaultId={studyVaultId}
+          chips={collectionChips}
+          clearChip={(key) =>
+            changeCollection((query) => {
+              query.delete(key);
+              if (key === "fromReport" || key === "fromAnswer" || key === "fromThread") query.delete("thread");
+            })
+          }
+          clearChips={() => go("collection", collectionFilter === "all" ? undefined : { filter: collectionFilter })}
+          links={
+            noteId || tutorAnswer ? (
+              <>
+                {noteId ? <StudyOriginLink origin={{ kind: "note", noteId }} label={t("study.recall.backToNote")} /> : null}
+                {tutorAnswer ? (
+                  <StudyOriginLink origin={{ kind: "tutor", ...tutorAnswer }} label={t("study.recall.openTutorAnswer")} />
+                ) : null}
+              </>
+            ) : undefined
+          }
+          focusedWord={params.get("word") ?? undefined}
           creation={
             output || cardId || fromReport || fromAnswer !== null || fromThread || noteId
               ? false
@@ -927,21 +602,29 @@ export default function StudyWorkspace({
                   }
                 : { notebookId: notebookId ?? undefined, vaultId: studyVaultId, tags: [] }
           }
-          review={(ids, practiceOnly) =>
+          review={(kind, ids, practiceOnly) =>
             go(
               "review",
               {
-                ...bookFilter,
-                ...reportFilter,
-                ...answerFilter,
-                ...noteFilter,
-                ...(notebookId ? { notebook: notebookId } : {}),
-                ...(output ? { output } : {}),
-                ...(cardId ? { card: cardId } : {}),
+                ...reviewScope,
+                ...(kind ? { kind } : {}),
                 ...(practiceOnly ? { mode: "practice" } : {}),
               },
               ids,
             )
+          }
+          practiceCards={(ids) => void openTutorSelection("card", ids)}
+          discussHighlights={(ids) => void openTutorSelection("highlight", ids)}
+          openingPractice={openingPractice}
+          locate={(item) =>
+            go("library", { book: item.bookId, page: String(item.section), highlight: item.id })
+          }
+          color={highlightColor}
+          onColorChange={(next) =>
+            changeCollection((query) => {
+              if (next) query.set("color", next);
+              else query.delete("color");
+            })
           }
         />
       ) : null}
@@ -962,68 +645,43 @@ export default function StudyWorkspace({
           initialPractice={weakMode || practiceMode}
           sessionId={reviewSessionId}
           history={rows.filter((row) => row.kind === "session")}
+          continueReading={lastRead}
           collectionSource={studioReturn ?? (tutorAnswer ? {
             href: originHref({ kind: "tutor", ...tutorAnswer }),
             label: t("study.recall.openTutorAnswer"),
           } : undefined)}
           libraryHref={
-            reviewingVocabulary
-              ? studyHref("vocabulary", { vault: studyVaultId })
-              : reviewingHighlights && book
-              ? studyHref("highlights", { book: book.id })
-              : reportFilter || answerFilter
-                ? studyHref("cards", { vault: studyVaultId, ...reportFilter, ...answerFilter })
-                : noteFilter || output || book || notebookId || cardId
-                  ? studyHref("cards", {
-                      ...bookFilter,
-                      ...noteFilter,
-                      output: output ?? undefined,
-                      notebook: notebookId ?? undefined,
-                      card: cardId ?? undefined,
-                      vault: studyVaultId,
-                    })
-                  : undefined
+            reviewingVocabulary || Object.keys(reviewScope).length
+              ? studyCollectionHref(
+                  reviewingHighlights
+                    ? "highlights"
+                    : reviewingVocabulary
+                      ? "words"
+                      : reviewKind === "cards" || noteFilter || output || cardId || reportFilter || answerFilter
+                        ? "cards"
+                        : "all",
+                  { ...reviewScope, vault: studyVaultId },
+                )
+              : undefined
           }
           libraryLabel={reviewingVocabulary ? t("study.vocabulary.open") : undefined}
           collection={
             weakMode
-              ? t(reviewingHighlights ? "study.recall.weakHighlights" : "study.recall.weakSet")
+              ? t(reviewingHighlights ? "study.recall.weakHighlights" : reviewKind === "cards" ? "study.recall.weakSet" : "study.review.weakItems")
               : reviewingVocabulary
-                ? t("study.tabs.vocabulary")
-                : requestedReview
-                ? t(
-                    reviewingHighlights
-                      ? "study.highlights.selection"
-                      : "study.recall.cardSelection",
-                    { count: new Set(requestedReview).size },
-                  )
-                : (answerCollection ?? reportCollection ?? noteCollection ?? book?.title)
+                ? t("study.collection.filters.words")
+                : (answerCollection ?? reportCollection ?? noteCollection ?? book?.title ??
+                  (requestedReview
+                    ? t(
+                        reviewingHighlights
+                          ? "study.highlights.selection"
+                          : reviewKind === "cards"
+                            ? "study.recall.cardSelection"
+                            : "study.review.selection",
+                        { count: new Set(requestedReview).size },
+                      )
+                    : undefined))
           }
-        />
-      ) : null}
-      {ready && !unavailableBook && tab === "highlights" ? (
-        <HighlightsLibrary
-          highlights={filteredHighlights}
-          filter={book?.title}
-          clearFilter={() => go("highlights")}
-          locate={(item) =>
-            go("library", { book: item.bookId, page: String(item.section), highlight: item.id })
-          }
-          review={(ids, practiceOnly) => go("review", {
-            kind: "highlights", ...bookFilter, ...(practiceOnly ? { mode: "practice" } : {}),
-          }, ids)}
-          discuss={(ids) => void openTutorSelection("highlight", ids)}
-          openingTutor={openingPractice}
-        />
-      ) : null}
-      {ready && tab === "vocabulary" ? (
-        <VocabularyLibrary
-          key={params.get("word") ?? "vocabulary"}
-          words={words}
-          cards={cards}
-          vaultId={studyVaultId}
-          focusedWord={params.get("word") ?? undefined}
-          review={(ids) => go("review", { kind: "vocabulary" }, ids)}
         />
       ) : null}
       {ready && tab === "tutor" ? (
@@ -1082,6 +740,12 @@ export default function StudyWorkspace({
         {tabs.map((entry) => (
           <Tabs.Trigger key={entry} value={entry}>
             {t(`study.tabs.${entry}`)}
+            {entry === "review" && dueNow ? (
+              <Tabs.Badge>
+                <span aria-hidden="true">{dueNow}</span>
+                <span className="sr-only">{t("study.tabs.dueCount", { count: dueNow })}</span>
+              </Tabs.Badge>
+            ) : null}
           </Tabs.Trigger>
         ))}
       </Tabs.List>

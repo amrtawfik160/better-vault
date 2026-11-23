@@ -93,6 +93,28 @@ export function studyCardsInScope(
   );
 }
 
+/** Scopes only flashcards can match: a note, a Studio output, one card, a Tutor report, answer or conversation. */
+export function studyCardOnlyScope(params: URLSearchParams) {
+  return ["note", "output", "card", "fromReport", "fromAnswer", "fromThread"].some((name) => params.get(name) !== null);
+}
+
+export function studyHighlightsInScope(
+  highlights: StudyRecordOf<"highlight">[],
+  params: URLSearchParams,
+  book: StudyBook | undefined,
+) {
+  if (studyCardOnlyScope(params)) return [];
+  const notebookId = params.get("notebook");
+  return highlights.filter(
+    (row) => (!book || row.bookId === book.id) && (!notebookId || row.notebookId === notebookId),
+  );
+}
+
+/**
+ * The items a review covers. `kind=highlights` reviews highlights, `kind=cards` flashcards and
+ * `kind=vocabulary` the saved words' cards. With no kind, flashcards (word cards included) and
+ * highlights are reviewed together in one queue.
+ */
 export function reviewCollection(
   rows: StudyRecord[],
   params: URLSearchParams,
@@ -102,32 +124,61 @@ export function reviewCollection(
   const book = rows.find((row): row is StudyBook => row.kind === "book" && row.id === bookId);
   if (bookId && !book) return [];
   const threadId = params.get("thread");
-  const reviewingHighlights = params.get("kind") === "highlights";
+  const kind = params.get("kind");
   const vocabulary =
-    params.get("kind") === "vocabulary"
+    kind === "vocabulary"
       ? new Set(rows.filter((row) => row.kind === "word").map(({ id }) => id))
       : undefined;
-  const items = reviewingHighlights
-    ? rows.filter(
-        (row): row is StudyRecordOf<"highlight"> =>
-          row.kind === "highlight" && (!book || row.bookId === book.id),
-      )
-    : studyCardsInScope(
-        rows.filter(
-          (row): row is StudyRecordOf<"card"> =>
-            row.kind === "card" &&
-            (!vocabulary || (row.origin?.kind === "word" && vocabulary.has(row.origin.wordId))),
-        ),
-        params,
-        book,
-        rows.some((row) => row.kind === "thread" && row.id === threadId) ? threadId : null,
-      );
+  const highlights =
+    kind === "cards" || kind === "vocabulary"
+      ? []
+      : studyHighlightsInScope(
+          rows.filter((row): row is StudyRecordOf<"highlight"> => row.kind === "highlight"),
+          params,
+          book,
+        );
+  const cards =
+    kind === "highlights"
+      ? []
+      : studyCardsInScope(
+          rows.filter(
+            (row): row is StudyRecordOf<"card"> =>
+              row.kind === "card" &&
+              (!vocabulary || (row.origin?.kind === "word" && vocabulary.has(row.origin.wordId))),
+          ),
+          params,
+          book,
+          rows.some((row) => row.kind === "thread" && row.id === threadId) ? threadId : null,
+        );
+  const included = new Set<StudyRecord>([...cards, ...highlights]);
+  const items = rows.filter((row): row is ReviewItem => included.has(row));
   const ids = selection && new Set(selection);
   const byId = ids && new Map(items.map((item) => [item.id, item]));
   const scoped = ids && byId ? [...ids].flatMap((id) => byId.get(id) ?? []) : items;
   if (params.get("mode") !== "weak") return scoped;
   const history = rows.filter((row) => row.kind === "session");
   return difficultStudyItems(scoped, history).map(({ item }) => item);
+}
+
+export type StudyReviewKind = "highlight" | "word" | "card";
+
+/** What a review item is to the learner: a highlight, a saved word's card, or a flashcard. */
+export function studyReviewKind(item: ReviewItem): StudyReviewKind {
+  if (item.kind === "highlight") return "highlight";
+  return item.origin?.kind === "word" ? "word" : "card";
+}
+
+/** The daily review: everything due now in one queue, how many of each kind, and when more come due. */
+export function dailyReview(rows: StudyRecord[], now: number) {
+  const items = reviewCollection(rows, new URLSearchParams());
+  const due = reviewQueue(items, null, now);
+  const counts: Record<StudyReviewKind, number> = { highlight: 0, word: 0, card: 0 };
+  for (const item of due) counts[studyReviewKind(item)]++;
+  let next: number | undefined;
+  for (const { schedule } of items) {
+    if (schedule.dueAt > now && (next === undefined || schedule.dueAt < next)) next = schedule.dueAt;
+  }
+  return { items, due, counts, next };
 }
 
 export function reviewQueue(items: ReviewItem[], practiced: string[] | null, now: number) {
