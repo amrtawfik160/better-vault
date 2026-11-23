@@ -178,7 +178,7 @@ async function readStudyRowsInVault(ids: string[], vaultId: string, thread?: Stu
   return [...rows.values()].filter((row) => scope.owner(row) === vaultId);
 }
 
-async function readStudyCardsInVault(ids: string[], vaultId: string, thread?: StudyThread) {
+export async function readStudyCardsInVault(ids: string[], vaultId: string, thread?: StudyThread) {
   const rows = await readStudyRowsInVault(ids, vaultId, thread);
   const cards = selectedStudyCards(ids, rows.filter((row) => row.kind === "card")).filter(
     ({ front, back }) => front.trim() && back.trim(),

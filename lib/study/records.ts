@@ -237,6 +237,122 @@ const studyReportSchema = studyReportReplySchema.extend({
   languageStatus: z.enum(["not-requested", "insufficient", "reviewed"]).optional(),
 });
 
+/** Who a Practice answer is for: it decides how the answer should be said, not only what it says. */
+export const studyPracticeAudiences = ["technical", "business", "meeting", "interview", "exam", "friend"] as const;
+export const studyPracticeQuestionTypes = ["write", "choice", "recall"] as const;
+export const studyPracticeVerdicts = ["correct", "partial", "incorrect"] as const;
+export const maxPracticeScenario = 500;
+export const maxPracticeLearned = 20_000;
+export const maxPracticeAnswer = 10_000;
+const passageNumber = z.number().int().positive();
+const practiceScore = z.number().int().min(1).max(5);
+const practicePoint = z.object({ text: z.string(), citations: z.array(passageNumber).optional() });
+export const studyPracticeFeedbackSchema = z.object({
+  verdict: z.enum(studyPracticeVerdicts),
+  reason: z.string(),
+  right: z.array(practicePoint),
+  missing: z.array(practicePoint),
+  wrong: z.array(practicePoint),
+  delivery: z.array(z.string()),
+  better: z.string(),
+  scores: z.object({ accuracy: practiceScore, clarity: practiceScore, structure: practiceScore, audience: practiceScore }),
+  language: z.array(z.object({ original: z.string(), suggestion: z.string(), reason: z.string() })),
+  vocabulary: z.array(z.object({ term: z.string(), meaning: z.string(), translation: z.string(), example: z.string() })),
+  /** On a second or later attempt: what changed since the previous one. */
+  progress: z.string().optional(),
+});
+const practiceAttempt = z.object({
+  id: z.string(),
+  at: z.number(),
+  answer: z.string().max(maxPracticeAnswer),
+  choice: index.optional(),
+  /** How many key points were shown as hints before answering. */
+  hints: index.optional(),
+  /** The reference answer was shown before answering. */
+  revealed: z.literal(true).optional(),
+  feedback: studyPracticeFeedbackSchema.optional(),
+  /** For a choice question, the model's short note on why the answer is right. */
+  explanation: z.string().optional(),
+});
+const practiceQuestion = z.object({
+  id: z.string(),
+  type: z.enum(studyPracticeQuestionTypes),
+  prompt: z.string(),
+  choices: z.array(z.string()).optional(),
+  /** The correct choice's position in `choices`. */
+  answer: index.optional(),
+  reference: z.string(),
+  keyPoints: z.array(z.string()),
+  citations: z.array(passageNumber).optional(),
+  /** A soft length for a written answer, in words. */
+  targetWords: index.optional(),
+  attempts: z.array(practiceAttempt),
+});
+/** The text a Practice session was made from, kept so questions and feedback cite the same passages. */
+const practicePassage = z.object({ title: z.string(), text: z.string(), origin: studyOriginSchema.optional() });
+
+/** Teach it back: how well one key idea of the material came across in the learner's explanation. */
+export const studyTeachIdeaStatuses = ["explained", "partial", "wrong", "missing"] as const;
+export const maxTeachExplanation = 20_000;
+const teachIdea = z.object({
+  title: z.string(),
+  /** A short quote from the material that states the idea. */
+  quote: z.string(),
+  citations: z.array(passageNumber).optional(),
+  status: z.enum(studyTeachIdeaStatuses),
+  note: z.string(),
+});
+export const studyTeachAnalysisSchema = z.object({
+  ideas: z.array(teachIdea),
+  misconceptions: z.array(
+    z.object({ said: z.string(), source: z.string(), why: z.string(), citations: z.array(passageNumber).optional() }),
+  ),
+  /** Advice on how the explanation was taught: structure, order, examples, jargon, concision. */
+  teaching: z.array(z.string()),
+  summary: z.string(),
+  /** How accurate what the learner said was, 1 to 5. */
+  accuracy: practiceScore,
+  /** From the second round: what improved and what is still missing. */
+  progress: z.string().optional(),
+  language: studyPracticeFeedbackSchema.shape.language,
+  vocabulary: studyPracticeFeedbackSchema.shape.vocabulary,
+});
+const teachRound = z.object({
+  id: z.string(),
+  at: z.number(),
+  explanation: z.string().max(maxTeachExplanation),
+  analysis: studyTeachAnalysisSchema.optional(),
+  /** The probing questions the analysis asked, answered and graded like Practice questions. */
+  questions: z.array(practiceQuestion),
+});
+
+const practiceSessionSchema = base.extend({
+  kind: z.literal("practice"),
+  /** `questions` (the default): answer generated questions. `teach`: explain the material in rounds. */
+  mode: z.enum(["questions", "teach"]).optional(),
+  rounds: z.array(teachRound).optional(),
+  title: z.string(),
+  createdAt: z.number(),
+  audience: z.enum(studyPracticeAudiences),
+  scenario: z.string().max(maxPracticeScenario).optional(),
+  material: z.object({
+    /** What the learner picked, for the session's links and saved cards. */
+    origins: z.array(studyOriginSchema),
+    /** The learner's own "what I learned" text. */
+    learned: z.string().max(maxPracticeLearned).optional(),
+    label: z.string().optional(),
+    /** The material was longer than one request takes: the passages are spread across it, with an outline. */
+    sampled: z.literal(true).optional(),
+  }),
+  passages: z.array(practicePassage),
+  types: z.array(z.enum(studyPracticeQuestionTypes)).min(1),
+  questions: z.array(practiceQuestion),
+  /** The question the learner was on. */
+  position: index.optional(),
+  /** The session whose weak questions this one retries. */
+  retryOf: z.string().optional(),
+});
+
 const visualOf = <K extends VisualKind>(kind: K) =>
   z.object({ kind: z.literal(kind), data: visualSchemas[kind] });
 /** A Tutor visual: one of the chat's visual kinds, checked by the same schema. */
@@ -255,6 +371,7 @@ export type StudyVisual = z.infer<typeof studyVisualSchema>;
 export const studyRecordSchema = z.discriminatedUnion("kind", [
   studyDocumentDraftSchema,
   studyOcrDraftSchema,
+  practiceSessionSchema,
   base.extend({
     kind: z.literal("book"),
     notebookId: z.string(),
@@ -404,6 +521,18 @@ export type StudyOcrDraftWrite = Pick<StudyOcrDraft, "bookId" | "fileId" | "vers
 export type StudyOcrWrite = { bookId: string; fileId: string; pages: StudyOcrPage[]; updatedAt: number; draftVersion?: string };
 export type StudyOcrWriteResult = "saved" | "conflict" | "limit";
 export type StudyThread = StudyRecordOf<"thread">;
+export type StudyPractice = StudyRecordOf<"practice">;
+export type StudyPracticeAudience = StudyPractice["audience"];
+export type StudyPracticeQuestion = StudyPractice["questions"][number];
+export type StudyPracticeQuestionType = StudyPracticeQuestion["type"];
+export type StudyPracticeAttempt = StudyPracticeQuestion["attempts"][number];
+export type StudyPracticeFeedback = z.infer<typeof studyPracticeFeedbackSchema>;
+export type StudyPracticeVerdict = StudyPracticeFeedback["verdict"];
+export type StudyPracticePassage = StudyPractice["passages"][number];
+export type StudyTeachRound = NonNullable<StudyPractice["rounds"]>[number];
+export type StudyTeachAnalysis = z.infer<typeof studyTeachAnalysisSchema>;
+export type StudyTeachIdea = StudyTeachAnalysis["ideas"][number];
+export type StudyTeachIdeaStatus = StudyTeachIdea["status"];
 export type StudyTutorDraft = z.infer<typeof studyTutorDraftSchema>;
 export type StudyTutorDraftChange =
   | { kind: "save"; draft: StudyTutorDraft }
