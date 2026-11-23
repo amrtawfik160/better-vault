@@ -35,6 +35,7 @@ import {
   type ReaderPanelTab,
   type ReaderTutor,
 } from "./study-reader-panel";
+import type { ReaderChatSeed, ReaderQuote } from "./reader-chat";
 import { ReaderTip } from "./study-reader-tip";
 import { StudySelectionMenu, type SelectionMenuHandle, type StudySelection } from "./study-selection-menu";
 import { highlightColors } from "./study-highlight-colors";
@@ -309,6 +310,8 @@ export function StudyReader({
   const [searchOpen, setSearchOpen] = useState(false);
   const tutorShown = tutor?.visible ? tutor.thread.id : undefined;
   const [panel, setPanel] = useState<ReaderPanelTab | null>(tutorShown ? "ai" : null);
+  const [chatQuote, setChatQuote] = useState<ReaderQuote>();
+  const [chatSeed, setChatSeed] = useState<ReaderChatSeed>();
   const [shownTutor, setShownTutor] = useState(tutorShown);
   // Set while the Ask AI panel goes back from a conversation to the list, so it stays open.
   const [listingConversations, setListingConversations] = useState(false);
@@ -1027,22 +1030,28 @@ export function StudyReader({
     toast.success(t("study.selection.noteSaved"));
   }
 
+  /** Sends a passage to Ask AI in the side panel: asked about next, or an explanation carried on. */
+  function askInPanel(quote: ReaderQuote, explanation?: string) {
+    if (explanation) setChatSeed({ id: crypto.randomUUID(), quote, explanation });
+    else setChatQuote(quote);
+    if (tutor) conversations.leave();
+    setPanel("ai");
+  }
+
   function ask() {
-    if (!selection || openingTutor) return;
-    startChat("passage", index, selection);
-    closeSelection();
+    if (!selection) return;
+    askInPanel({ text: selection.text, section: index + 1 });
+    closeSelection(false);
   }
 
+  /** Discussing opens Ask AI beside the page, which reads the rest of the book itself; Teach it back is a tutor session. */
   function discuss(what: "chapter" | "book" | "teach-back") {
-    if (what === "book") startChat("book", index);
-    else startChat("chapter", index, undefined, what === "teach-back" ? "teach-back" : undefined);
-  }
-
-  function highlightSelection(item: Highlight): Selection {
-    const at = locateStudyMark(book, item);
-    return at < 0
-      ? { text: item.quote, offset: item.offset, revision: item.revision ?? revision }
-      : { text: item.quote, offset: at, revision };
+    if (what === "teach-back") {
+      startChat("chapter", index, undefined, "teach-back");
+      return;
+    }
+    if (tutor) conversations.leave();
+    setPanel("ai");
   }
 
   const originalDownload = fileId && originalFile
@@ -1541,11 +1550,8 @@ export function StudyReader({
                 if (body === undefined) closeSelection();
               }}
               onContinueExplain={(answer) => {
-                startChat("passage", index, selection, undefined, [
-                  { role: "user", text: t("study.reader.explainPassage") },
-                  { role: "assistant", text: answer, citations: [{ index: 1, title: book.title, origin: sourceOf(selection) }] },
-                ]);
-                closeSelection();
+                askInPanel({ text: selection.text, section: index + 1 }, answer);
+                closeSelection(false);
               }}
               onShowWords={() => {
                 closeSelection(false);
@@ -1576,12 +1582,16 @@ export function StudyReader({
             }}
             openingTutor={openingTutor}
             canDiscussPage={hasPageText}
-            canDiscussBook={hasBookText}
+            index={index}
+            chatQuote={chatQuote}
+            clearChatQuote={() => setChatQuote(undefined)}
+            chatSeed={chatSeed}
+            openSection={(section) => go(section - 1)}
             goToHighlight={(item) => {
               if (!wide) setPanel(null);
               navigate(originHref(studyHighlightOrigin(item), readerParams), { state: returnState });
             }}
-            askHighlight={(item) => startChat("passage", item.section, highlightSelection(item))}
+            askHighlight={(item) => askInPanel({ text: item.quote, section: item.section + 1 })}
             discuss={discuss}
             reviewHighlights={reviewHighlights}
             reviewWords={reviewWords}

@@ -19,7 +19,6 @@ import { Textarea } from "@/components/panelui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { removeStudyRecord, studyVocabularyCards, updateStudyReviewItem } from "@/lib/db/study";
 import { notebookChatHref } from "@/lib/study/links";
-import { goalLabel } from "@/lib/study/practice";
 import {
   studyHighlightColor,
   type StudyBook,
@@ -35,6 +34,7 @@ import { cn } from "@/lib/utils";
 import { highlightColors } from "./study-highlight-colors";
 import { StudyMakeFromBook } from "./study-make-from-book";
 import { StudyText } from "./study-text";
+import { ReaderChat, type ReaderChatSeed, type ReaderQuote } from "./reader-chat";
 
 export type ReaderPanelTab = "highlights" | "words" | "make" | "ai";
 type Highlight = StudyRecordOf<"highlight">;
@@ -207,7 +207,11 @@ export function StudyReaderPanel({
   conversations,
   openingTutor,
   canDiscussPage,
-  canDiscussBook,
+  index,
+  chatQuote,
+  clearChatQuote,
+  chatSeed,
+  openSection,
   goToHighlight,
   askHighlight,
   discuss,
@@ -228,7 +232,13 @@ export function StudyReaderPanel({
   conversations: ReaderConversations;
   openingTutor: boolean;
   canDiscussPage: boolean;
-  canDiscussBook: boolean;
+  /** The section on screen, from 0. */
+  index: number;
+  chatQuote?: ReaderQuote;
+  clearChatQuote: () => void;
+  chatSeed?: ReaderChatSeed;
+  /** Opens a section, from 1. */
+  openSection: (section: number) => void;
   goToHighlight: (item: Highlight) => void;
   askHighlight: (item: Highlight) => void;
   discuss: (what: "chapter" | "book" | "teach-back") => void;
@@ -243,7 +253,6 @@ export function StudyReaderPanel({
   const opening = useRef(false);
   const [now] = useState(Date.now);
   const sorted = [...highlights].sort((a, b) => a.section - b.section || a.offset - b.offset);
-  const pageNoun = book.format === "pdf" ? "page" : "chapter";
 
   async function practiseWords() {
     if (opening.current) return;
@@ -407,64 +416,20 @@ export function StudyReaderPanel({
               </section>
             </>
           ) : (
-            <ScrollArea className="min-h-0 flex-1">
-              <div className="flex flex-col gap-5 p-3">
-                <Empty>
-                  <p>{t("study.reader.panel.askHint")}</p>
-                  <div className="flex flex-wrap justify-center gap-1.5">
-                    <Button size="sm" variant="outline" disabled={openingTutor || !canDiscussPage} onClick={() => discuss("chapter")}>
-                      {t(`study.reader.discuss.${pageNoun}`)}
-                    </Button>
-                    <Button size="sm" variant="outline" disabled={openingTutor || !canDiscussBook} onClick={() => discuss("book")}>
-                      {t("study.reader.discuss.book")}
-                    </Button>
-                    <Button size="sm" variant="outline" disabled={openingTutor || !canDiscussPage} onClick={() => discuss("teach-back")}>
-                      {t("study.reader.teachBack")}
-                    </Button>
-                  </div>
-                </Empty>
-                {conversations.threads.length ? (
-                  <section className="flex flex-col gap-1.5" aria-labelledby="reader-conversations">
-                    <h3 id="reader-conversations" className="px-1 text-xs font-medium text-muted-foreground">
-                      {t("study.reader.panel.conversations")}
-                    </h3>
-                    <ul className="flex flex-col gap-1">
-                      {conversations.threads.map((thread) => {
-                        const detail = [
-                          goalLabel(thread, t(`study.goals.labels.${thread.goal}`)),
-                          thread.section === undefined ? undefined : book.sections[thread.section]?.title,
-                        ].filter(Boolean).join(" · ");
-                        return (
-                          <li key={thread.id}>
-                            <button
-                              type="button"
-                              disabled={openingTutor}
-                              onClick={() => conversations.open(thread)}
-                              className="flex w-full min-w-0 cursor-pointer flex-col items-start gap-0.5 rounded-xl px-2.5 py-2 text-start outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-60"
-                            >
-                              <DirectionalText as="span" text={thread.title} className="w-full truncate text-sm font-medium" />
-                              {detail ? (
-                                <span className="w-full truncate text-xs text-muted-foreground" dir="auto">{detail}</span>
-                              ) : null}
-                            </button>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </section>
-                ) : null}
-                <div className="flex flex-col items-start gap-2 rounded-2xl border p-3">
-                  <p className="text-xs text-muted-foreground">{t("study.reader.panel.notebookHint")}</p>
-                  <Link
-                    to={notebookChatHref(book.notebookId)}
-                    className={buttonVariants({ size: "sm", variant: "outline" })}
-                  >
-                    <Icon icon={Chatting01Icon} size={16} />
-                    {t("study.reader.panel.openInNotebook")}
-                  </Link>
-                </div>
-              </div>
-            </ScrollArea>
+            <ReaderChat
+              book={book}
+              vaultId={vaultId}
+              index={index}
+              quote={chatQuote}
+              clearQuote={clearChatQuote}
+              seed={chatSeed}
+              openSection={openSection}
+              teachBack={() => discuss("teach-back")}
+              canTeachBack={canDiscussPage}
+              openingTutor={openingTutor}
+              tutorThreads={conversations.threads}
+              openTutorThread={conversations.open}
+            />
           )}
         </Tabs.Content>
       </Tabs>

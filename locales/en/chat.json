@@ -66,6 +66,36 @@
   "error": "The answer could not be completed: {{error}}",
   "answerUnavailable": "This notebook answer is no longer available.",
   "newChat": "New chat",
+  "book": {
+    "nouns": {
+      "page": "Page",
+      "chapter": "Chapter",
+      "section": "Section"
+    },
+    "reading": "Reading {{noun}} {{section}}…",
+    "searching": "Searching the book for “{{query}}”…",
+    "contents": "Looking at the contents…",
+    "read": "Read",
+    "open": "Open {{noun}} {{section}}"
+  },
+  "reader": {
+    "title": "Ask about this book",
+    "body": "I can see {{noun}} {{section}}, and I can read or search the rest of the book when your question needs it.",
+    "placeholder": "Ask about this {{noun}} or the book…",
+    "placeholderQuote": "Ask about this passage…",
+    "onScreen": "{{noun}} {{section}}",
+    "removeQuote": "Remove passage",
+    "history": "Conversations",
+    "notebookConversations": "This notebook's chats",
+    "noConversations": "No conversations yet",
+    "tutorSessions": "Tutor sessions",
+    "suggestions": {
+      "summary": "Summarize this {{noun}}",
+      "explain": "Explain the hardest idea here simply",
+      "quiz": "Quiz me on this {{noun}}",
+      "connect": "How does this connect to the rest of the book?"
+    }
+  },
   "history": {
     "open": "History",
     "title": "History",

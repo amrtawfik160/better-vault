@@ -18,6 +18,7 @@ const hostOf = (url: string) => {
   }
 };
 import { AnswerReferences, SearchStatus, type Reference } from "./answer-references";
+import { BookActivity, readingBook, type BookLinks } from "./book-activity";
 import { Markdown } from "./markdown";
 import { isVisualPart, VisualPart } from "./visual/visual-part";
 
@@ -31,6 +32,8 @@ interface AssistantMessageProps {
   onOpenPassage: (passage: PassageRef) => void;
   onMakeCards: (material: ReturnType<typeof answerFlashcardMaterial>) => void;
   focusRef?: Ref<HTMLDivElement>;
+  /** Ask AI beside the reader: the book's sections the answer read, opening in the reader. */
+  book?: BookLinks;
 }
 
 /** An answer: the sources it read or searched, the text with citations, and actions. */
@@ -42,6 +45,7 @@ export function AssistantMessage({
   onOpenPassage,
   onMakeCards,
   focusRef,
+  book,
 }: AssistantMessageProps) {
   const { t } = useTranslation("chat");
   const { t: tSources } = useTranslation("sources");
@@ -159,6 +163,7 @@ export function AssistantMessage({
       }
     >
       <Message.Content className="gap-3">
+        {book ? <BookActivity parts={message.parts} streaming={streaming} book={book} /> : null}
         {message.metadata?.mode === "web" && web.searching ? (
           <SearchStatus
             label={
@@ -184,7 +189,7 @@ export function AssistantMessage({
               )}
             </Message.BubbleContent>
           </Message.Bubble>
-        ) : streaming && !web.searching ? (
+        ) : streaming && !web.searching && !(book && readingBook(message.parts)) ? (
           <Message.Status>
             {passages.length > 0 ? t("status.reading") : t("status.thinking")}
           </Message.Status>

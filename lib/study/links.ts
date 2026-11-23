@@ -40,6 +40,15 @@ export function notebookChatHref(notebookId: string) {
   return withQuery(routes.notebook(notebookId), { tab: "chat" });
 }
 
+/** A notebook's chat, open at one conversation's answer when there is one. */
+export function notebookAnswerHref(notebookId: string, conversationId: string, answerId?: string) {
+  return withQuery(routes.notebook(notebookId), {
+    tab: "chat",
+    conversation: answerId ? conversationId : undefined,
+    answer: answerId,
+  });
+}
+
 export function studyCollectionHref(
   filter: StudyCollectionFilter,
   params: Record<string, string | number | undefined> = {},
