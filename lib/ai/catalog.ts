@@ -204,8 +204,9 @@ export const providers: Record<ProviderId, ProviderInfo> = {
     needsKey: false,
     webSearch: false,
     suggestedModels: [],
-    contextChars: 100_000,
-    contextTokens: 32_000,
+    // Subscription models (GPT, Claude, Gemini, Grok, Kimi) all read at least 200k tokens.
+    contextChars: 300_000,
+    contextTokens: 200_000,
     imageModels: [],
     efforts: [],
   },
