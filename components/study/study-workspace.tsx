@@ -255,6 +255,15 @@ export default function StudyWorkspace({
     setParams(query, { replace: true, state: studyReturnState(location.state) });
   }
   const libraryScope = notebookId ? { notebook: notebookId } : undefined;
+  // "Practise this subject" in a notebook: its documents and sources, chosen in advance.
+  const practicePreset =
+    tab === "practice" && notebookId && sourceTitles && scope.notebookOwner(notebookId) === studyVaultId
+      ? {
+          key: `${location.key}:${notebookId}`,
+          bookIds: books.filter((entry) => entry.notebookId === notebookId).map(({ id }) => id),
+          sourceIds: sourceTitles.filter((source) => source.notebookId === notebookId).map(({ id }) => id),
+        }
+      : undefined;
   const readerScope = {
     ...libraryScope,
     ...(readerThreadId ? {
@@ -778,6 +787,7 @@ export default function StudyWorkspace({
             practice={(ids) => void openTutorSelection("card", ids)}
             openingPractice={openingPractice}
             setupModel={() => setSettings(true)}
+            preset={practicePreset}
           />
         )
       ) : null}

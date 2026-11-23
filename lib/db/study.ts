@@ -96,6 +96,29 @@ export function useStudyRecords() {
   return useStoreQuery(async () => withQuizChoices(await store().listStudy()), [], ["study", "outputs"]);
 }
 
+/** Every Study document, without flashcards and the rest: for the notebooks page. */
+export function useStudyBooks() {
+  return useStoreQuery(
+    async () => (await store().listStudy()).filter((row): row is StudyBook => row.kind === "book"),
+    [],
+    ["study"],
+  );
+}
+
+/** A notebook's Study documents, flashcards and highlights. */
+export function useNotebookStudy(notebookId: string) {
+  return useStoreQuery(
+    async () =>
+      (await store().listStudy()).filter(
+        (row): row is StudyRecordOf<"book" | "card" | "highlight"> =>
+          row.notebookId === notebookId &&
+          (row.kind === "book" || row.kind === "card" || row.kind === "highlight"),
+      ),
+    [notebookId],
+    ["study"],
+  );
+}
+
 export function useSavedStudyBookForSource(notebookId: string, sourceId: string, enabled: boolean) {
   return useStoreQuery(
     () => (enabled ? store().getStudyBookForSource(notebookId, sourceId) : Promise.resolve(undefined)),

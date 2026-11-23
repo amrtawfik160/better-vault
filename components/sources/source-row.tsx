@@ -1,6 +1,7 @@
 import {
   ArrowUpRight01Icon,
   BookOpen01Icon,
+  Books01Icon,
   Delete02Icon,
   MoreVerticalIcon,
   PencilEdit01Icon,
@@ -19,7 +20,16 @@ import { countWords } from "@/lib/format";
 import { sourceKindIcons } from "./source-kind";
 
 /** One source: whether it is used, its kind and size, and what can be done with it. */
-export function SourceRow({ source, onRead }: { source: Source; onRead: () => void }) {
+export function SourceRow({
+  source,
+  onRead,
+  onReadInStudy,
+}: {
+  source: Source;
+  onRead: () => void;
+  /** Opens it in the Study reader; left out for a source with nothing to read. */
+  onReadInStudy?: () => void;
+}) {
   const { t, i18n } = useTranslation("sources");
   const { t: tCommon } = useTranslation();
   const [renaming, setRenaming] = useState(false);
@@ -63,6 +73,12 @@ export function SourceRow({ source, onRead }: { source: Source; onRead: () => vo
             <Icon icon={BookOpen01Icon} />
             {t("read")}
           </Menu.Item>
+          {onReadInStudy ? (
+            <Menu.Item onClick={onReadInStudy}>
+              <Icon icon={Books01Icon} />
+              {t("openStudy")}
+            </Menu.Item>
+          ) : null}
           {source.url ? (
             <Menu.Item onClick={() => window.open(source.url, "_blank", "noopener,noreferrer")}>
               <Icon icon={ArrowUpRight01Icon} />
