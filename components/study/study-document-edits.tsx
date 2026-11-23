@@ -21,6 +21,7 @@ export function StudyDocumentEdits({
   open,
   onOpenChange,
   onSave,
+  showTrigger = true,
 }: {
   book: StudyBook;
   section: number;
@@ -28,6 +29,8 @@ export function StudyDocumentEdits({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: () => void;
+  /** Whether it draws its own "Edit text" button. Without one, mounting it with `open` starts editing. */
+  showTrigger?: boolean;
 }) {
   const { t } = useTranslation(["home", "common"]);
   const navigate = useNavigate();
@@ -46,6 +49,22 @@ export function StudyDocumentEdits({
   const [editor, setEditor] = useState<{ edit: Edit; row?: StudyDocumentRecovery }>();
   const [saving, setSaving] = useState(false);
   const [discard, setDiscard] = useState(false);
+  const startEditing = () =>
+    setEditor(
+      resumable
+        ? { edit: savedDraft, row: recovery.latest }
+        : {
+            edit: {
+              kind: "edit",
+              original: current.text,
+              originalMarkdown: current.markdown,
+              text: current.markdown ?? current.text,
+              markdown: current.markdown !== undefined,
+            },
+          },
+    );
+  // Opened from the reader's menu: start from the saved draft or the current text.
+  if (!showTrigger && open && !editor && recovery.ready) startEditing();
   const edit = open ? editor?.edit : undefined;
   const conflict =
     edit && (edit.original !== current.text || edit.originalMarkdown !== current.markdown);
@@ -162,29 +181,17 @@ export function StudyDocumentEdits({
         }}
       />
     </>
-  ) : (
+  ) : showTrigger ? (
     <Button
       variant="outline"
       size="sm"
       disabled={!recovery.ready}
       onClick={() => {
-        setEditor(
-          resumable
-            ? { edit: savedDraft, row: recovery.latest }
-            : {
-                edit: {
-                  kind: "edit",
-                  original: current.text,
-                  originalMarkdown: current.markdown,
-                  text: current.markdown ?? current.text,
-                  markdown: current.markdown !== undefined,
-                },
-              },
-        );
+        startEditing();
         onOpenChange(true);
       }}
     >
       {t(resumable ? "study.documentEditor.resumeEditing" : "study.documentEditor.edit")}
     </Button>
-  );
+  ) : null;
 }

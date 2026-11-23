@@ -1,5 +1,26 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
-import { ArrowLeft01Icon, ArrowRight01Icon, FullScreenIcon, MinimizeScreenIcon } from "@hugeicons/core-free-icons";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+  type Ref,
+  type RefObject,
+} from "react";
+import {
+  AiChat02Icon,
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
+  HighlighterIcon,
+  LeftToRightListBulletIcon,
+  MoreHorizontalIcon,
+  Search01Icon,
+  TranslateIcon,
+} from "@hugeicons/core-free-icons";
 import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -7,6 +28,9 @@ import { StudyMarkdown, StudyText } from "./study-text";
 import { StudyDocumentEdits } from "./study-document-edits";
 import { StudyDocumentSearch } from "./study-document-search";
 import { StudyReaderSettings } from "./study-reader-settings";
+import { StudyReaderPanel, type ReaderPanelTab, type ReaderTutor } from "./study-reader-panel";
+import { ReaderTip } from "./study-reader-tip";
+import { StudySelectionMenu, type SelectionMenuHandle, type StudySelection } from "./study-selection-menu";
 import { highlightColors } from "./study-highlight-colors";
 import { flashcardMaterialLimit, flashcardPassageSize } from "@/lib/study/ai";
 import { flashcardDraftRanges } from "@/lib/study/flashcard-material";
@@ -22,10 +46,10 @@ import { StudyImageDiscussion } from "./study-image-discussion";
 import { StudyFlashcardDraftDialog, type FlashcardSource } from "./study-flashcard-generator";
 import { renderedSelection, renderedStudyRange, useRenderedStudyMarks } from "./study-rendered-text";
 import { useStudyReadingPlace } from "./study-reading-place";
-import { Input } from "@/components/panelui/input";
-import { Textarea } from "@/components/panelui/textarea";
 import { Menu } from "@/components/panelui/menu";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { loadBlob } from "@/lib/db/blobs";
+import { updateSettings, useSettings } from "@/lib/db/settings";
 import { useSource } from "@/lib/db/sources";
 import { studyReturnState } from "@/lib/study/return-links";
 import {
@@ -33,20 +57,20 @@ import {
   putStudyRecords,
   readStudyOcrDraft,
   recordStudyActivity,
-  saveStudyCard,
+  removeStudyRecord,
   saveStudyNote,
   saveStudyVisualCard,
-  saveStudyWord,
   studyId,
   updateStudyBook,
+  updateStudyReviewItem,
 } from "@/lib/db/study";
 import { routes } from "@/lib/routes";
 import { textDirection, textLines } from "@/lib/text/direction";
-import { askStudyModel } from "@/lib/study/client";
-import { originHref, studyHref, studyNotesHref } from "@/lib/study/links";
+import { originHref, studyHighlightOrigin, studyHref, studyNotesHref } from "@/lib/study/links";
+import { studyBookProgress } from "@/lib/study/reading-progress";
+import { defaultTranslationLanguage } from "@/lib/study/translation-language";
 import {
   defaultStudyReadingAppearance,
-  studyHighlightColor,
   type StudyBook,
   type StudyHighlightColor,
   type StudyOcrDraft,
@@ -56,22 +80,23 @@ import {
   type StudyRecordOf,
   type StudyThread,
   type StudyVisualOrigin,
+  type StudyWord,
 } from "@/lib/study/records";
 import type { StudyImageCapture } from "@/lib/study/visual-card";
 import { locateStudyMark, resolveStudyRange, studyTextRevision } from "@/lib/study/text-edits";
 import { studyDocumentFormulaMode } from "@/lib/study/markdown-document";
+import { cn } from "@/lib/utils";
 
-type Selection = { text: string; offset: number; revision: number };
-type AssistResult = {
-  action: "explain" | "translate";
-  text: string;
-  selection: Selection;
-  language: string;
-};
+type Selection = StudySelection;
+type Highlight = StudyRecordOf<"highlight">;
+
+/** Keys that belong to the control that has focus, not to the reader. */
+const ownKeys =
+  "input, textarea, select, [contenteditable]:not([contenteditable=false]), [role=menu], [role=listbox], [role=tablist], [role=radiogroup], [role=slider], [role=dialog]:not([data-study-selection-menu])";
 
 function highlighted(
   text: string,
-  highlights: StudyRecordOf<"highlight">[],
+  highlights: Highlight[],
   focus?: { offset: number; length: number },
 ) {
   const candidates = highlights.flatMap(({ id, offset, quote, color }) => {
@@ -112,7 +137,7 @@ function highlighted(
         <mark
           id={range.offset >= start ? range.id : undefined}
           key={range.id}
-          className={highlightColors[range.color]}
+          className={cn("rounded-[0.2em]", highlightColors[range.color])}
         >
           {directionalInline(text.slice(from, to), direction)}
         </mark>,
@@ -131,10 +156,18 @@ function highlighted(
   });
 }
 
+/** The box a range takes on screen, or nothing when it is no longer in the page. */
+function rangeRect(range: Range | null | undefined) {
+  if (!range || range.collapsed || !range.startContainer.isConnected) return null;
+  const rect = range.getBoundingClientRect();
+  return rect.width || rect.height ? rect : null;
+}
+
 export function StudyReader({
   book,
   scanDraft,
   viewport,
+  viewportRef,
   vaultId,
   requestedPage,
   reference,
@@ -142,6 +175,10 @@ export function StudyReader({
   focusedRange,
   focusedVisual,
   highlights,
+  words,
+  tutor,
+  tutorPane,
+  wide,
   openPage,
   resume,
   openPassage,
@@ -152,17 +189,25 @@ export function StudyReader({
   focused,
   toggleFocus,
   back,
+  reviewHighlights,
+  reviewWords,
 }: {
   book: StudyBook;
   scanDraft?: StudyOcrDraft;
   viewport: HTMLDivElement | null;
+  viewportRef: Ref<HTMLDivElement>;
   vaultId: string;
   requestedPage?: number;
   reference: boolean;
   focusedHighlight?: string;
   focusedRange?: { offset: number; length: number; revision?: number };
   focusedVisual?: StudyVisualOrigin;
-  highlights: StudyRecordOf<"highlight">[];
+  highlights: Highlight[];
+  words: StudyWord[];
+  tutor?: ReaderTutor;
+  tutorPane: RefObject<HTMLElement | null>;
+  /** The panel sits beside the page; on a narrow screen it covers it. */
+  wide: boolean;
   openPage: (section: number) => void;
   resume: () => void;
   openPassage: (section: number, range: { offset: number; length: number }) => void;
@@ -179,6 +224,8 @@ export function StudyReader({
   focused: boolean;
   toggleFocus: () => void;
   back: () => void;
+  reviewHighlights: () => void;
+  reviewWords: (cardIds: string[]) => void;
 }) {
   const [openedSection] = useState(book.section);
   const index = Math.min(Math.max(0, requestedPage ?? openedSection), book.sections.length - 1);
@@ -197,8 +244,11 @@ export function StudyReader({
   const returnState = studyReturnState(location.state);
   const readerParams = new URLSearchParams(location.search);
   const visitingPassage = reference || !!(focusedHighlight || focusedRange || focusedVisual);
-  const { t } = useTranslation("home");
+  const { t, i18n } = useTranslation("home");
+  const rtl = i18n.dir() === "rtl";
   const focusLabel = t(focused ? "study.reader.exitFullscreen" : "study.reader.fullscreen");
+  const settings = useSettings();
+  const translateTo = settings?.study?.translateTo ?? defaultTranslationLanguage(navigator.language);
   const source = useSource(book.sourceId);
   const fileId = source === null ? undefined : book.fileId;
   const hasPageText = Boolean(section.text.trim());
@@ -214,26 +264,38 @@ export function StudyReader({
   const focusStart = focus?.offset;
   const focusLength = focus?.length;
   const missingPassage = Boolean((focusedRange || focusedHighlight) && !focus);
+  const root = useRef<HTMLElement>(null);
   const textBody = useRef<HTMLElement>(null);
-  const passageNotice = useRef<HTMLParagraphElement>(null);
+  const passageNotice = useRef<HTMLDivElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
+  const panelElement = useRef<HTMLElement>(null);
+  const selectionMenu = useRef<SelectionMenuHandle>(null);
+  const anchorRange = useRef<Range | null>(null);
+  const lastPointer = useRef("mouse");
+  const [frame, setFrame] = useState<HTMLDivElement | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
-  const [cardFront, setCardFront] = useState<string | null>(null);
-  const [cardBack, setCardBack] = useState("");
+  const [selectionByTouch, setSelectionByTouch] = useState(false);
   const [draftSource, setDraftSource] = useState<FlashcardSource | null>(null);
-  const [cardSaving, setCardSaving] = useState(false);
   const [visualAction, setVisualAction] = useState<{
     action: "card" | "discuss";
     capture: StudyImageCapture;
     section: number;
   }>();
-  const [language, setLanguage] = useState("");
-  const [translating, setTranslating] = useState(false);
   const [color, setColor] = useState<StudyHighlightColor>("yellow");
   const [editingSection, setEditingSection] = useState<number>();
   const [ocrMode, setOcrMode] = useState<"page" | "batch">();
   const [batchDraft, setBatchDraft] = useState<StudyOcrDraft>();
   const [openingScanReview, setOpeningScanReview] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const tutorShown = tutor?.visible ? tutor.thread.id : undefined;
+  const [panel, setPanel] = useState<ReaderPanelTab | null>(tutorShown ? "ai" : null);
+  const [shownTutor, setShownTutor] = useState(tutorShown);
+  if (shownTutor !== tutorShown) {
+    setShownTutor(tutorShown);
+    if (tutorShown) setPanel("ai");
+    else if (panel === "ai" && shownTutor) setPanel(null);
+  }
+  const [within, setWithin] = useState(0);
   const appearance = { ...defaultStudyReadingAppearance, ...book.readingAppearance };
   const { textSize: font, pdfZoom: zoom, epubTheme } = appearance;
   const appearanceCheckpoint = useRef<StudyReadingPlace | undefined>(undefined);
@@ -259,10 +321,7 @@ export function StudyReader({
   const layout =
     showingOriginal && readingSurface?.section === index ? readingSurface.root : undefined;
   const loadingLayout = showingOriginal && layout === undefined;
-  const [result, setResult] = useState<AssistResult | null>(null);
-  const [busy, setBusy] = useState(false);
   const [originalFile, setOriginalFile] = useState<{ url: string; mime: string }>();
-  const pendingAssist = useRef<AbortController | null>(null);
   const started = useRef(0);
   const [readingSessionId] = useState(studyId);
   const latestInteraction = useRef(0);
@@ -316,6 +375,20 @@ export function StudyReader({
   const visualKind = focusedVisual?.kind;
   const figure = focusedVisual?.kind === "epub" ? focusedVisual.figure : undefined;
   const pageTop = focusedVisual?.kind === "pdf" ? focusedVisual.top : undefined;
+  const selectedMark = selection
+    ? pageHighlights.find(
+        ({ offset, quote }) =>
+          offset <= selection.offset && offset + quote.length >= selection.offset + selection.text.length,
+      )
+    : undefined;
+  const pageNoun = book.format === "pdf" ? "page" : "chapter";
+  const progress = studyBookProgress(book, index, within);
+  const percent = new Intl.NumberFormat(i18n.language, { style: "percent" }).format(
+    progress < 1 ? Math.min(0.99, progress) : 1,
+  );
+  const showsTitle = !showingOriginal && book.format !== "pdf" &&
+    !section.text.trimStart().startsWith(section.title.trim());
+  const panelCovers = panel !== null && !wide;
 
   useEffect(() => {
     if (!visitingPassage) void updateStudyBook(book.id, { section: index });
@@ -354,7 +427,6 @@ export function StudyReader({
     document.addEventListener("visibilitychange", visibility);
     window.addEventListener("pagehide", whileReading);
     return () => {
-      pendingAssist.current?.abort();
       window.clearInterval(heartbeat);
       document.removeEventListener("visibilitychange", visibility);
       window.removeEventListener("pagehide", whileReading);
@@ -431,21 +503,188 @@ export function StudyReader({
     waitingMath,
   ]);
 
+  // How far down this section the reader is, for the progress line.
+  useEffect(() => {
+    if (!viewport) return;
+    let next = 0;
+    const read = () => {
+      const room = viewport.scrollHeight - viewport.clientHeight;
+      setWithin(room > 1 ? viewport.scrollTop / room : 1);
+    };
+    const schedule = () => {
+      cancelAnimationFrame(next);
+      next = requestAnimationFrame(read);
+    };
+    schedule();
+    viewport.addEventListener("scroll", schedule, { passive: true });
+    const observer = new ResizeObserver(schedule);
+    observer.observe(viewport);
+    return () => {
+      cancelAnimationFrame(next);
+      viewport.removeEventListener("scroll", schedule);
+      observer.disconnect();
+    };
+  }, [viewport, index]);
+
+  // The selected passage stays marked while the menu has focus.
+  useEffect(() => {
+    const range = anchorRange.current;
+    if (!selection || !range || !globalThis.CSS?.highlights) return;
+    CSS.highlights.set("study-selection", new Highlight(range));
+    return () => {
+      CSS.highlights.delete("study-selection");
+    };
+  }, [selection]);
+
+  const dismissSelection = useEffectEvent(() => closeSelection(false));
+  useEffect(() => {
+    if (!selection) return;
+    function down(event: PointerEvent) {
+      const target = event.target;
+      if (!(target instanceof Node) || selectionMenu.current?.contains(target)) return;
+      if (target instanceof Element && target.closest('[role="menu"], [role="listbox"], [data-sonner-toaster]')) return;
+      dismissSelection();
+    }
+    document.addEventListener("pointerdown", down, true);
+    return () => document.removeEventListener("pointerdown", down, true);
+  }, [selection]);
+
+  // A touch selection ends with the handles, not a mouseup: read it once it settles.
+  const captureSettled = useEffectEvent(() => {
+    const native = window.getSelection();
+    const node = native?.anchorNode;
+    if (!native || native.isCollapsed || !node) return;
+    if (layout?.contains(node)) captureRendered(layout);
+    else if (textBody.current?.contains(node)) capture();
+  });
+  useEffect(() => {
+    let timer = 0;
+    function changed() {
+      if (lastPointer.current !== "touch") return;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(captureSettled, 450);
+    }
+    document.addEventListener("selectionchange", changed);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("selectionchange", changed);
+    };
+  }, []);
+
+  const keyOnPage = useEffectEvent((event: KeyboardEvent) => {
+    if (event.target === document.body || event.target === document.documentElement) readerKey(event);
+  });
+  useEffect(() => {
+    document.addEventListener("keydown", keyOnPage);
+    return () => document.removeEventListener("keydown", keyOnPage);
+  }, []);
+
+  function clearNativeSelection() {
+    const native = window.getSelection();
+    const node = native?.anchorNode;
+    if (node && root.current?.contains(node)) native.removeAllRanges();
+  }
+
+  function closeSelection(restoreFocus = true) {
+    const hadFocus = restoreFocus && selectionMenu.current?.contains(document.activeElement);
+    setSelection(null);
+    anchorRange.current = null;
+    if (restoreFocus) clearNativeSelection();
+    if (hadFocus) (textBody.current ?? viewport)?.focus({ preventScroll: true });
+  }
+
   function clearSelection() {
     setSelection(null);
-    setCardFront(null);
-    setDraftSource(null);
-    setTranslating(false);
-    pendingAssist.current?.abort();
+    anchorRange.current = null;
   }
 
   function go(page: number) {
+    if (page < 0 || page >= book.sections.length) return;
     clearSelection();
+    setDraftSource(null);
     setVisualAction(undefined);
     setEditingSection(undefined);
     setOcrMode(undefined);
-    setResult(null);
     openPage(page);
+  }
+
+  function openSearch() {
+    setSearchOpen(true);
+    requestAnimationFrame(() => {
+      searchInput.current?.select();
+      searchInput.current?.focus();
+    });
+  }
+
+  function showPanel(next: ReaderPanelTab) {
+    setPanel(next);
+    if (next === "ai" && tutor && !tutor.visible) tutor.show();
+  }
+
+  function closePanel() {
+    setPanel(null);
+    if (tutor?.visible) tutor.hide();
+    if (!wide) (textBody.current ?? viewport)?.focus({ preventScroll: true });
+  }
+
+  function togglePanel(next: ReaderPanelTab) {
+    if (panel === next) closePanel();
+    else showPanel(next);
+  }
+
+  function readerKey(event: KeyboardEvent | ReactKeyboardEvent) {
+    if (event.defaultPrevented || ("isComposing" in event && event.isComposing)) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (
+      hasBookText && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey &&
+      event.key.toLowerCase() === "f"
+    ) {
+      event.preventDefault();
+      openSearch();
+      return;
+    }
+    if (event.key === "Escape") {
+      if (selection) {
+        event.preventDefault();
+        closeSelection();
+      } else if (searchOpen && target?.closest("[data-study-reader-search]")) {
+        event.preventDefault();
+        setSearchOpen(false);
+        (textBody.current ?? viewport)?.focus({ preventScroll: true });
+      } else if (panel && !target?.closest(ownKeys)) {
+        event.preventDefault();
+        closePanel();
+      }
+      return;
+    }
+    if (
+      selection && event.key === "Tab" && !event.shiftKey &&
+      !selectionMenu.current?.contains(target) && !target?.closest(ownKeys)
+    ) {
+      event.preventDefault();
+      selectionMenu.current?.focus();
+      return;
+    }
+    if (event.metaKey || event.ctrlKey || event.altKey || target?.closest(ownKeys)) return;
+    if (target && panelElement.current?.contains(target)) return;
+    if (selection) {
+      const key = event.key.toLowerCase();
+      if (key === "h") void saveHighlight(color);
+      else if (key === "t") selectionMenu.current?.run("translate");
+      else if (key === "w") selectionMenu.current?.run("word");
+      else if (key === "n") selectionMenu.current?.run("note");
+      else if (key === "a") ask();
+      else return;
+      event.preventDefault();
+      return;
+    }
+    if ((event.key === "ArrowLeft" || event.key === "ArrowRight") && !event.shiftKey) {
+      const forward = (event.key === "ArrowRight") !== rtl;
+      const next = index + (forward ? 1 : -1);
+      if (next < 0 || next >= book.sections.length) return;
+      event.preventDefault();
+      go(next);
+    }
   }
 
   async function openScanReview() {
@@ -500,7 +739,10 @@ export function StudyReader({
   }
 
   async function changeAppearance(change: Partial<StudyReadingAppearance>) {
-    const changesSize = (change.textSize ?? font) !== font || (viewPdf && (change.pdfZoom ?? zoom) !== zoom);
+    const changesSize =
+      (change.textSize ?? font) !== font ||
+      (change.font ?? appearance.font) !== appearance.font ||
+      (viewPdf && (change.pdfZoom ?? zoom) !== zoom);
     const cancel = changesSize ? prepareReflow(appearanceCheckpoint.current) : undefined;
     try {
       await updateStudyBook(book.id, { readingAppearance: change });
@@ -510,11 +752,22 @@ export function StudyReader({
     }
   }
 
-  function selectPassage(selected: Omit<Selection, "revision">) {
+  function chooseTranslateTo(code: string) {
+    void updateSettings((saved) => {
+      saved.study = { ...saved.study, translateTo: code };
+    }).catch((error: Error) => toast.error(error.message));
+  }
+
+  function selectPassage(selected: Omit<Selection, "revision">, range?: Range) {
     latestInteraction.current = Date.now();
-    setCardFront(null);
-    setResult(null);
-    pendingAssist.current?.abort();
+    if (
+      selection && selection.offset === selected.offset && selection.text === selected.text &&
+      selection.revision === revision
+    )
+      return;
+    const live = window.getSelection();
+    anchorRange.current = range ?? (live?.rangeCount && !live.isCollapsed ? live.getRangeAt(0).cloneRange() : null);
+    setSelectionByTouch(lastPointer.current === "touch");
     setSelection({ ...selected, revision });
   }
 
@@ -540,15 +793,43 @@ export function StudyReader({
     });
   }
 
-  function captureRendered(root: HTMLElement) {
+  function captureRendered(surface: HTMLElement) {
     if (!hasPageText) return;
-    const selected = renderedSelection(root, section.text);
+    const selected = renderedSelection(surface, section.text);
     if (selected === undefined) return;
     if (selected === null) {
-      toast.error("Select this passage in the extracted text below to use it in Study.");
+      toast.error(t("study.selection.useExtractedText"));
       return;
     }
     selectPassage(selected);
+  }
+
+  /** A click on a saved highlight opens the menu for it. */
+  function openHighlightAt(surface: HTMLElement | null | undefined, event: ReactMouseEvent) {
+    if (!surface || !pageHighlights.length) return;
+    if (event.target instanceof Element && event.target.closest("button, a, input, textarea, [role=button]")) return;
+    const native = window.getSelection();
+    if (native && !native.isCollapsed) return;
+    for (const item of pageHighlights) {
+      const range = renderedStudyRange(surface, section.text, item);
+      const hit = range && Array.from(range.getClientRects()).some(
+        (rect) => event.clientX >= rect.left && event.clientX <= rect.right &&
+          event.clientY >= rect.top && event.clientY <= rect.bottom,
+      );
+      if (hit && range) {
+        selectPassage({ text: item.quote, offset: item.offset }, range);
+        return;
+      }
+    }
+  }
+
+  function selectionAnchor() {
+    const live = rangeRect(anchorRange.current);
+    if (live || !selection) return live;
+    const surface = layout ?? textBody.current;
+    const range = surface && renderedStudyRange(surface, section.text, { offset: selection.offset, quote: selection.text });
+    anchorRange.current = range ?? null;
+    return rangeRect(range);
   }
 
   function sourceOf(selected?: Selection | null): Extract<StudyOrigin, { kind: "book" }> {
@@ -564,35 +845,6 @@ export function StudyReader({
       : { kind: "book", bookId: book.id, section: index };
   }
 
-  async function assist(action: AssistResult["action"]) {
-    const selected = selection;
-    if (!selected) return;
-    const controller = new AbortController();
-    pendingAssist.current?.abort();
-    pendingAssist.current = controller;
-    setBusy(true);
-    setResult(null);
-    const quote = selected.text;
-    try {
-      const response = await askStudyModel({
-        action,
-        input: action === "translate" ? `Language: ${language}\nText: ${quote}` : quote,
-        passages: [{ title: section.title, text: quote }],
-        signal: controller.signal,
-      });
-      if (controller.signal.aborted) return;
-      setResult({ action, text: response.text, selection: selected, language });
-    } catch (error) {
-      if (!controller.signal.aborted)
-        toast.error(error instanceof Error ? error.message : String(error));
-    } finally {
-      if (pendingAssist.current === controller) {
-        pendingAssist.current = null;
-        setBusy(false);
-      }
-    }
-  }
-
   function makeNote(selected: Selection, body = selected.text) {
     void saveStudyNote({
       title: `${book.title} · ${section.title}`,
@@ -601,9 +853,9 @@ export function StudyReader({
       notebookId: book.notebookId,
     })
       .then((note) =>
-        toast.success("Saved to Notes", {
+        toast.success(t("study.selection.savedToNotes"), {
           action: {
-            label: "Open note",
+            label: t("study.selection.openNote"),
             onClick: () =>
               navigate(originHref({ kind: "note", noteId: note.id }), { state: returnState }),
           },
@@ -652,7 +904,7 @@ export function StudyReader({
           place.quote === selected.text,
       )
     ) {
-      toast.info("This passage is already bookmarked.");
+      toast.info(t("study.selection.alreadyBookmarked"));
       return;
     }
     void updateStudyBook(book.id, {
@@ -667,159 +919,288 @@ export function StudyReader({
         },
       ],
     })
-      .then(() => toast.success("Passage bookmarked"))
+      .then(() => toast.success(t("study.selection.bookmarked")))
       .catch((error: Error) => toast.error(error.message));
   }
 
-  function saveVocabulary(selected: Selection) {
-    const translated =
-      result?.action === "translate" && result.selection === selected ? result : null;
-    void saveStudyWord({
-      origin: sourceOf(selected),
-      term: selected.text,
-      translation: translated?.text ?? "",
-      context: section.text.slice(
-        Math.max(0, selected.offset - 100),
-        selected.offset + selected.text.length + 100,
-      ),
-      language: translated?.language ?? language,
-      note: "",
-      notebookId: book.notebookId,
+  function newHighlight(selected: Selection, choice: StudyHighlightColor, note = ""): Highlight {
+    return {
+      id: studyId(),
+      kind: "highlight",
       bookId: book.id,
-      vaultId,
-    })
-      .then((word) =>
-        toast.success("Saved to vocabulary", {
-          action: {
-            label: "View word",
-            onClick: () =>
-              navigate(originHref({ kind: "word", wordId: word.id }), { state: returnState }),
-          },
-        }),
-      )
-      .catch((error: Error) => toast.error(error.message));
+      notebookId: book.notebookId,
+      section: index,
+      quote: selected.text,
+      offset: selected.offset,
+      revision: selected.revision,
+      color: choice,
+      note,
+      updatedAt: Date.now(),
+      schedule: freshSchedule(),
+    };
   }
 
-  return (
-    <section
-      className="space-y-5"
-      onKeyDown={(event) => {
-        if (
-          searchInput.current &&
-          event.key.toLowerCase() === "f" &&
-          (event.metaKey || event.ctrlKey) &&
-          !event.altKey && !event.shiftKey &&
-          event.target instanceof Node && event.currentTarget.contains(event.target)
-        ) {
-          event.preventDefault();
-          searchInput.current.select();
-          searchInput.current.focus();
-        }
-      }}
-    >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <Button size="sm" variant="ghost" onClick={back}>
-            ← Library
-          </Button>
-          <h2 className="text-xl font-semibold wrap-break-word" dir={textDirection(book.title)}>
-            {book.title}
-          </h2>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {visitingPassage ? (
-            <Button variant="outline" onClick={resume}>
-              {t("study.reader.resume")}
-            </Button>
-          ) : null}
-          <Link
-            to={routes.notebook(book.notebookId)}
-            state={returnState}
-            className="rounded-lg border px-3 py-2 text-sm hover:bg-accent"
-          >
-            Open notebook
-          </Link>
-          <Link
-            className="rounded-lg border px-3 py-2 text-sm hover:bg-accent"
-            to={studyNotesHref(book.notebookId)}
-            state={returnState}
-          >
-            Notes
-          </Link>
-          <Link
-            className="rounded-lg border px-3 py-2 text-sm hover:bg-accent"
-            to={studyHref("cards", { book: book.id })}
-            state={returnState}
-          >
-            Flashcards
-          </Link>
-          <Link
-            className="rounded-lg border px-3 py-2 text-sm hover:bg-accent"
-            to={studyHref("highlights", { book: book.id })}
-            state={returnState}
-          >
-            Highlights
-          </Link>
-          {fileId && originalFile ? (
-            <a
-              href={originalFile.url}
-              download={source?.fileName ?? `${book.title}.${book.format === "text" ? (originalFile.mime === "text/markdown" ? "md" : "txt") : book.format}`}
-              className="rounded-lg border px-3 py-2 text-sm hover:bg-accent"
-            >
-              Download original
-            </a>
-          ) : null}
-          {canToggleLayout ? (
-            <Button variant="outline" disabled={savingSurface} onClick={() => void toggleLayout(!showLayout)}>
-              {layoutLabel}
-            </Button>
-          ) : null}
-        </div>
-      </div>
+  async function saveHighlight(choice: StudyHighlightColor) {
+    const selected = selection;
+    if (!selected) return;
+    setColor(choice);
+    closeSelection();
+    try {
+      if (selectedMark) {
+        if (selectedMark.color === choice) return;
+        await updateStudyReviewItem({
+          kind: "highlight",
+          id: selectedMark.id,
+          change: { note: selectedMark.note, cue: selectedMark.cue, color: choice },
+          updatedAt: Date.now(),
+        });
+        return;
+      }
+      const row = newHighlight(selected, choice);
+      await putStudyRecords(row);
+      toast.success(t("study.selection.highlightSaved"), {
+        action: { label: t("study.selection.undo"), onClick: () => void removeStudyRecord(row.id) },
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function removeHighlight() {
+    const original = highlights.find(({ id }) => id === selectedMark?.id);
+    closeSelection();
+    if (!original) return;
+    try {
+      await removeStudyRecord(original.id);
+      toast.success(t("study.selection.highlightRemoved"), {
+        action: {
+          label: t("study.selection.undo"),
+          onClick: () => void putStudyRecords({ ...original, updatedAt: Date.now() }),
+        },
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function saveSelectionNote(note: string) {
+    const selected = selection;
+    if (!selected) return;
+    if (selectedMark) {
+      const saved = await updateStudyReviewItem({
+        kind: "highlight",
+        id: selectedMark.id,
+        change: { note, cue: selectedMark.cue, color: selectedMark.color },
+        updatedAt: Date.now(),
+      });
+      if (!saved) throw new Error(t("study.recall.editUnavailable"));
+    } else if (note) {
+      await putStudyRecords(newHighlight(selected, color, note));
+    }
+    toast.success(t("study.selection.noteSaved"));
+  }
+
+  function ask() {
+    if (!selection || openingTutor) return;
+    startChat("passage", index, selection);
+    closeSelection();
+  }
+
+  function discuss(what: "chapter" | "book" | "teach-back") {
+    if (what === "book") startChat("book", index);
+    else startChat("chapter", index, undefined, what === "teach-back" ? "teach-back" : undefined);
+  }
+
+  function highlightSelection(item: Highlight): Selection {
+    const at = locateStudyMark(book, item);
+    return at < 0
+      ? { text: item.quote, offset: item.offset, revision: item.revision ?? revision }
+      : { text: item.quote, offset: at, revision };
+  }
+
+  const originalDownload = fileId && originalFile
+    ? source?.fileName ?? `${book.title}.${book.format === "text" ? (originalFile.mime === "text/markdown" ? "md" : "txt") : book.format}`
+    : undefined;
+  const canScanPage = book.format === "pdf" && !!fileId && (!hasPageText || !!section.ocrLanguages) &&
+    !scanDraft?.pages.some(({ section }) => section === index);
+  const canScanBook = book.format === "pdf" && !!fileId && book.sections.length > 1 &&
+    book.sections.some(({ text }) => !text.trim());
+  const canEditText = book.format === "text" && !book.attachedToNotebook;
+  const bookmarked = book.bookmarks.includes(index);
+  const searchKeys = [/Mac|iPhone|iPad/.test(navigator.userAgent) ? "⌘" : "Ctrl", "F"];
+
+  const notices = (
+    <>
       {source === null ? (
         <p className="text-sm text-muted-foreground">{t("study.capture.sourceRemoved")}</p>
       ) : null}
-      <div
-        data-study-reader-toolbar
+      {visitingPassage ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+          <span>{t("study.reader.visiting")}</span>
+          <Button size="sm" variant="ghost" onClick={resume}>{t("study.reader.resume")}</Button>
+        </div>
+      ) : null}
+      {missingPassage ? (
+        <div ref={passageNotice} role="status" className="rounded-xl bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+          {t("study.reader.passageChanged")}{" "}
+          <button
+            type="button"
+            className="cursor-pointer underline underline-offset-4"
+            hidden={!hasBookText}
+            onClick={openSearch}
+          >
+            {t("study.reader.search")}
+          </button>
+        </div>
+      ) : null}
+      {selectedHighlight && (missingPassage || selectedHighlight.note.trim()) ? (
+        <div className="space-y-3 rounded-xl border-s-2 bg-muted/40 px-3 py-2.5 text-sm">
+          {missingPassage ? (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">{t("study.highlights.savedExcerpt")}</p>
+              <blockquote className="mt-1 font-serif">
+                <StudyText text={selectedHighlight.quote} className="wrap-break-word" />
+              </blockquote>
+            </div>
+          ) : null}
+          {selectedHighlight.note.trim() ? (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">{t("study.highlights.annotation")}</p>
+              <DirectionalText
+                multiline
+                text={selectedHighlight.note}
+                className="mt-1 wrap-break-word whitespace-pre-wrap"
+              />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </>
+  );
+
+  return (
+    <section
+      ref={root}
+      aria-label={book.title}
+      className="flex min-h-0 min-w-0 flex-1 flex-col bg-card"
+      onKeyDown={(event) => {
+        if (event.target instanceof Node && event.currentTarget.contains(event.target)) readerKey(event);
+      }}
+      onPointerDown={(event) => {
+        lastPointer.current = event.pointerType;
+      }}
+    >
+      <header
         data-window-bar={focused ? "" : undefined}
-        className="sticky top-0 z-20 space-y-1.5 rounded-2xl border bg-card p-2"
-        role="region"
-        aria-label={t("study.reader.controls")}
+        className="flex min-h-14 shrink-0 items-center gap-1 border-b px-2 sm:px-3"
       >
-        {focused ? <p className="truncate px-2 text-sm font-medium" dir="auto">{book.title}</p> : null}
-        <div className="flex items-center gap-1.5">
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            aria-label={t("study.reader.previous")}
-            title={t("study.reader.previous")}
-            disabled={index === 0}
-            onClick={() => go(index - 1)}
-          >
-            <Icon icon={ArrowLeft01Icon} size={16} className="rtl:rotate-180" />
+        <ReaderTip label={t("study.reader.back")} side="bottom">
+          <Button size="icon-sm" variant="ghost" aria-label={t("study.reader.back")} onClick={back}>
+            <Icon icon={ArrowLeft01Icon} size={18} className="rtl:rotate-180" />
           </Button>
-          <select
-            className="h-8 min-w-0 flex-1 rounded-lg border bg-background px-2 text-sm sm:max-w-md"
-            aria-label={t("study.reader.position")}
-            value={index}
-            onChange={(event) => go(Number(event.target.value))}
+        </ReaderTip>
+        <Menu>
+          <Menu.Trigger
+            render={<Button size="icon-sm" variant="ghost" aria-label={t("study.reader.contents")} title={t("study.reader.contents")} />}
           >
-            {book.sections.map((chapter, i) => (
-              <option key={i} value={i}>
-                {chapter.title}
-              </option>
-            ))}
-          </select>
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            aria-label={t("study.reader.next")}
-            title={t("study.reader.next")}
-            disabled={index === book.sections.length - 1}
-            onClick={() => go(index + 1)}
-          >
-            <Icon icon={ArrowRight01Icon} size={16} className="rtl:rotate-180" />
-          </Button>
+            <Icon icon={LeftToRightListBulletIcon} size={18} className="rtl:-scale-x-100" />
+          </Menu.Trigger>
+          <Menu.Content align="start" className="max-w-[min(24rem,calc(100vw-1rem))]">
+            <Menu.Group>
+              <Menu.GroupLabel>{t(book.format === "pdf" ? "study.reader.pages" : "study.reader.contents")}</Menu.GroupLabel>
+              <Menu.RadioGroup
+                value={index}
+                onValueChange={(value: unknown) => {
+                  if (typeof value === "number" && value !== index) go(value);
+                }}
+              >
+                {book.sections.map((entry, at) => (
+                  <Menu.RadioItem key={at} value={at} closeOnClick>
+                    <span className="min-w-0 truncate" dir="auto">{entry.title}</span>
+                  </Menu.RadioItem>
+                ))}
+              </Menu.RadioGroup>
+            </Menu.Group>
+            {book.bookmarks.length ? (
+              <>
+                <Menu.Separator />
+                <Menu.Group>
+                  <Menu.GroupLabel>{t("study.reader.bookmarkedPages")}</Menu.GroupLabel>
+                  {book.bookmarks.map((at) => (
+                    <Menu.Item key={at} onClick={() => go(at)}>
+                      <span className="min-w-0 truncate" dir="auto">{book.sections[at]?.title ?? at + 1}</span>
+                    </Menu.Item>
+                  ))}
+                </Menu.Group>
+              </>
+            ) : null}
+            {bookmarkPlaces.length ? (
+              <>
+                <Menu.Separator />
+                <Menu.Group>
+                  <Menu.GroupLabel>{t("study.reader.bookmarkedPassages")}</Menu.GroupLabel>
+                  {bookmarkPlaces.map((place) => {
+                    const at = locateStudyMark(book, place);
+                    return (
+                      <Menu.Sub key={place.id}>
+                        <Menu.SubTrigger>
+                          <span className="min-w-0 max-w-64 truncate" dir="auto">{place.quote}</span>
+                        </Menu.SubTrigger>
+                        <Menu.SubContent>
+                          <Menu.Item
+                            render={
+                              <Link
+                                to={originHref({
+                                  kind: "book",
+                                  bookId: book.id,
+                                  section: place.section,
+                                  offset: at < 0 ? place.offset : at,
+                                  length: place.quote.length,
+                                  revision: at < 0 ? place.revision : revision,
+                                }, readerParams)}
+                                state={returnState}
+                              />
+                            }
+                          >
+                            {t("study.reader.goToPassage")}
+                          </Menu.Item>
+                          <Menu.Item
+                            variant="destructive"
+                            onClick={() =>
+                              void updateStudyBook(book.id, {
+                                bookmarkPlaces: bookmarkPlaces.filter(({ id }) => id !== place.id),
+                              })
+                            }
+                          >
+                            {t("study.reader.removeBookmark")}
+                          </Menu.Item>
+                        </Menu.SubContent>
+                      </Menu.Sub>
+                    );
+                  })}
+                </Menu.Group>
+              </>
+            ) : null}
+          </Menu.Content>
+        </Menu>
+        <div className="min-w-0 flex-1 px-1 text-center leading-tight">
+          <p className="truncate text-[0.8125rem] font-semibold" dir={textDirection(book.title)}>{book.title}</p>
+          <p className="truncate text-xs text-muted-foreground" dir="auto">{section.title}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-0.5">
+          {hasBookText ? (
+            <ReaderTip label={t("study.reader.search")} keys={searchKeys} side="bottom">
+              <Button
+                size="icon-sm"
+                variant={searchOpen ? "secondary" : "ghost"}
+                aria-label={t("study.reader.search")}
+                aria-expanded={searchOpen}
+                onClick={() => (searchOpen ? setSearchOpen(false) : openSearch())}
+              >
+                <Icon icon={Search01Icon} size={17} />
+              </Button>
+            </ReaderTip>
+          ) : null}
           <StudyReaderSettings
             appearance={appearance}
             original={showingOriginal && book.format !== "text" ? book.format : undefined}
@@ -828,452 +1209,378 @@ export function StudyReader({
               disabled: savingSurface,
               toggle: () => void toggleLayout(!showLayout, appearanceCheckpoint.current),
             } : undefined}
+            translateTo={translateTo}
+            onTranslateTo={chooseTranslateTo}
             onOpen={() => { appearanceCheckpoint.current = captureLayout(); }}
             onChange={(change) => void changeAppearance(change)}
           />
-          <Button size="icon-sm" variant="ghost" aria-label={focusLabel} title={focusLabel} onClick={toggleFocus}>
-            <Icon icon={focused ? MinimizeScreenIcon : FullScreenIcon} size={17} />
-          </Button>
-        </div>
-        {hasBookText ? (
-          <StudyDocumentSearch
-            input={searchInput}
-            sections={book.sections}
-            active={focus && { section: index, ...focus }}
-            open={({ section, offset, length }) => {
-              clearSelection();
-              setVisualAction(undefined);
-              setEditingSection(undefined);
-              setOcrMode(undefined);
-              setResult(null);
-              openPassage(section, { offset, length });
-            }}
-            study={({ offset, length }) => {
-              selectPassage({ text: section.text.slice(offset, offset + length), offset });
-            }}
-          />
-        ) : null}
-      </div>
-      <div className="grid gap-3 rounded-2xl border p-4">
-        <div className="flex flex-wrap items-center gap-2">
+          <ReaderTip label={t("study.reader.panel.highlights")} side="bottom">
+            <Button
+              size="sm"
+              variant={panel === "highlights" ? "secondary" : "ghost"}
+              className="gap-1 px-2"
+              aria-label={t("study.reader.highlightsCount", { count: highlights.length })}
+              aria-pressed={panel === "highlights"}
+              onClick={() => togglePanel("highlights")}
+            >
+              <Icon icon={HighlighterIcon} size={17} />
+              <span aria-hidden className="text-xs tabular-nums">{highlights.length}</span>
+            </Button>
+          </ReaderTip>
+          <ReaderTip label={t("study.reader.panel.words")} side="bottom">
+            <Button
+              size="sm"
+              variant={panel === "words" ? "secondary" : "ghost"}
+              className="hidden gap-1 px-2 sm:inline-flex"
+              aria-label={t("study.reader.wordsCount", { count: words.length })}
+              aria-pressed={panel === "words"}
+              onClick={() => togglePanel("words")}
+            >
+              <Icon icon={TranslateIcon} size={17} />
+              <span aria-hidden className="text-xs tabular-nums">{words.length}</span>
+            </Button>
+          </ReaderTip>
           <Button
             size="sm"
-            variant="outline"
-            onClick={() =>
-              void updateStudyBook(book.id, {
-                bookmarks: book.bookmarks.includes(index)
-                  ? book.bookmarks.filter((at) => at !== index)
-                  : [...book.bookmarks, index],
-              })
-            }
+            shape="pill"
+            variant={panel === "ai" ? "default" : "outline"}
+            className="ms-1 gap-1.5 px-2.5 sm:px-3"
+            aria-pressed={panel === "ai"}
+            aria-label={t("study.selection.ask")}
+            onClick={() => togglePanel("ai")}
           >
-            {book.bookmarks.includes(index) ? "Remove bookmark" : "Bookmark"}
+            <Icon icon={AiChat02Icon} size={16} />
+            <span className="hidden sm:inline">{t("study.selection.ask")}</span>
           </Button>
-          {book.format === "pdf" && fileId && (!hasPageText || section.ocrLanguages) &&
-            !scanDraft?.pages.some(({ section }) => section === index) ? (
-            <Button size="sm" variant="outline" onClick={() => setOcrMode("page")}>
-              {t(section.ocrLanguages ? "study.scan.edit" : "study.scan.title")}
-            </Button>
-          ) : null}
-          {book.format === "pdf" && fileId && book.sections.length > 1 && book.sections.some(({ text }) => !text.trim()) ? (
-            <Button size="sm" variant="outline" disabled={openingScanReview} onClick={() => void openScanReview()}>
-              {t(scanDraft?.pages.length ? "study.scan.resume" : "study.scan.batch")}
-            </Button>
-          ) : null}
-        </div>
-        {book.bookmarks.length || bookmarkPlaces.length ? (
-          <div className="flex flex-wrap gap-2 text-sm">
-            <span>Bookmarks</span>
-            {book.bookmarks.map((at) => (
-              <button
-                key={at}
-                type="button"
-                className="cursor-pointer underline"
-                onClick={() => go(at)}
-              >
-                {book.sections[at]?.title ?? at + 1}
-              </button>
-            ))}
-            {bookmarkPlaces.map((place) => {
-              const { id, section, quote, offset } = place;
-              const at = locateStudyMark(book, place);
-              return (
-                <div key={id} className="flex items-center gap-1 rounded-md bg-muted ps-2">
-                  <Link
-                    className="max-w-56 truncate underline"
-                    to={originHref({
-                      kind: "book",
-                      bookId: book.id,
-                      section,
-                      offset: at < 0 ? offset : at,
-                      length: quote.length,
-                      revision: at < 0 ? place.revision : revision,
-                    }, readerParams)}
-                    state={returnState}
-                  >
-                    {quote}
-                  </Link>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-label={`Remove bookmark for ${quote}`}
-                    onClick={() =>
-                      void updateStudyBook(book.id, {
-                        bookmarkPlaces: bookmarkPlaces.filter((place) => place.id !== id),
-                      })
-                    }
-                  >
-                    Remove
-                  </Button>
-                </div>
-              );
-            })}
-          </div>
-        ) : null}
-        {missingPassage ? (
-          <p role="status" ref={passageNotice} className="text-sm text-muted-foreground">
-            {t("study.reader.passageChanged")}{" "}
-            <button
-              type="button"
-              className="cursor-pointer underline underline-offset-4"
-              hidden={!hasBookText}
-              onClick={() => searchInput.current?.focus()}
+          <Menu>
+            <Menu.Trigger
+              render={<Button size="icon-sm" variant="ghost" aria-label={t("study.reader.more")} title={t("study.reader.more")} />}
             >
-              {t("study.reader.search")}
-            </button>
-          </p>
-        ) : null}
-        {selectedHighlight && (missingPassage || selectedHighlight.note.trim()) ? (
-          <div className="space-y-3 rounded-xl border bg-muted/25 p-3 text-sm">
-            {missingPassage ? (
-              <div>
-                <p className="font-medium">{t("study.highlights.savedExcerpt")}</p>
-                <blockquote className="mt-1">
-                  <StudyText text={selectedHighlight.quote} className="wrap-break-word" />
-                </blockquote>
-              </div>
-            ) : null}
-            {selectedHighlight.note.trim() ? (
-              <div>
-                <p className="font-medium">{t("study.highlights.annotation")}</p>
-                <DirectionalText
-                  multiline
-                  text={selectedHighlight.note}
-                  className="mt-1 wrap-break-word whitespace-pre-wrap"
-                />
-              </div>
-            ) : null}
+              <Icon icon={MoreHorizontalIcon} size={18} />
+            </Menu.Trigger>
+            <Menu.Content align="end">
+              <Menu.Item
+                onClick={() =>
+                  void updateStudyBook(book.id, {
+                    bookmarks: bookmarked ? book.bookmarks.filter((at) => at !== index) : [...book.bookmarks, index],
+                  })
+                }
+              >
+                {t(bookmarked ? `study.reader.removePageBookmark.${pageNoun}` : `study.reader.bookmarkPage.${pageNoun}`)}
+              </Menu.Item>
+              {visitingPassage ? <Menu.Item onClick={resume}>{t("study.reader.resume")}</Menu.Item> : null}
+              <Menu.Separator />
+              <Menu.Item disabled={openingTutor || !hasPageText} onClick={() => discuss("chapter")}>
+                {t(`study.reader.discuss.${pageNoun}`)}
+              </Menu.Item>
+              <Menu.Item disabled={openingTutor || !hasBookText} onClick={() => discuss("book")}>
+                {t("study.reader.discuss.book")}
+              </Menu.Item>
+              <Menu.Item disabled={openingTutor || !hasPageText} onClick={() => discuss("teach-back")}>
+                {t("study.reader.teachBack")}
+              </Menu.Item>
+              <Menu.Item disabled={!hasPageText} onClick={() => draftCards(section.text)}>
+                {t("study.capture.cardsFromSection")}
+              </Menu.Item>
+              {canScanPage || canScanBook || canEditText || canToggleLayout || originalDownload ? <Menu.Separator /> : null}
+              {canScanPage ? (
+                <Menu.Item onClick={() => setOcrMode("page")}>
+                  {t(section.ocrLanguages ? "study.scan.edit" : "study.scan.title")}
+                </Menu.Item>
+              ) : null}
+              {canScanBook ? (
+                <Menu.Item disabled={openingScanReview} onClick={() => void openScanReview()}>
+                  {t(scanDraft?.pages.length ? "study.scan.resume" : "study.scan.batch")}
+                </Menu.Item>
+              ) : null}
+              {canEditText ? (
+                <Menu.Item disabled={editingSection === index} onClick={() => setEditingSection(index)}>
+                  {t("study.documentEditor.edit")}
+                </Menu.Item>
+              ) : null}
+              {canToggleLayout ? (
+                <Menu.Item disabled={savingSurface} onClick={() => void toggleLayout(!showLayout)}>
+                  {layoutLabel}
+                </Menu.Item>
+              ) : null}
+              {originalDownload && originalFile ? (
+                <Menu.Item render={<a href={originalFile.url} download={originalDownload} />}>
+                  {t("study.reader.downloadOriginal")}
+                </Menu.Item>
+              ) : null}
+              <Menu.Separator />
+              <Menu.Item render={<Link to={routes.notebook(book.notebookId)} state={returnState} />}>
+                {t("study.reader.openNotebook")}
+              </Menu.Item>
+              <Menu.Item render={<Link to={studyNotesHref(book.notebookId)} state={returnState} />}>
+                {t("study.reader.notes")}
+              </Menu.Item>
+              <Menu.Item render={<Link to={studyHref("cards", { book: book.id })} state={returnState} />}>
+                {t("study.reader.flashcards")}
+              </Menu.Item>
+              <Menu.Item render={<Link to={studyHref("highlights", { book: book.id })} state={returnState} />}>
+                {t("study.reader.allHighlights")}
+              </Menu.Item>
+              <Menu.Separator />
+              <Menu.Item onClick={toggleFocus}>{focusLabel}</Menu.Item>
+            </Menu.Content>
+          </Menu>
+        </div>
+      </header>
+      {searchOpen && hasBookText ? (
+        <div data-study-reader-search="" className="shrink-0 border-b px-3 py-2">
+          <div className="mx-auto max-w-3xl">
+            <StudyDocumentSearch
+              input={searchInput}
+              sections={book.sections}
+              active={focus && { section: index, ...focus }}
+              open={({ section, offset, length }) => {
+                clearSelection();
+                setVisualAction(undefined);
+                setEditingSection(undefined);
+                setOcrMode(undefined);
+                openPassage(section, { offset, length });
+              }}
+              study={({ offset, length }) => {
+                selectPassage({ text: section.text.slice(offset, offset + length), offset }, undefined);
+              }}
+            />
           </div>
-        ) : null}
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="outline" disabled={openingTutor || !hasPageText} onClick={() => startChat("chapter", index)}>
-          Discuss this {book.format === "pdf" ? "page" : "chapter"}
-        </Button>
-        <Button size="sm" variant="outline" disabled={openingTutor || !hasBookText} onClick={() => startChat("book", index)}>
-          Discuss the book
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={!hasPageText}
-          onClick={() => draftCards(section.text)}
-        >
-          {t("study.capture.cardsFromSection")}
-        </Button>
-      </div>
-      {book.format === "text" && !book.attachedToNotebook ? (
-        <StudyDocumentEdits
-          key={index}
-          book={book}
-          section={index}
-          vaultId={vaultId}
-          open={editingSection === index}
-          onOpenChange={(open) => setEditingSection(open ? index : undefined)}
-          onSave={clearSelection}
-        />
+        </div>
       ) : null}
-      <div className="space-y-4 rounded-2xl border bg-card p-5 sm:p-8">
-        {viewPdf && fileId ? (
-          <StudyPdfPage
-            key={index}
-            fileId={fileId}
-            page={index}
-            sectionText={section.text}
-            marks={renderedMarks}
-            zoom={zoom}
-            layoutVisit={location.key}
-            focusCrop={focusedVisual?.kind === "pdf" ? focusedVisual.crop : undefined}
-            onSelect={captureRendered}
-            onReadingSurface={setReadingSurface}
-            onVisual={(capture) => openVisualAction(capture, "card")}
-            onDiscuss={(capture) => void startImageChat(index, capture)}
-            onDiscussArea={(capture) => openVisualAction(capture, "discuss")}
-          />
-        ) : null}
-        {viewEpub && fileId ? (
-          <StudyEpubChapter
-            key={index}
-            fileId={fileId}
-            section={section}
-            index={index}
-            sections={book.sections}
-            marks={renderedMarks}
-            font={font}
-            theme={epubTheme}
-            focus={focusedVisual?.kind === "epub" ? focusedVisual : undefined}
-            go={go}
-            onSelect={captureRendered}
-            onReadingSurface={setReadingSurface}
-            onVisual={(capture) => openVisualAction(capture, "card")}
-            onDiscuss={(capture) => void startImageChat(index, capture)}
-            onDiscussArea={(capture) => openVisualAction(capture, "discuss")}
-          />
-        ) : null}
-        {section.ocrLanguages ? (
-          <p className="mx-auto max-w-prose text-sm font-medium text-muted-foreground">{t("study.scan.recognized")}</p>
-        ) : null}
-        <article
-          ref={textBody}
-          tabIndex={0}
-          aria-label={section.title}
-          className={`mx-auto max-w-prose leading-relaxed wrap-break-word outline-none focus-visible:ring-2 focus-visible:ring-ring ${markdown === undefined ? "whitespace-pre-wrap" : "markdown study-math study-reading-text"}`}
-          style={{ fontSize: font }}
-          onMouseUp={capture}
-          onTouchEnd={capture}
-          onKeyUp={capture}
+      <div className="relative flex min-h-0 flex-1">
+        <div
+          ref={setFrame}
+          className="relative flex min-h-0 min-w-0 flex-1 flex-col"
+          inert={panelCovers}
           onPointerMove={() => {
             latestInteraction.current = Date.now();
           }}
         >
-          {markdown !== undefined ? (
-            <StudyMarkdown bare imageAltOnly math={formulaMode} onMathReady={onMathReady} text={markdown} />
-          ) : hasPageText ? (
-            highlighted(section.text, pageHighlights, focus)
-          ) : (
-            t("study.reader.noSelectableText")
-          )}
-        </article>
-      </div>
-      {selection ? (
-        <div
-          aria-label={t("study.capture.selectionActions")}
-          className="sticky bottom-3 z-10 space-y-2 rounded-2xl border bg-popover p-3 shadow"
-        >
-          <div className="flex items-start justify-between gap-3">
-            <StudyText
-              text={selection.text}
-              className="min-w-0 line-clamp-2 text-sm text-muted-foreground"
-            />
-            <Button size="sm" variant="ghost" onClick={clearSelection}>
-              {t("study.capture.dismiss")}
-            </Button>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              size="sm"
-              onClick={() => {
-                void putStudyRecords({
-                  id: studyId(),
-                  kind: "highlight",
-                  bookId: book.id,
-                  notebookId: book.notebookId,
-                  section: index,
-                  quote: selection.text,
-                  offset: selection.offset,
-                  revision: selection.revision,
-                  color,
-                  note: "",
-                  updatedAt: Date.now(),
-                  schedule: freshSchedule(),
-                })
-                  .then(clearSelection)
-                  .catch((error: Error) => toast.error(error.message));
-              }}
-            >
-              Highlight
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              onClick={() => void assist("explain")}
-            >
-              Explain
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={openingTutor}
-              onClick={() => startChat("passage", index, selection, "teach-back")}
-            >
-              {t("study.capture.practice")}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setCardFront("");
-                setCardBack(selection.text);
-              }}
-            >
-              Make flashcard
-            </Button>
-            <Menu>
-              <Menu.Trigger render={<Button size="sm" variant="ghost" />}>
-                {t("study.capture.more")}
-              </Menu.Trigger>
-              <Menu.Content align="end">
-                <Menu.Item disabled={openingTutor} onClick={() => startChat("passage", index, selection)}>
-                  Ask about selection
-                </Menu.Item>
-                <Menu.Item onClick={() => draftCards(selection.text, selection)}>
-                  {t("study.capture.cardsFromSelection")}
-                </Menu.Item>
-                <Menu.Item onClick={() => makeNote(selection)}>Save to Notes</Menu.Item>
-                <Menu.Item onClick={() => bookmarkSelection(selection)}>
-                  Bookmark selection
-                </Menu.Item>
-                <Menu.Item onClick={() => setTranslating(true)}>Translate</Menu.Item>
-                <Menu.Item onClick={() => saveVocabulary(selection)}>Save vocabulary</Menu.Item>
-                <Menu.Separator />
-                <Menu.Group>
-                  <Menu.GroupLabel>{t("study.highlights.colorLabel")}</Menu.GroupLabel>
-                  <Menu.RadioGroup
-                    value={color}
-                    onValueChange={(value) => {
-                      const choice = studyHighlightColor.safeParse(value);
-                      if (choice.success) setColor(choice.data);
-                    }}
-                  >
-                    {studyHighlightColor.options.map((name) => (
-                      <Menu.RadioItem key={name} value={name} closeOnClick>
-                        {t(`study.highlights.colors.${name}`)}
-                      </Menu.RadioItem>
-                    ))}
-                  </Menu.RadioGroup>
-                </Menu.Group>
-              </Menu.Content>
-            </Menu>
-          </div>
-          {translating ? (
-            <form
-              className="flex flex-wrap items-center gap-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (language.trim() && !busy) void assist("translate");
-              }}
-            >
-              <Input
-                className="max-w-40"
-                aria-label="Translate to"
-                placeholder="Language"
-                value={language}
-                onChange={(event) => setLanguage(event.target.value)}
-              />
-              <Button type="submit" size="sm" variant="outline" disabled={busy || !language.trim()}>
-                Translate
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setTranslating(false)}>
-                {t("study.capture.dismiss")}
-              </Button>
-            </form>
-          ) : null}
-          {cardFront !== null ? (
-            <form
-              className="flex flex-wrap items-start gap-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (cardSaving || !cardFront.trim() || !cardBack.trim()) return;
-                setCardSaving(true);
-                void saveStudyCard({
-                  front: cardFront.trim(),
-                  back: cardBack.trim(),
-                  tags: [book.title],
-                  notebookId: book.notebookId,
-                  origin: sourceOf(selection),
-                })
-                  .then(() => {
-                    setCardFront(null);
-                    toast.success("Flashcard created", {
-                      action: {
-                        label: "View flashcards",
-                        onClick: () =>
-                          navigate(studyHref("cards", { book: book.id }), { state: returnState }),
-                      },
-                    });
-                  })
-                  .catch((error: Error) => toast.error(error.message))
-                  .finally(() => setCardSaving(false));
-              }}
-            >
-              <Input
-                value={cardFront}
-                dir={textDirection(cardFront)}
-                onChange={(event) => setCardFront(event.target.value)}
-                aria-label="Front of flashcard"
-                placeholder="Question to review"
-                className="max-w-sm"
-              />
-              <Textarea
-                value={cardBack}
-                dir={textDirection(cardBack)}
-                onChange={(event) => setCardBack(event.target.value)}
-                aria-label={t("study.capture.flashcardAnswer")}
-                size="sm"
-                minRows={1}
-                maxRows={4}
-                className="basis-full sm:flex-1"
-              />
-              <Button
-                type="submit"
-                size="sm"
-                disabled={cardSaving || !cardFront.trim() || !cardBack.trim()}
+          <ScrollArea className="min-h-0 flex-1" viewportRef={viewportRef}>
+            <div className="px-5 pt-8 pb-28 sm:px-8 sm:pt-12">
+              <div className="mx-auto max-w-[44rem] space-y-3 empty:hidden">{notices}</div>
+              {editingSection === index && canEditText ? (
+                <div className="mx-auto mt-4 max-w-[44rem]">
+                  <StudyDocumentEdits
+                    key={index}
+                    book={book}
+                    section={index}
+                    vaultId={vaultId}
+                    open
+                    showTrigger={false}
+                    onOpenChange={(open) => setEditingSection(open ? index : undefined)}
+                    onSave={clearSelection}
+                  />
+                </div>
+              ) : null}
+              {showsTitle ? (
+                <header className={cn("mx-auto mt-6 mb-8 max-w-[44rem] first:mt-0", appearance.font === "sans" ? "font-sans" : "font-serif")}>
+                  {book.format !== "pdf" && book.sections.length > 1 ? (
+                    <p className="mb-2 font-sans text-xs font-medium tracking-[0.14em] text-muted-foreground uppercase">
+                      {t("study.reader.sectionNumber", { number: index + 1 })}
+                    </p>
+                  ) : null}
+                  <h1 className="text-[1.75rem] leading-tight font-medium text-balance wrap-break-word" dir="auto">
+                    {section.title}
+                  </h1>
+                </header>
+              ) : null}
+              {showingOriginal ? (
+                <div className="mx-auto max-w-5xl" onClick={(event) => openHighlightAt(layout, event)}>
+                  {viewPdf && fileId ? (
+                    <StudyPdfPage
+                      key={index}
+                      fileId={fileId}
+                      page={index}
+                      sectionText={section.text}
+                      marks={renderedMarks}
+                      zoom={zoom}
+                      layoutVisit={location.key}
+                      focusCrop={focusedVisual?.kind === "pdf" ? focusedVisual.crop : undefined}
+                      onSelect={captureRendered}
+                      onReadingSurface={setReadingSurface}
+                      onVisual={(capture) => openVisualAction(capture, "card")}
+                      onDiscuss={(capture) => void startImageChat(index, capture)}
+                      onDiscussArea={(capture) => openVisualAction(capture, "discuss")}
+                    />
+                  ) : null}
+                  {viewEpub && fileId ? (
+                    <StudyEpubChapter
+                      key={index}
+                      fileId={fileId}
+                      section={section}
+                      index={index}
+                      sections={book.sections}
+                      marks={renderedMarks}
+                      font={font}
+                      theme={epubTheme}
+                      focus={focusedVisual?.kind === "epub" ? focusedVisual : undefined}
+                      go={go}
+                      onSelect={captureRendered}
+                      onReadingSurface={setReadingSurface}
+                      onVisual={(capture) => openVisualAction(capture, "card")}
+                      onDiscuss={(capture) => void startImageChat(index, capture)}
+                      onDiscussArea={(capture) => openVisualAction(capture, "discuss")}
+                    />
+                  ) : null}
+                </div>
+              ) : null}
+              {section.ocrLanguages ? (
+                <p className="mx-auto mt-6 max-w-[44rem] text-sm font-medium text-muted-foreground">{t("study.scan.recognized")}</p>
+              ) : null}
+              <article
+                ref={textBody}
+                tabIndex={0}
+                aria-label={section.title}
+                className={cn(
+                  "mx-auto max-w-[44rem] leading-[1.8] wrap-break-word outline-none rounded-sm focus-visible:ring-1 focus-visible:ring-ring/40 focus-visible:ring-offset-8 focus-visible:ring-offset-card",
+                  showingOriginal && "mt-8",
+                  appearance.font === "sans" ? "font-sans" : "font-serif",
+                  markdown === undefined ? "whitespace-pre-wrap" : "markdown study-math study-reading-text",
+                )}
+                style={{ fontSize: font }}
+                onMouseUp={capture}
+                onTouchEnd={capture}
+                onKeyUp={capture}
+                onClick={(event) => openHighlightAt(textBody.current, event)}
               >
-                Save flashcard
-              </Button>
-              <Button type="button" variant="ghost" size="sm" onClick={() => setCardFront(null)}>
-                Cancel
-              </Button>
-            </form>
-          ) : null}
-          {busy ? (
-            <p className="text-sm text-muted-foreground" role="status">
-              {t("study.capture.working")}
-            </p>
-          ) : null}
-          {result && result.selection === selection ? (
-            <div className="max-h-[40dvh] space-y-2 overflow-auto border-t pt-2">
-              <StudyText prose text={result.text} />
-              <div className="flex flex-wrap gap-1">
-                {result.action === "explain" && result.text.trim() ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={openingTutor}
-                    onClick={() => startChat("passage", index, selection, undefined, [
-                      { role: "user", text: t("study.reader.explainPassage") },
-                      { role: "assistant", text: result.text, citations: [{ index: 1, title: book.title, origin: sourceOf(selection) }] },
-                    ])}
-                  >
-                    {t("study.reader.continueWithTutor")}
-                  </Button>
-                ) : null}
-                <Button variant="ghost" size="sm" onClick={() => makeNote(selection, result.text)}>
-                  {t("study.capture.saveAnswer")}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => draftCards(result.text, selection)}
-                >
-                  {t("study.capture.cardsFromAnswer")}
-                </Button>
-              </div>
+                {markdown !== undefined ? (
+                  <StudyMarkdown bare imageAltOnly math={formulaMode} onMathReady={onMathReady} text={markdown} />
+                ) : hasPageText ? (
+                  highlighted(section.text, pageHighlights, focus)
+                ) : (
+                  <span className="font-sans text-base text-muted-foreground">{t("study.reader.noSelectableText")}</span>
+                )}
+              </article>
             </div>
+          </ScrollArea>
+          {selection && frame ? (
+            <StudySelectionMenu
+              key={`${selection.offset}:${selection.text.length}:${selection.revision}`}
+              handle={selectionMenu}
+              selection={selection}
+              frame={frame}
+              viewport={viewport}
+              anchor={selectionAnchor}
+              preferBelow={selectionByTouch}
+              book={book}
+              sectionTitle={section.title}
+              sectionText={section.text}
+              origin={sourceOf(selection)}
+              vaultId={vaultId}
+              translateTo={translateTo}
+              chooseTranslateTo={chooseTranslateTo}
+              highlight={selectedMark}
+              color={color}
+              openingTutor={openingTutor}
+              onHighlight={(choice) => void saveHighlight(choice)}
+              onRemoveHighlight={() => void removeHighlight()}
+              onSaveNote={saveSelectionNote}
+              onAsk={ask}
+              onTeachBack={() => {
+                startChat("passage", index, selection, "teach-back");
+                closeSelection();
+              }}
+              onDraftCards={(text) => {
+                draftCards(text, selection);
+                closeSelection();
+              }}
+              onBookmark={() => {
+                bookmarkSelection(selection);
+                closeSelection();
+              }}
+              onSaveToNotes={(body) => {
+                makeNote(selection, body);
+                if (body === undefined) closeSelection();
+              }}
+              onContinueExplain={(answer) => {
+                startChat("passage", index, selection, undefined, [
+                  { role: "user", text: t("study.reader.explainPassage") },
+                  { role: "assistant", text: answer, citations: [{ index: 1, title: book.title, origin: sourceOf(selection) }] },
+                ]);
+                closeSelection();
+              }}
+              onShowWords={() => {
+                closeSelection(false);
+                showPanel("words");
+              }}
+              onViewCards={() => navigate(studyHref("cards", { book: book.id }), { state: returnState })}
+              onClose={() => closeSelection()}
+            />
           ) : null}
         </div>
-      ) : null}
+        {panel ? (
+          <StudyReaderPanel
+            tab={panel}
+            chooseTab={showPanel}
+            close={closePanel}
+            wide={wide}
+            book={book}
+            vaultId={vaultId}
+            highlights={highlights}
+            words={words}
+            tutor={tutor}
+            openingTutor={openingTutor}
+            canDiscussPage={hasPageText}
+            canDiscussBook={hasBookText}
+            goToHighlight={(item) => {
+              if (!wide) setPanel(null);
+              navigate(originHref(studyHighlightOrigin(item), readerParams), { state: returnState });
+            }}
+            askHighlight={(item) => startChat("passage", item.section, highlightSelection(item))}
+            discuss={discuss}
+            reviewHighlights={reviewHighlights}
+            reviewWords={reviewWords}
+            panelRef={panelElement}
+            tutorPane={tutorPane}
+          />
+        ) : null}
+      </div>
+      <footer className="flex h-12 shrink-0 items-center gap-3 border-t px-2 text-xs text-muted-foreground sm:px-3">
+        <ReaderTip label={t("study.reader.previous")} keys={[rtl ? "→" : "←"]}>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label={t("study.reader.previous")}
+            disabled={index === 0}
+            onClick={() => go(index - 1)}
+          >
+            <Icon icon={ArrowLeft01Icon} size={16} className="rtl:rotate-180" />
+          </Button>
+        </ReaderTip>
+        <span className="min-w-9 shrink-0 tabular-nums">{percent}</span>
+        <div
+          role="progressbar"
+          aria-label={t("study.reader.progress")}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(progress * 100)}
+          className="relative h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-muted"
+        >
+          <span
+            className="absolute inset-y-0 start-0 rounded-full bg-foreground/60 transition-[width] duration-300 motion-reduce:transition-none"
+            style={{ width: `${progress * 100}%` }}
+          />
+        </div>
+        <span className="shrink-0 tabular-nums">
+          {t(book.format === "pdf" ? "study.reader.pageOf" : "study.reader.sectionOf", {
+            current: index + 1,
+            count: book.sections.length,
+          })}
+        </span>
+        <ReaderTip label={t("study.reader.next")} keys={[rtl ? "←" : "→"]}>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label={t("study.reader.next")}
+            disabled={index === book.sections.length - 1}
+            onClick={() => go(index + 1)}
+          >
+            <Icon icon={ArrowRight01Icon} size={16} className="rtl:rotate-180" />
+          </Button>
+        </ReaderTip>
+      </footer>
       {ocrMode === "page" && fileId ? (
         <StudyPageOcr
           key={`${book.id}:${index}`}

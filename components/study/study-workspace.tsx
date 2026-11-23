@@ -158,6 +158,8 @@ export default function StudyWorkspace({
   const readingWithoutPane = params.get("readerView") === "book";
   const tutorVisible = Boolean(readerThreadId && (sideBySide || !readingWithoutPane));
   const unavailableBook = Boolean(ready && bookId && !book);
+  const readingBook = ready && tab === "library" && Boolean(book);
+  const outsideReader = useRef<string | null>(null);
   const thread = threads.find((entry) => entry.id === params.get("thread"));
   const fromAnswer = params.get("fromAnswer");
   const answerIndex = queryIndex(fromAnswer);
@@ -262,6 +264,11 @@ export default function StudyWorkspace({
 
   useEffect(() => () => readerRequest.current?.abort(), [bookId, tab]);
 
+  // The reader's back button returns to the Study view the book was opened from.
+  useEffect(() => {
+    if (!bookId) outsideReader.current = location.search;
+  }, [bookId, location.search]);
+
   useEffect(() => {
     if (tutorVisible) tutorPane.current?.focus({ preventScroll: true });
     else if (wasShowingTutor.current) {
@@ -298,6 +305,11 @@ export default function StudyWorkspace({
       return query;
     }, { replace: true, state: studyReturnState(location.state) });
     if (next) enterFullscreen();
+  }
+  function leaveReader() {
+    const previous = outsideReader.current;
+    if (previous) setParams(new URLSearchParams(previous), { state: studyReturnState(location.state) });
+    else go("library", libraryScope);
   }
   function read(what: StudyBook) {
     go("library", { ...libraryScope, book: what.id });
@@ -522,7 +534,21 @@ export default function StudyWorkspace({
             focusedRange={focusedRange}
             focusedVisual={focusedVisual}
             highlights={highlights.filter((highlight) => highlight.bookId === book.id)}
-            back={() => go("library", libraryScope)}
+            words={words.filter((word) => word.bookId === book.id)}
+            viewportRef={setReaderViewport}
+            wide={sideBySide}
+            tutorPane={tutorPane}
+            tutor={readerThread ? {
+              thread: readerThread,
+              visible: tutorVisible,
+              content: conversation(readerThread, true),
+              show: () => showReaderTutor(readerThread.id),
+              hide: () => (sideBySide ? showReaderTutor() : showReaderTutor(readerThread.id, true)),
+              openFull: () => openThread(readerThread),
+            } : undefined}
+            reviewHighlights={() => go("review", { kind: "highlights", book: book.id })}
+            reviewWords={(ids) => go("review", { kind: "vocabulary" }, ids)}
+            back={leaveReader}
             openPage={(section) => locate(book.id, section)}
             resume={() => locate(book.id, book.section)}
             openPassage={(section, range) =>
@@ -736,7 +762,7 @@ export default function StudyWorkspace({
         !focusedReader && "rounded-3xl ring-1 ring-border",
       )}
     >
-      <Tabs.List aria-label={t("study.sections")} className={cn("shrink-0 px-2 sm:px-4", focusedReader && !unavailableBook && "hidden")}>
+      <Tabs.List aria-label={t("study.sections")} className={cn("shrink-0 px-2 sm:px-4", (readingBook || (focusedReader && !unavailableBook)) && "hidden")}>
         {tabs.map((entry) => (
           <Tabs.Trigger key={entry} value={entry}>
             {t(`study.tabs.${entry}`)}
@@ -752,57 +778,19 @@ export default function StudyWorkspace({
       {tabs.map((entry) => (
         <Tabs.Content key={entry} value={entry} className="flex min-h-0 flex-col">
           {entry === tab ? (
-            <div className="relative flex min-h-0 flex-1">
-              <div
-                className="isolate flex min-h-0 min-w-0 flex-1 flex-col"
-                inert={tutorVisible && !sideBySide}
-              >
-                {readerThread && !tutorVisible ? (
-                  <div className="border-b px-3 py-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => showReaderTutor(readerThread.id)}
-                    >
-                      {t("study.reader.backToTutor")}
-                    </Button>
-                  </div>
-                ) : null}
+            readingBook ? (
+              // The reader fills the card with its own bars, scrolling and side panel.
+              <div className="relative flex min-h-0 flex-1">{content}</div>
+            ) : (
+              <div className="relative flex min-h-0 flex-1">
                 <ScrollArea
-                  key={`${studyVaultId}:${book?.id ?? ""}:${thread?.id ?? ""}`}
+                  key={`${studyVaultId}:${thread?.id ?? ""}`}
                   className="min-h-0 min-w-0 flex-1"
-                  viewportRef={entry === "library" && book ? setReaderViewport : undefined}
                 >
                   <div className="mx-auto max-w-6xl px-4 pt-5 pb-8 sm:px-6">{content}</div>
                 </ScrollArea>
               </div>
-              {readerThread ? (
-                <aside
-                  ref={tutorPane}
-                  tabIndex={-1}
-                  aria-label={t("study.reader.tutorPane")}
-                  className={`absolute inset-0 z-10 min-h-0 min-w-0 flex-col bg-card outline-none lg:relative lg:inset-auto lg:w-[min(46%,36rem)] lg:shrink-0 lg:border-s ${tutorVisible ? "flex" : "hidden"}`}
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() =>
-                        sideBySide ? showReaderTutor() : showReaderTutor(readerThread.id, true)
-                      }
-                    >
-                      {t(sideBySide ? "study.reader.closeTutor" : "study.reader.backToReading")}
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => openThread(readerThread)}>
-                      {t("study.reader.fullTutor")}
-                    </Button>
-                  </div>
-                  <ScrollArea className="min-h-0 flex-1">
-                    <div className="p-3 sm:p-4">{conversation(readerThread, true)}</div>
-                  </ScrollArea>
-                </aside>
-              ) : null}
-            </div>
+            )
           ) : null}
         </Tabs.Content>
       ))}

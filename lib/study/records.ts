@@ -28,16 +28,19 @@ const schedule = z.object({
 const index = z.number().int().nonnegative();
 const readingSurface = z.enum(["text", "layout"]);
 export const studyEpubTheme = z.enum(["system", "light", "sepia", "dark"]);
+export const studyReadingFont = z.enum(["serif", "sans"]);
 const readingAppearance = z.object({
   textSize: z.number().int().min(14).max(28).optional(),
   pdfZoom: z.number().int().min(75).max(200).multipleOf(25).optional(),
   epubTheme: studyEpubTheme.optional(),
+  font: studyReadingFont.optional(),
 });
 export type StudyReadingAppearance = Required<z.infer<typeof readingAppearance>>;
 export const defaultStudyReadingAppearance: StudyReadingAppearance = {
   textSize: 18,
   pdfZoom: 100,
   epubTheme: "system",
+  font: "serif",
 };
 const readingPlace = z.object({
   section: index,
