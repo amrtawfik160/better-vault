@@ -16,11 +16,13 @@ import { useStudioRunner } from "./studio-runner";
 interface ToolDialogProps {
   notebookId: string;
   toolId: StudioToolId | null;
+  /** Sources to start with instead of the notebook's selection (a tool opened for one Study book). */
+  initialSourceIds?: string[] | null;
   onClose: () => void;
 }
 
 /** A Studio tool's options, opened from its tile: its own fields, then language and sources. */
-export function ToolDialog({ notebookId, toolId, onClose }: ToolDialogProps) {
+export function ToolDialog({ notebookId, toolId, initialSourceIds, onClose }: ToolDialogProps) {
   const { t: tCommon } = useTranslation();
   const client = toolId ? toolClients[toolId] : undefined;
   return (
@@ -31,7 +33,13 @@ export function ToolDialog({ notebookId, toolId, onClose }: ToolDialogProps) {
         className={cn(client?.wide && "max-w-2xl")}
       >
         {toolId ? (
-          <ToolForm key={toolId} notebookId={notebookId} toolId={toolId} onDone={onClose} />
+          <ToolForm
+            key={toolId}
+            notebookId={notebookId}
+            toolId={toolId}
+            initialSourceIds={initialSourceIds ?? null}
+            onDone={onClose}
+          />
         ) : null}
       </Dialog.Content>
     </Dialog>
@@ -41,10 +49,12 @@ export function ToolDialog({ notebookId, toolId, onClose }: ToolDialogProps) {
 function ToolForm({
   notebookId,
   toolId,
+  initialSourceIds,
   onDone,
 }: {
   notebookId: string;
   toolId: StudioToolId;
+  initialSourceIds: string[] | null;
   onDone: () => void;
 }) {
   const { t } = useTranslation("studio");
@@ -58,8 +68,8 @@ function ToolForm({
   const [options, setOptions] = useState<unknown>(definition?.defaults);
   const [focus, setFocus] = useState("");
   const [language, setLanguage] = useState("auto");
-  // Starts with the sources selected in the notebook.
-  const [sourceIds, setSourceIds] = useState<string[] | null>(null);
+  // Starts with the sources it was opened for, else those selected in the notebook.
+  const [sourceIds, setSourceIds] = useState<string[] | null>(initialSourceIds);
   const chosen = sourceIds
     ? sourceIds.filter((id) => sources?.some((source) => source.id === id))
     : sources?.filter((source) => source.selected).map(({ id }) => id) ?? [];

@@ -45,8 +45,10 @@ interface WorkspaceState {
   clearConversationAction: () => void;
   /** The Studio tool whose dialog is open. */
   activeTool: StudioToolId | null;
-  /** Closes the Studio sheet and opens a tool's dialog. */
-  openTool: (id: StudioToolId) => void;
+  /** The sources the open dialog starts with, when it was opened for them (from Study). */
+  toolSources: string[] | null;
+  /** Closes the Studio sheet and opens a tool's dialog, optionally for given sources. */
+  openTool: (id: StudioToolId, sourceIds?: string[]) => void;
   closeTool: () => void;
   outputAction: OutputAction | null;
   /** Closes the Studio sheet and asks to rename or delete an output. */
@@ -100,6 +102,7 @@ export function WorkspaceProvider({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [conversationAction, setConversationAction] = useState<ConversationAction | null>(null);
   const [activeTool, setActiveTool] = useState<StudioToolId | null>(null);
+  const [toolSources, setToolSources] = useState<string[] | null>(null);
   const [outputAction, setOutputAction] = useState<OutputAction | null>(null);
   const [reading, setReading] = useState<WorkspaceState["reading"]>(null);
 
@@ -148,11 +151,16 @@ export function WorkspaceProvider({
       },
       clearConversationAction: () => setConversationAction(null),
       activeTool,
-      openTool: (id) => {
+      toolSources,
+      openTool: (id, sourceIds) => {
         setStudioOpen(false);
+        setToolSources(sourceIds ?? null);
         setActiveTool(id);
       },
-      closeTool: () => setActiveTool(null),
+      closeTool: () => {
+        setActiveTool(null);
+        setToolSources(null);
+      },
       outputAction,
       requestOutputAction: (action) => {
         setStudioOpen(false);
@@ -174,6 +182,7 @@ export function WorkspaceProvider({
       historyOpen,
       conversationAction,
       activeTool,
+      toolSources,
       outputAction,
       reading,
       setParams,

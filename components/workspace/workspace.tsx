@@ -20,6 +20,7 @@ import { StudioView } from "./studio-view";
 import { TopBar } from "./top-bar";
 import { WorkspaceProvider, useWorkspace, type WorkspaceTab } from "./workspace-context";
 import { routes } from "@/lib/routes";
+import { studioMakeRequest } from "@/studio/make-link";
 
 /** The notebook screen. */
 export function Workspace({ notebookId }: { notebookId: string }) {
@@ -47,6 +48,8 @@ function WorkspaceLayout() {
     reading,
     closeReader,
     activeTool,
+    toolSources,
+    openTool,
     closeTool,
     readSource,
   } = useWorkspace();
@@ -55,14 +58,18 @@ function WorkspaceLayout() {
   const [params, setParams] = useSearchParams();
   const handled = useRef<string | null>(null);
 
-  // The studio output stays in the URL. Source and Add source links are one-shot commands.
+  // The studio output stays in the URL. Source, Add source and Make links are one-shot commands.
   useEffect(() => {
     const source = params.get("source");
     const view = params.get("tab");
     const addSource = params.get("add") === "source";
-    if ((!source && !view && !addSource) || handled.current === key) return;
+    const make = studioMakeRequest(params);
+    if ((!source && !view && !addSource && !make && !params.has("make")) || handled.current === key) return;
     handled.current = key;
-    if (source) {
+    if (make) {
+      setTab("studio");
+      openTool(make.toolId, make.sourceIds);
+    } else if (source) {
       setTab("sources");
       const snippet = state?.studySourceSnippet;
       readSource(
@@ -75,10 +82,10 @@ function WorkspaceLayout() {
     }
     if (addSource) setAddSourceOpen(true);
     const rest = new URLSearchParams(params);
-    for (const param of ["source", "passage", "add", "tab"]) rest.delete(param);
-    if (source || view === "chat" || view === "sources") rest.delete("output");
+    for (const param of ["source", "passage", "add", "tab", "make", "from"]) rest.delete(param);
+    if (make || source || view === "chat" || view === "sources") rest.delete("output");
     setParams(rest, { replace: true, state: studyReturnState(state) });
-  }, [key, params, state, setParams, setTab, readSource, setAddSourceOpen]);
+  }, [key, params, state, setParams, setTab, readSource, setAddSourceOpen, openTool]);
 
   useEffect(() => {
     document.title = `${notebook.title} · ${t("appName")}`;
@@ -111,7 +118,12 @@ function WorkspaceLayout() {
         onOpenChange={setAddSourceOpen}
       />
       <SourceReader notebookId={notebook.id} reading={reading} onClose={closeReader} />
-      <ToolDialog notebookId={notebook.id} toolId={activeTool} onClose={closeTool} />
+      <ToolDialog
+        notebookId={notebook.id}
+        toolId={activeTool}
+        initialSourceIds={toolSources}
+        onClose={closeTool}
+      />
       <OutputActionDialogs />
       <ConversationActionDialogs />
     </Tabs>
