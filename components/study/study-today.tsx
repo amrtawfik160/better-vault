@@ -37,6 +37,7 @@ import { StudyBookCover, StudyProgressBar } from "./study-book-cover";
 import { studyDueLabel } from "./study-due";
 import { StudyFollowUps } from "./study-follow-ups";
 import { StudyListenButton } from "./study-listen";
+import { StudyMakeFromBook } from "./study-make-from-book";
 import { StudyOriginLink } from "./study-origin-link";
 import { useStudyClock } from "./use-study-clock";
 
@@ -265,10 +266,8 @@ export function DailyStudy({
         </Panel>
       </div>
 
-      {/* Slot: the "Make from this book" panel (Studio tools for the book being read) joins this grid
-          as a third column later; switch the grid to lg:grid-cols-3 when it lands. */}
-      {words.length || threads.length ? (
-        <div className="grid gap-4 md:grid-cols-2">
+      {words.length || threads.length || lastRead ? (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {words.length ? (
             <Panel label={t("study.today.yourWords")}>
               <div className="flex items-center justify-between gap-2">
@@ -331,6 +330,11 @@ export function DailyStudy({
                 ) : null
               }
             />
+          ) : null}
+          {lastRead ? (
+            <Panel label={t("study.make.title", { title: lastRead.title })}>
+              <StudyMakeFromBook book={lastRead} compact />
+            </Panel>
           ) : null}
         </div>
       ) : null}
