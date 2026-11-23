@@ -4,6 +4,7 @@ import { POST as bot } from "./routes/bot";
 import { POST as calendarFetch } from "./routes/calendar-fetch";
 import { POST as chat } from "./routes/chat";
 import { POST as chatgpt } from "./routes/chatgpt";
+import { POST as readerChat } from "./routes/reader-chat";
 import { POST as cliproxyapi } from "./routes/cliproxyapi";
 import { POST as models } from "./routes/models";
 import { POST as opencode } from "./routes/opencode";
@@ -48,6 +49,7 @@ export function createApi({
   api.post("/sources/transcribe", (c) => sourcesTranscribe(c.req.raw));
   api.post("/study", (c) => study(c.req.raw));
   api.post("/study/practice", (c) => studyPractice(c.req.raw));
+  api.post("/study/reader-chat", (c) => readerChat(c.req.raw));
   api.get("/study/ocr", (c) => studyOcrStatus(c.req.raw));
   api.post("/study/ocr", (c) => studyOcr(c.req.raw));
   api.get("/study/voice", (c) => studyVoiceStatus(c.req.raw));

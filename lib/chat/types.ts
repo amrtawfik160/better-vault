@@ -32,6 +32,8 @@ export interface ChatMessageMetadata {
   usage?: TokenUsage;
   /** In a bot's thread: the bot that sent this message (a task handed over), not the user. */
   from?: string;
+  /** Ask AI beside the reader: the passage the user selected to ask about. */
+  quote?: { text: string; section: number };
 }
 
 export interface PromptSize {

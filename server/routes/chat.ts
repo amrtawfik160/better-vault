@@ -1,10 +1,13 @@
 import {
   convertToModelMessages,
   createUIMessageStreamResponse,
+  getToolName,
+  isToolUIPart,
   stepCountIs,
   streamText,
   toUIMessageStream,
   type LanguageModelUsage,
+  type ToolSet,
 } from "ai";
 import { z } from "zod";
 import { providers } from "@/lib/ai/catalog";
@@ -54,6 +57,19 @@ function withoutOldCitations(messages: ChatMessage[]): ChatMessage[] {
           ),
         },
   );
+}
+
+/**
+ * Tool calls this chat can't make, such as a conversation begun beside the
+ * reader that read the book: providers refuse calls to tools they weren't given.
+ */
+function withoutOtherTools(messages: ChatMessage[], tools: ToolSet | undefined): ChatMessage[] {
+  return messages.map((message) => ({
+    ...message,
+    parts: message.parts.filter(
+      (part) => !isToolUIPart(part) || (tools !== undefined && getToolName(part) in tools),
+    ),
+  }));
 }
 
 function textLength(message: ChatMessage): number {
@@ -106,7 +122,7 @@ export async function POST(request: Request) {
   const result = streamText({
     model: languageModel,
     system,
-    messages: await convertToModelMessages(withoutOldCitations(messages), {
+    messages: await convertToModelMessages(withoutOtherTools(withoutOldCitations(messages), tools), {
       ignoreIncompleteToolCalls: true,
     }),
     tools,
