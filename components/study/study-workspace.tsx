@@ -535,8 +535,13 @@ export default function StudyWorkspace({
   const thread = threads.find((entry) => entry.id === params.get("thread"));
   const fromAnswer = params.get("fromAnswer");
   const answerIndex = queryIndex(fromAnswer);
-  const answerFilter = fromAnswer !== null && thread ? { thread: thread.id, fromAnswer } : undefined;
-  const answerCollection = fromAnswer !== null ? t("study.recall.tutorAnswerCards") : undefined;
+  const fromThread = params.get("fromThread") === "1" ? "1" : undefined;
+  const answerFilter: Record<string, string> | undefined = fromAnswer !== null && thread
+    ? { thread: thread.id, fromAnswer }
+    : fromThread && thread ? { thread: thread.id, fromThread } : undefined;
+  const answerCollection = fromAnswer !== null
+    ? t("study.recall.tutorAnswerCards")
+    : fromThread ? t("study.tutorActions.conversationCards") : undefined;
   const tutorAnswer = answerIndex !== undefined && thread?.messages[answerIndex]?.role === "assistant" &&
     !tutorReturnState(location.state) ? { threadId: thread.id, message: answerIndex } : undefined;
   const fromReport = params.get("fromReport");
@@ -911,7 +916,7 @@ export default function StudyWorkspace({
           }
           clearFilter={() => go("cards")}
           creation={
-            output || cardId || fromReport || fromAnswer !== null || noteId
+            output || cardId || fromReport || fromAnswer !== null || fromThread || noteId
               ? false
               : book
                 ? {

@@ -14,9 +14,10 @@ export function studyHref(tab: string, params: Record<string, string | number | 
   return withQuery(routes.home, { view: "study", tab, ...params });
 }
 
-export function tutorCardsScope(origin?: StudyOrigin) {
+export function tutorCardsScope(origin?: StudyOrigin): Record<string, string> | undefined {
   if (origin?.kind === "tutor" && origin.message !== undefined)
     return { thread: origin.threadId, fromAnswer: String(origin.message) };
+  if (origin?.kind === "tutor") return { thread: origin.threadId, fromThread: "1" };
   if (origin?.kind === "report")
     return { thread: origin.threadId, fromReport: origin.reportId ?? "legacy" };
 }

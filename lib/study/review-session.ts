@@ -71,6 +71,7 @@ export function studyCardsInScope(
   const fromReport = params.get("fromReport");
   const fromAnswer = params.get("fromAnswer");
   const answerIndex = queryIndex(fromAnswer);
+  const fromThread = params.get("fromThread") === "1";
   const outputId = params.get("output");
   const cardId = params.get("card");
   const notebookId = params.get("notebook");
@@ -87,6 +88,7 @@ export function studyCardsInScope(
       (!fromReport || matchesStudyReport(card.origin, threadId, fromReport)) &&
       (fromAnswer === null || (answerIndex !== undefined && card.origin?.kind === "tutor" &&
         card.origin.threadId === threadId && card.origin.message === answerIndex)) &&
+      (!fromThread || (card.origin?.kind === "tutor" && card.origin.threadId === threadId)) &&
       (!cardId || card.id === cardId),
   );
 }
