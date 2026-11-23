@@ -143,6 +143,11 @@ export async function ingestUrl(notebookId: string, address: string): Promise<So
   });
 }
 
-export function ingestText(notebookId: string, title: string, text: string): Promise<Source> {
-  return save({ notebookId, title, kind: "text", text });
+export function ingestText(
+  notebookId: string,
+  title: string,
+  text: string,
+  url?: string,
+): Promise<Source> {
+  return save({ notebookId, title, kind: "text", text, url });
 }

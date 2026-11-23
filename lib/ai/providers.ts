@@ -107,6 +107,45 @@ export function createSpeechModel(ref: ModelRef, credentials: ProviderCredential
   return createElevenLabs({ apiKey: credentials.apiKey }).speech(ref.modelId);
 }
 
+type TranscriptionModel = ReturnType<ReturnType<typeof createOpenAI>["transcription"]>;
+
+/**
+ * The model each provider transcribes with (ids from the installed packages'
+ * unions): both return timed segments, which become `[mm:ss]` paragraphs.
+ */
+export const transcriptionModelIds = {
+  openai: "gpt-4o-transcribe-diarize",
+  elevenlabs: "scribe_v2",
+} as const satisfies {
+  openai: Parameters<ReturnType<typeof createOpenAI>["transcription"]>[0];
+  elevenlabs: Parameters<ReturnType<typeof createElevenLabs>["transcription"]>[0];
+};
+
+/**
+ * Builds a transcription model for one request. The recording's media type is
+ * passed on as the file says, since the SDK only recognises audio by its bytes.
+ */
+export function createTranscriptionModel(
+  provider: keyof typeof transcriptionModelIds,
+  credentials: ProviderCredentials,
+  mediaType?: string,
+): TranscriptionModel {
+  if (!credentials.apiKey) throw new Error(`Add an API key for ${providers[provider].name} in Settings.`);
+  const model =
+    provider === "openai"
+      ? createOpenAI({ apiKey: credentials.apiKey }).transcription(transcriptionModelIds.openai)
+      : createElevenLabs({ apiKey: credentials.apiKey }).transcription(
+          transcriptionModelIds.elevenlabs,
+        );
+  if (!mediaType) return model;
+  return {
+    specificationVersion: model.specificationVersion,
+    provider: model.provider,
+    modelId: model.modelId,
+    doGenerate: (options) => model.doGenerate({ ...options, mediaType }),
+  };
+}
+
 /**
  * The provider's own web search tool, or nothing when it has none.
  * better-vault uses no third-party search service.
