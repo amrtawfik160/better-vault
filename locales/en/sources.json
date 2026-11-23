@@ -35,7 +35,7 @@
   },
   "delete": {
     "title": "Delete “{{title}}”?",
-    "body": "It will be removed from this notebook. Chats and outputs made from it are kept.",
+    "body": "It will be removed from this notebook. Chats, outputs, and Study documents made from it are kept.",
     "confirm": "Delete source"
   },
   "addDialog": {
