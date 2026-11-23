@@ -1,5 +1,6 @@
 import {
   Add01Icon,
+  ArrowRight01Icon,
   Book02Icon,
   Delete02Icon,
   FileImportIcon,
@@ -31,15 +32,18 @@ import { readStudyFile } from "@/lib/study/read-file";
 import { studyReadingProgress } from "@/lib/study/reading-progress";
 import { studyDocumentContent } from "@/lib/study/markdown-document";
 import { studyDocumentDraftId } from "@/lib/study/document-drafts";
+import { studyShelves } from "@/lib/study/library";
 import type { StudyBook, StudyDocumentRecovery, StudyDocumentSnapshot, StudyRecordOf } from "@/lib/study/records";
 import { cn } from "@/lib/utils";
 import { StudyBookCover, StudyProgressBar } from "./study-book-cover";
 import { StudyDocumentEditor } from "./study-document-editor";
 import { useStudyDocumentRecovery } from "./study-document-recovery";
+import { chosenNotebook, StudyNotebookField, type StudyNotebookChoice } from "./study-notebook-field";
 
 const studyFileTypes = /\.(pdf|epub|txt|text|md|markdown|mdx)$/i;
 const studyMimeTypes = new Set(["application/pdf", "application/epub+zip", "text/plain", "text/markdown"]);
 const isStudyFile = (file: File) => studyFileTypes.test(file.name) || studyMimeTypes.has(file.type);
+const shelfGrid = "grid grid-cols-2 gap-x-5 gap-y-7 sm:grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]";
 
 export function StudyLibrary({
   books,
@@ -56,12 +60,13 @@ export function StudyLibrary({
   vaultId: string;
   openBook: (book: StudyBook) => void;
 }) {
-  const { t, i18n } = useTranslation("home");
+  const { t } = useTranslation("home");
   const { t: tNotes } = useTranslation("notes");
   const { t: tCommon } = useTranslation();
   const { t: tSources } = useTranslation("sources");
   const input = useRef<HTMLInputElement>(null);
   const openingSource = useRef<AbortController>(null);
+  const shelvesId = useId();
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [opening, setOpening] = useState<string>();
@@ -69,6 +74,8 @@ export function StudyLibrary({
   const [editing, setEditing] = useState<StudyBook | null>(null);
   const [drafting, setDrafting] = useState<string>();
   const [addingMedia, setAddingMedia] = useState<string>();
+  const [mediaNotebook, setMediaNotebook] = useState<StudyNotebookChoice>("");
+  const [choosing, setChoosing] = useState<{ vaultId: string; files: File[] } | null>(null);
   const [dragging, setDragging] = useState(false);
   const recovery = useStudyDocumentRecovery({ id: studyDocumentDraftId({ vaultId }), vaultId });
   const sources = useSources(notebookId ?? "");
@@ -101,13 +108,13 @@ export function StudyLibrary({
     }
   }
 
-  async function importBooks(files: File[]) {
+  async function importBooks(files: File[], notebook?: string) {
     setLoading(true);
     let last: StudyBook | undefined;
     try {
       for (const file of files) {
         try {
-          last = await addStudyBook({ ...(await readStudyFile(file)), vaultId });
+          last = await addStudyBook({ ...(await readStudyFile(file)), vaultId, notebookId: notebook });
         } catch (error) {
           toast.error(t("study.library.importError", { name: file.name, error: String(error) }));
         }
@@ -123,11 +130,16 @@ export function StudyLibrary({
     const accepted = files.filter(isStudyFile);
     for (const file of files)
       if (!accepted.includes(file)) toast.error(t("study.library.unsupported", { name: file.name }));
-    if (accepted.length) void importBooks(accepted);
+    if (accepted.length) chooseNotebook(accepted);
+  }
+
+  /** Asks which notebook the files go to before adding them. */
+  function chooseNotebook(files: File[]) {
+    setChoosing({ vaultId, files });
   }
 
   const canImport = !notebookId;
-  const percent = new Intl.NumberFormat(i18n.language, { style: "percent" });
+  const deletingIn = deleting ? notebookTitles.get(deleting.notebookId) : undefined;
   const highlightCounts = new Map<string, number>();
   for (const { bookId } of highlights) highlightCounts.set(bookId, (highlightCounts.get(bookId) ?? 0) + 1);
 
@@ -183,7 +195,14 @@ export function StudyLibrary({
                   : "study.library.newText",
               )}
             </Button>
-            <Button shape="pill" variant="outline" onClick={() => setAddingMedia(vaultId)}>
+            <Button
+              shape="pill"
+              variant="outline"
+              onClick={() => {
+                setMediaNotebook("");
+                setAddingMedia(vaultId);
+              }}
+            >
               <Icon icon={PodcastIcon} />
               {tSources("transcript.open")}
             </Button>
@@ -200,7 +219,7 @@ export function StudyLibrary({
               onChange={(event) => {
                 const files = Array.from(event.currentTarget.files ?? []);
                 event.currentTarget.value = "";
-                if (files.length) void importBooks(files);
+                if (files.length) chooseNotebook(files);
               }}
             />
           </div>
@@ -217,90 +236,76 @@ export function StudyLibrary({
           aria-label={t("study.library.search")}
         />
       ) : null}
-      {matches.length || (canImport && !query) ? (
-        <ul className="grid grid-cols-2 gap-x-5 gap-y-7 sm:grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]">
-          {matches.map((book) => {
-            const byline = notebookTitles.get(book.notebookId);
-            const shownByline = byline && byline.trim() !== book.title.trim() ? byline : undefined;
-            const position = studyReadingProgress(book);
-            const shown = position < 1 ? Math.min(0.99, position) : 1;
-            const count = highlightCounts.get(book.id) ?? 0;
+      {notebookId && matches.length ? (
+        <ul className={shelfGrid}>
+          {matches.map((book) => (
+            <ShelfBook
+              key={book.id}
+              book={book}
+              highlights={highlightCounts.get(book.id) ?? 0}
+              openBook={openBook}
+              rename={setEditing}
+              remove={setDeleting}
+            />
+          ))}
+        </ul>
+      ) : null}
+      {notebookId
+        ? null
+        : studyShelves(matches).map((shelf) => {
+            const title = notebookTitles.get(shelf.notebookId);
+            const headingId = `${shelvesId}-${shelf.notebookId}`;
             return (
-              <li key={book.id} className="flex min-w-0 flex-col gap-2">
-                <button
-                  type="button"
-                  aria-label={t("study.today.openBook", { title: book.title })}
-                  className="cursor-pointer rounded-e-xl outline-none transition-transform hover:-translate-y-1 focus-visible:ring-[3px] focus-visible:ring-ring/40 motion-reduce:transition-none"
-                  onClick={() => openBook(book)}
-                >
-                  <StudyBookCover book={book} byline={shownByline} className="w-full" />
-                </button>
-                <div className="flex min-w-0 items-start gap-1">
-                  <div className="min-w-0 flex-1">
-                    <h3 className="truncate text-sm font-semibold" dir="auto">
-                      {book.title}
-                    </h3>
-                    <p className="truncate text-xs text-muted-foreground" dir="auto">
-                      {shownByline ??
-                        (book.sections.some((section) => section.markdown !== undefined)
-                          ? "Markdown"
-                          : book.format.toUpperCase())}
-                    </p>
-                  </div>
-                  <Menu>
-                    <Menu.Trigger
-                      render={<Button variant="ghost" shape="pill" size="icon-sm" className="-me-1.5 shrink-0" />}
-                      aria-label={t("study.library.options", { title: book.title })}
+              <section key={shelf.notebookId} className="space-y-3" aria-labelledby={headingId}>
+                <div className="flex min-w-0 items-center justify-between gap-3 border-b pb-2">
+                  <h3 id={headingId} className="min-w-0 truncate text-sm font-semibold" dir="auto">
+                    {title ?? t("study.library.unknownNotebook")}
+                  </h3>
+                  {title === undefined ? null : (
+                    <Link
+                      to={routes.notebook(shelf.notebookId)}
+                      aria-label={t("study.library.openNotebookNamed", { notebook: title })}
+                      className={buttonVariants({ variant: "ghost", size: "sm", shape: "pill", className: "shrink-0" })}
                     >
-                      <Icon icon={MoreHorizontalIcon} />
-                    </Menu.Trigger>
-                    <Menu.Content align="end">
-                      <Menu.Item onClick={() => setEditing(book)}>
-                        <Icon icon={PencilEdit01Icon} />
-                        {t("study.library.rename")}
-                      </Menu.Item>
-                      <Menu.Item variant="destructive" onClick={() => setDeleting(book)}>
-                        <Icon icon={Delete02Icon} />
-                        {t("study.library.delete")}
-                      </Menu.Item>
-                    </Menu.Content>
-                  </Menu>
+                      {t("study.library.openNotebook")}
+                      <Icon icon={ArrowRight01Icon} className="rtl:rotate-180" />
+                    </Link>
+                  )}
                 </div>
-                <StudyProgressBar className="h-1" value={shown} label={t("study.library.progress")} />
-                <p className="text-xs text-muted-foreground">
-                  {position > 0
-                    ? t("study.library.shelfMeta", {
-                        percent: percent.format(shown),
-                        highlights: t("study.today.counts.highlights", { count }),
-                      })
-                    : count
-                      ? t("study.library.notStartedWithHighlights", {
-                          highlights: t("study.today.counts.highlights", { count }),
-                        })
-                      : t("study.library.notStarted")}
-                </p>
-              </li>
+                <ul className={shelfGrid}>
+                  {shelf.books.map((book) => (
+                    <ShelfBook
+                      key={book.id}
+                      book={book}
+                      highlights={highlightCounts.get(book.id) ?? 0}
+                      openBook={openBook}
+                      rename={setEditing}
+                      remove={setDeleting}
+                    />
+                  ))}
+                </ul>
+              </section>
             );
           })}
-          {canImport && !query ? (
-            <li className="min-w-0">
-              <button
-                type="button"
-                disabled={loading}
-                onClick={() => input.current?.click()}
-                className={cn(
-                  "flex aspect-[2/3] w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-4 text-center text-muted-foreground outline-none transition-colors hover:border-foreground/40 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:cursor-progress",
-                  dragging && "border-primary bg-muted/60 text-foreground",
-                )}
-              >
-                <Icon icon={FileImportIcon} size={22} />
-                <span className="text-sm font-medium">
-                  {t(loading ? "study.library.importing" : dragging ? "study.library.dropHere" : "study.library.addBook")}
-                </span>
-                <span className="text-xs">{t("study.library.formats")}</span>
-              </button>
-            </li>
-          ) : null}
+      {canImport && !query ? (
+        <ul className={shelfGrid}>
+          <li className="min-w-0">
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => input.current?.click()}
+              className={cn(
+                "flex aspect-[2/3] w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-4 text-center text-muted-foreground outline-none transition-colors hover:border-foreground/40 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:cursor-progress",
+                dragging && "border-primary bg-muted/60 text-foreground",
+              )}
+            >
+              <Icon icon={FileImportIcon} size={22} />
+              <span className="text-sm font-medium">
+                {t(loading ? "study.library.importing" : dragging ? "study.library.dropHere" : "study.library.addBook")}
+              </span>
+              <span className="text-xs">{t("study.library.formats")}</span>
+            </button>
+          </li>
         </ul>
       ) : null}
       {unreadMatches.length ? (
@@ -372,10 +377,30 @@ export function StudyLibrary({
           }}
         />
       ) : null}
+      {choosing?.vaultId === vaultId ? (
+        <ImportStudyFiles
+          key={vaultId}
+          vaultId={vaultId}
+          files={choosing.files}
+          onClose={() => setChoosing(null)}
+          onImport={(notebook) => {
+            setChoosing(null);
+            void importBooks(choosing.files, notebook);
+          }}
+        />
+      ) : null}
       {addingMedia === vaultId ? (
         <AddTranscriptDialog
           key={vaultId}
           onClose={() => setAddingMedia(undefined)}
+          fields={(saving) => (
+            <StudyNotebookField
+              vaultId={vaultId}
+              value={mediaNotebook}
+              onChange={setMediaNotebook}
+              disabled={saving}
+            />
+          )}
           onSave={async ({ title, text, link }) => {
             const book = await addStudyBook({
               title,
@@ -383,6 +408,7 @@ export function StudyLibrary({
               sections: [{ title, ...studyDocumentContent(text, false) }],
               vaultId,
               url: link,
+              notebookId: chosenNotebook(mediaNotebook),
             });
             setAddingMedia((current) => (current === vaultId ? undefined : current));
             if (currentVaultId() === vaultId) openBook(book);
@@ -407,9 +433,13 @@ export function StudyLibrary({
         open={deleting !== null}
         onOpenChange={(open) => !open && setDeleting(null)}
         title={t("study.library.deleteTitle")}
-        body={t(
-          deleting?.attachedToNotebook ? "study.library.removeBody" : "study.library.deleteBody",
-        )}
+        body={
+          deleting?.attachedToNotebook
+            ? deletingIn
+              ? t("study.library.removeBody", { notebook: deletingIn })
+              : t("study.library.removeBodyUnnamed")
+            : t("study.library.deleteBody")
+        }
         confirmLabel={t("study.library.delete")}
         onConfirm={async () => {
           if (deleting) await deleteStudyBook(deleting);
@@ -417,6 +447,140 @@ export function StudyLibrary({
         }}
       />
     </section>
+  );
+}
+
+/** One document on a shelf: its cover, title, menu and how far it has been read. */
+function ShelfBook({
+  book,
+  highlights: count,
+  openBook,
+  rename,
+  remove,
+}: {
+  book: StudyBook;
+  highlights: number;
+  openBook: (book: StudyBook) => void;
+  rename: (book: StudyBook) => void;
+  remove: (book: StudyBook) => void;
+}) {
+  const { t, i18n } = useTranslation("home");
+  const percent = new Intl.NumberFormat(i18n.language, { style: "percent" });
+  const position = studyReadingProgress(book);
+  const shown = position < 1 ? Math.min(0.99, position) : 1;
+  return (
+    <li className="flex min-w-0 flex-col gap-2">
+      <button
+        type="button"
+        aria-label={t("study.today.openBook", { title: book.title })}
+        className="cursor-pointer rounded-e-xl outline-none transition-transform hover:-translate-y-1 focus-visible:ring-[3px] focus-visible:ring-ring/40 motion-reduce:transition-none"
+        onClick={() => openBook(book)}
+      >
+        <StudyBookCover book={book} className="w-full" />
+      </button>
+      <div className="flex min-w-0 items-start gap-1">
+        <div className="min-w-0 flex-1">
+          <h4 className="truncate text-sm font-semibold" dir="auto">
+            {book.title}
+          </h4>
+          <p className="truncate text-xs text-muted-foreground" dir="auto">
+            {book.sections.some((section) => section.markdown !== undefined) ? "Markdown" : book.format.toUpperCase()}
+          </p>
+        </div>
+        <Menu>
+          <Menu.Trigger
+            render={<Button variant="ghost" shape="pill" size="icon-sm" className="-me-1.5 shrink-0" />}
+            aria-label={t("study.library.options", { title: book.title })}
+          >
+            <Icon icon={MoreHorizontalIcon} />
+          </Menu.Trigger>
+          <Menu.Content align="end">
+            <Menu.Item onClick={() => rename(book)}>
+              <Icon icon={PencilEdit01Icon} />
+              {t("study.library.rename")}
+            </Menu.Item>
+            <Menu.Item variant="destructive" onClick={() => remove(book)}>
+              <Icon icon={Delete02Icon} />
+              {t("study.library.delete")}
+            </Menu.Item>
+          </Menu.Content>
+        </Menu>
+      </div>
+      <StudyProgressBar className="h-1" value={shown} label={t("study.library.progress")} />
+      <p className="text-xs text-muted-foreground">
+        {position > 0
+          ? t("study.library.shelfMeta", {
+              percent: percent.format(shown),
+              highlights: t("study.today.counts.highlights", { count }),
+            })
+          : count
+            ? t("study.library.notStartedWithHighlights", {
+                highlights: t("study.today.counts.highlights", { count }),
+              })
+            : t("study.library.notStarted")}
+      </p>
+    </li>
+  );
+}
+
+/** "Which notebook?" for files chosen or dropped in the Library, before they are added. */
+function ImportStudyFiles({
+  vaultId,
+  files,
+  onClose,
+  onImport,
+}: {
+  vaultId: string;
+  files: File[];
+  onClose: () => void;
+  onImport: (notebookId: string | undefined) => void;
+}) {
+  const { t } = useTranslation("home");
+  const { t: tCommon } = useTranslation();
+  const [notebook, setNotebook] = useState<StudyNotebookChoice>("");
+  const form = useId();
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <Dialog.Content closeLabel={tCommon("actions.close")}>
+        <Dialog.Header
+          title={t("study.library.importTitle", { count: files.length })}
+          description={t("study.library.importDescription")}
+        />
+        <Dialog.Body>
+          <form
+            id={form}
+            className="grid gap-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              onImport(chosenNotebook(notebook));
+            }}
+          >
+            <ul className="grid gap-1 text-sm" aria-label={t("study.library.importFiles")}>
+              {files.map((file, index) => (
+                <li key={`${index}:${file.name}`} className="flex min-w-0 items-center gap-2">
+                  <Icon icon={FileImportIcon} size={16} className="shrink-0 text-muted-foreground" />
+                  <span className="truncate" dir="auto">
+                    {file.name}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <StudyNotebookField
+              vaultId={vaultId}
+              value={notebook}
+              onChange={setNotebook}
+              several={files.length > 1}
+            />
+          </form>
+        </Dialog.Body>
+        <Dialog.Footer>
+          <Dialog.Close render={<Button variant="secondary" />}>{tCommon("actions.cancel")}</Dialog.Close>
+          <Button type="submit" form={form}>
+            {t("study.library.importConfirm", { count: files.length })}
+          </Button>
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog>
   );
 }
 
@@ -468,6 +632,7 @@ function NewStudyDocument({
   const { draft, row } = editor;
   const [saving, setSaving] = useState(false);
   const [discard, setDiscard] = useState(false);
+  const [notebook, setNotebook] = useState<StudyNotebookChoice>("");
   const form = useId();
   function update(change: Partial<Pick<typeof draft, "title" | "text" | "markdown">>) {
     const next = { ...draft, ...change };
@@ -494,6 +659,7 @@ function NewStudyDocument({
                       { title: draft.title, ...studyDocumentContent(draft.text, draft.markdown) },
                     ],
                     vaultId,
+                    notebookId: chosenNotebook(notebook),
                   });
                   if (row) await recovery.clear(row).catch(console.error);
                   onSave(created);
@@ -516,6 +682,12 @@ function NewStudyDocument({
                 value={draft}
                 onChange={update}
                 label={t("study.library.text")}
+                disabled={saving}
+              />
+              <StudyNotebookField
+                vaultId={vaultId}
+                value={notebook}
+                onChange={setNotebook}
                 disabled={saving}
               />
             </form>

@@ -730,7 +730,12 @@
       "crop": "Crop image",
       "reset": "Reset crop",
       "cropHelp": "Drag on the image or set the crop edges as percentages.",
-      "edges": { "left": "Left", "top": "Top", "right": "Right", "bottom": "Bottom" },
+      "edges": {
+        "left": "Left",
+        "top": "Top",
+        "right": "Right",
+        "bottom": "Bottom"
+      },
       "imageSide": "Show the image on",
       "question": "Question",
       "answer": "Answer",
@@ -915,8 +920,8 @@
       "rename": "Rename document",
       "delete": "Delete document",
       "deleteTitle": "Delete document?",
-      "removeBody": "This removes the reading position, bookmarks, and highlights. The source stays in the notebook.",
-      "deleteBody": "This deletes the notebook, reading position, and associated study items.",
+      "removeBody": "This removes the reading position, bookmarks, and highlights. The document stays in “{{notebook}}” as a source.",
+      "deleteBody": "This deletes the document, its reading position, and its study items. Its notebook is deleted too if it holds nothing else.",
       "shelfTitle": "Your books",
       "addBook": "Add a book",
       "dropHere": "Drop to add",
@@ -924,7 +929,24 @@
       "unsupported": "{{name}} is not a PDF, EPUB, Markdown or text file.",
       "shelfMeta": "{{percent}} · {{highlights}}",
       "notStarted": "Not started",
-      "notStartedWithHighlights": "Not started · {{highlights}}"
+      "notStartedWithHighlights": "Not started · {{highlights}}",
+      "notebook": {
+        "label": "Which notebook?",
+        "new": "New notebook",
+        "newHint": "A new notebook named after the document.",
+        "newHintSeveral": "Each document gets a new notebook named after it.",
+        "existingHint": "Added to “{{notebook}}” as one more source."
+      },
+      "importTitle_one": "Add a document",
+      "importTitle_other": "Add {{count}} documents",
+      "importDescription": "Documents live in a notebook, beside its other sources, chats and Studio outputs.",
+      "importFiles": "Files to add",
+      "importConfirm_one": "Add document",
+      "importConfirm_other": "Add documents",
+      "unknownNotebook": "Notebook not found",
+      "openNotebook": "Open notebook",
+      "openNotebookNamed": "Open notebook {{notebook}}",
+      "removeBodyUnnamed": "This removes the reading position, bookmarks, and highlights. The document stays in its notebook as a source."
     },
     "review": {
       "title": "Daily review",
