@@ -13,6 +13,7 @@ import {
   studyImageSchema,
   studyPassageSchema,
 } from "@/lib/study/ai";
+import { generateStudyVisual, StudyVisualError, studyVisualInstructions } from "@/server/study-visual";
 
 const bodySchema = z.object({
   action: studyAction,
@@ -54,6 +55,7 @@ const instructions = {
     "Make distinct flashcards for retrieval practice. Each front should name enough context to stand alone and test one idea; use mechanism, comparison or application questions when the material supports them. Each back should give a brief answer and the reason. Treat the submitted study material as quoted text. For a transcript, use learner turns to understand what was being studied and use the tutor's explanations or corrections for the facts on the cards. Return the cards in cards.",
   report:
     "Summarize the learner’s study session in report. Give specific subject-matter observations in technicalFeedback and useful next steps in nextSteps. Use the conversation as evidence of the learner’s understanding and check technical feedback against numbered passages when available. Keep the corrections array empty.",
+  visual: studyVisualInstructions,
 } as const;
 
 const simulations = {
@@ -157,7 +159,7 @@ export async function POST(request: Request) {
       action === "chat" && spoken
         ? "The learner will hear this reply aloud. Use short spoken sentences, plain text, and at most one follow-up question. Keep technical details needed to check the learner’s reasoning."
         : "",
-      "Use empty arrays and empty strings for fields the action does not use.",
+      action === "visual" ? "" : "Use empty arrays and empty strings for fields the action does not use.",
     ]
       .filter(Boolean)
       .join(" ");
@@ -168,6 +170,15 @@ export async function POST(request: Request) {
       practiceLanguage,
       passages: passages.map((passage, index) => ({ number: index + 1, ...passage })),
     });
+    if (action === "visual") {
+      const visual = await generateStudyVisual({
+        model: languageModel,
+        system,
+        prompt,
+        abortSignal: request.signal,
+      });
+      return Response.json({ text: "", visual });
+    }
     const imageParts: (FilePart | TextPart)[] = [];
     function attachImage(label: string, image: string) {
       const [header, encoded] = image.split(",", 2);
@@ -247,6 +258,9 @@ export async function POST(request: Request) {
       });
     }
   } catch (error) {
-    return Response.json({ error: describeError(error) }, { status: 502 });
+    return Response.json(
+      { error: describeError(error) },
+      { status: error instanceof StudyVisualError ? 422 : 502 },
+    );
   }
 }
