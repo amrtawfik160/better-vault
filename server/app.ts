@@ -10,6 +10,7 @@ import { POST as opencode } from "./routes/opencode";
 import { POST as sourcesParse } from "./routes/sources-parse";
 import { POST as sourcesTranscribe } from "./routes/sources-transcribe";
 import { POST as study } from "./routes/study";
+import { POST as studyPractice } from "./routes/study-practice";
 import { recognize as studyOcr, status as studyOcrStatus } from "./routes/study-ocr";
 import { status as studyVoiceStatus, transcribe as studyVoice } from "./routes/study-voice";
 import { POST as studio } from "./routes/studio";
@@ -46,6 +47,7 @@ export function createApi({
   api.post("/sources/parse", (c) => sourcesParse(c.req.raw));
   api.post("/sources/transcribe", (c) => sourcesTranscribe(c.req.raw));
   api.post("/study", (c) => study(c.req.raw));
+  api.post("/study/practice", (c) => studyPractice(c.req.raw));
   api.get("/study/ocr", (c) => studyOcrStatus(c.req.raw));
   api.post("/study/ocr", (c) => studyOcr(c.req.raw));
   api.get("/study/voice", (c) => studyVoiceStatus(c.req.raw));
