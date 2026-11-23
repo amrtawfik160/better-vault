@@ -144,6 +144,16 @@
   },
   "study": {
     "sections": "Study sections",
+    "make": {
+      "title": "Make from {{title}}",
+      "hint": "Opens Studio with this book as the source.",
+      "notesTitle": "Notes about this book",
+      "noNotes": "No notes yet. Notes you save while reading, or that link [[src:{{source}}]], appear here.",
+      "newNote": "New note about this book",
+      "noteTitle": "{{title}} · notes",
+      "noteCreated": "Note created",
+      "openNote": "Open note"
+    },
     "today": {
       "resumeReview": "Resume review",
       "resumeReading": "Continue reading",
