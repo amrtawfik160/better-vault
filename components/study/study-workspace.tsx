@@ -45,6 +45,7 @@ import {
   startHighlightTutor,
   studyId,
   useStudyRecords,
+  useStudySources,
 } from "@/lib/db/study";
 import { useNotes } from "@/lib/db/notes";
 import { useOutput } from "@/lib/db/outputs";
@@ -111,6 +112,7 @@ export default function StudyWorkspace({
   });
   const ready = saved !== undefined && notes !== undefined;
   const sourceTitles = useSourceTitles(tutoring, true);
+  const librarySources = useStudySources(tab === "library");
   const selection = tab === "review" ? reviewSelection(location.state) : undefined;
   const scope = useMemo(
     () =>
@@ -178,7 +180,10 @@ export default function StudyWorkspace({
     }];
   });
   const bookId = params.get("book");
-  const book = books.find((entry) => entry.id === bookId);
+  // A link to a book merged into another one (two books of one source) opens the kept book.
+  const book =
+    books.find((entry) => entry.id === bookId) ??
+    (bookId ? books.find((entry) => entry.mergedIds?.includes(bookId)) : undefined);
   const scanDraft = book && saved?.find((row) => row.id === scanDraftId(book.id));
   const readerThread =
     book && threads.find(({ id, bookId }) => id === requestedReaderTutor && bookId === book.id);
@@ -598,6 +603,7 @@ export default function StudyWorkspace({
             reviewHighlights={() => go("review", { kind: "highlights", book: book.id })}
             reviewWords={(ids) => go("review", { kind: "vocabulary" }, ids)}
             back={leaveReader}
+            notebookTitle={notebookTitles.get(book.notebookId)}
             openPage={(section) => locate(book.id, section)}
             resume={() => locate(book.id, book.section)}
             openPassage={(section, range) =>
@@ -622,6 +628,11 @@ export default function StudyWorkspace({
         ) : (
           <StudyLibrary
             books={notebookId ? books.filter((item) => item.notebookId === notebookId) : books}
+            sources={librarySources?.filter(
+              (source) =>
+                (notebookId ? source.notebookId === notebookId : true) &&
+                scope.notebookOwner(source.notebookId) === studyVaultId,
+            )}
             highlights={highlights}
             notebookTitles={notebookTitles}
             notebookId={notebookId}

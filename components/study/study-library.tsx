@@ -2,6 +2,7 @@ import {
   Add01Icon,
   ArrowRight01Icon,
   Book02Icon,
+  BookmarkRemove01Icon,
   Delete02Icon,
   FileImportIcon,
   MoreHorizontalIcon,
@@ -16,15 +17,14 @@ import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { RenameDialog } from "@/components/common/rename-dialog";
 import { Icon } from "@/components/icon";
 import { Button, buttonVariants } from "@/components/panelui/button";
-import { Card } from "@/components/panelui/card";
 import { Dialog } from "@/components/panelui/dialog";
 import { Input } from "@/components/panelui/input";
 import { Menu } from "@/components/panelui/menu";
-import { sourceKindIcons } from "@/components/sources/source-kind";
 import { AddTranscriptDialog } from "@/components/sources/add-transcript-dialog";
 import { useNotebook } from "@/lib/db/notebooks";
-import { useSources } from "@/lib/db/sources";
-import { addStudyBook, deleteStudyDocument, renameStudyBook, studyBookForSource } from "@/lib/db/study";
+import { renameSource } from "@/lib/db/sources";
+import { addStudyBook, renameStudyBook, studyBookForSource } from "@/lib/db/study";
+import type { SourceSummary } from "@/lib/db/types";
 import { currentVaultId } from "@/lib/db/vaults";
 import { routes } from "@/lib/routes";
 import { studyHref } from "@/lib/study/links";
@@ -32,10 +32,11 @@ import { readStudyFile } from "@/lib/study/read-file";
 import { studyReadingProgress } from "@/lib/study/reading-progress";
 import { studyDocumentContent } from "@/lib/study/markdown-document";
 import { studyDocumentDraftId } from "@/lib/study/document-drafts";
-import { studyShelves } from "@/lib/study/library";
+import { studyLibraryEntries, studyShelves, type StudyLibraryEntry } from "@/lib/study/library";
 import type { StudyBook, StudyDocumentRecovery, StudyDocumentSnapshot, StudyRecordOf } from "@/lib/study/records";
 import { cn } from "@/lib/utils";
 import { StudyBookCover, StudyProgressBar } from "./study-book-cover";
+import { StudyDocumentRemovalDialog, type StudyDocumentRemoval } from "./study-document-dialogs";
 import { StudyDocumentEditor } from "./study-document-editor";
 import { useStudyDocumentRecovery } from "./study-document-recovery";
 import { chosenNotebook, StudyNotebookField, type StudyNotebookChoice } from "./study-notebook-field";
@@ -45,8 +46,11 @@ const studyMimeTypes = new Set(["application/pdf", "application/epub+zip", "text
 const isStudyFile = (file: File) => studyFileTypes.test(file.name) || studyMimeTypes.has(file.type);
 const shelfGrid = "grid grid-cols-2 gap-x-5 gap-y-7 sm:grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]";
 
+type Entry = StudyLibraryEntry<StudyBook>;
+
 export function StudyLibrary({
   books,
+  sources,
   highlights,
   notebookTitles,
   notebookId,
@@ -54,6 +58,8 @@ export function StudyLibrary({
   openBook,
 }: {
   books: StudyBook[];
+  /** The readable sources of the notebooks shown, without their text; `undefined` while loading. */
+  sources: SourceSummary[] | undefined;
   highlights: StudyRecordOf<"highlight">[];
   notebookTitles: ReadonlyMap<string, string>;
   notebookId: string | null;
@@ -70,22 +76,17 @@ export function StudyLibrary({
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [opening, setOpening] = useState<string>();
-  const [deleting, setDeleting] = useState<StudyBook | null>(null);
-  const [editing, setEditing] = useState<StudyBook | null>(null);
+  const [removing, setRemoving] = useState<StudyDocumentRemoval | null>(null);
+  const [editing, setEditing] = useState<Entry | null>(null);
   const [drafting, setDrafting] = useState<string>();
   const [addingMedia, setAddingMedia] = useState<string>();
   const [mediaNotebook, setMediaNotebook] = useState<StudyNotebookChoice>("");
   const [choosing, setChoosing] = useState<{ vaultId: string; files: File[] } | null>(null);
   const [dragging, setDragging] = useState(false);
   const recovery = useStudyDocumentRecovery({ id: studyDocumentDraftId({ vaultId }), vaultId });
-  const sources = useSources(notebookId ?? "");
-  const studied = new Set(books.map(({ sourceId }) => sourceId));
-  const unread = (sources ?? []).filter(
-    (source) => source.notebookId === notebookId && !studied.has(source.id),
-  );
+  const entries = studyLibraryEntries(books, sources);
   const query = search.trim().toLowerCase();
-  const matches = books.filter(({ title }) => title.toLowerCase().includes(query));
-  const unreadMatches = unread.filter(({ title }) => title.toLowerCase().includes(query));
+  const matches = entries.filter(({ title }) => title.toLowerCase().includes(query));
 
   useEffect(() => () => openingSource.current?.abort(), [notebookId, vaultId]);
 
@@ -139,9 +140,22 @@ export function StudyLibrary({
   }
 
   const canImport = !notebookId;
-  const deletingIn = deleting ? notebookTitles.get(deleting.notebookId) : undefined;
+  const removingFrom = removing
+    ? notebookTitles.get(removing.kind === "delete" ? removing.document.notebookId : removing.book.notebookId)
+    : undefined;
   const highlightCounts = new Map<string, number>();
   for (const { bookId } of highlights) highlightCounts.set(bookId, (highlightCounts.get(bookId) ?? 0) + 1);
+  const shelfEntry = (entry: Entry) => (
+    <ShelfEntry
+      key={`${entry.kind}:${entry.id}`}
+      entry={entry}
+      highlights={entry.kind === "book" ? (highlightCounts.get(entry.id) ?? 0) : 0}
+      opening={opening}
+      open={(next) => (next.kind === "book" ? openBook(next.book) : void readSource(next.id))}
+      rename={setEditing}
+      remove={setRemoving}
+    />
+  );
 
   return (
     <section
@@ -226,7 +240,7 @@ export function StudyLibrary({
         )}
       </div>
       {notebookId ? <NotebookLibraryScope notebookId={notebookId} /> : null}
-      {books.length || unread.length ? (
+      {entries.length ? (
         <Input
           type="search"
           className="max-w-sm"
@@ -236,20 +250,7 @@ export function StudyLibrary({
           aria-label={t("study.library.search")}
         />
       ) : null}
-      {notebookId && matches.length ? (
-        <ul className={shelfGrid}>
-          {matches.map((book) => (
-            <ShelfBook
-              key={book.id}
-              book={book}
-              highlights={highlightCounts.get(book.id) ?? 0}
-              openBook={openBook}
-              rename={setEditing}
-              remove={setDeleting}
-            />
-          ))}
-        </ul>
-      ) : null}
+      {notebookId && matches.length ? <ul className={shelfGrid}>{matches.map(shelfEntry)}</ul> : null}
       {notebookId
         ? null
         : studyShelves(matches).map((shelf) => {
@@ -272,18 +273,7 @@ export function StudyLibrary({
                     </Link>
                   )}
                 </div>
-                <ul className={shelfGrid}>
-                  {shelf.books.map((book) => (
-                    <ShelfBook
-                      key={book.id}
-                      book={book}
-                      highlights={highlightCounts.get(book.id) ?? 0}
-                      openBook={openBook}
-                      rename={setEditing}
-                      remove={setDeleting}
-                    />
-                  ))}
-                </ul>
+                <ul className={shelfGrid}>{shelf.books.map(shelfEntry)}</ul>
               </section>
             );
           })}
@@ -308,57 +298,21 @@ export function StudyLibrary({
           </li>
         </ul>
       ) : null}
-      {unreadMatches.length ? (
-        <section className="space-y-3" aria-labelledby="study-notebook-sources">
-          <h3 id="study-notebook-sources" className="text-sm font-medium text-muted-foreground">
-            {t("study.materials.sources")}
-          </h3>
-          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {unreadMatches.map((source) => (
-              <Card as="li" size="sm" key={source.id} className="min-w-0 shadow-none">
-                <Card.Header>
-                  <Card.Title as="h4">
-                    <button
-                      type="button"
-                      disabled={opening !== undefined}
-                      aria-busy={opening === source.id}
-                      className="flex w-full min-w-0 cursor-pointer items-center gap-3 rounded-xl text-start outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-60"
-                      onClick={() => void readSource(source.id)}
-                    >
-                      <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground">
-                        <Icon icon={sourceKindIcons[source.kind]} size={18} />
-                      </span>
-                      <span className="truncate" dir="auto">
-                        {source.title}
-                      </span>
-                    </button>
-                  </Card.Title>
-                </Card.Header>
-                <Card.Content>
-                  <p className="text-xs text-muted-foreground">
-                    {tSources(`kinds.${source.kind}`)}
-                  </p>
-                </Card.Content>
-              </Card>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-      {notebookId && sources === undefined && !matches.length ? (
+      {sources === undefined && !matches.length ? (
         <p role="status" className="text-sm text-muted-foreground">
           {tCommon("status.loading")}
         </p>
-      ) : !matches.length && !unreadMatches.length && canImport && !query ? (
+      ) : !matches.length && canImport && !query ? (
         <p className="text-sm text-muted-foreground">{t("study.library.emptyDescription")}</p>
-      ) : !matches.length && !unreadMatches.length ? (
+      ) : !matches.length ? (
         <div className="flex flex-col items-center gap-3 px-6 py-14 text-center">
           <span className="grid size-14 place-items-center rounded-2xl bg-muted text-muted-foreground">
             <Icon icon={Book02Icon} size={24} />
           </span>
           <p className="font-semibold">
-            {t(books.length || unread.length ? "study.library.noMatches" : "study.library.empty")}
+            {t(entries.length ? "study.library.noMatches" : "study.library.empty")}
           </p>
-          {books.length || unread.length ? null : (
+          {entries.length ? null : (
             <p className="max-w-xs text-sm text-muted-foreground">
               {t(notebookId ? "study.library.emptyNotebook" : "study.library.emptyDescription")}
             </p>
@@ -423,83 +377,97 @@ export function StudyLibrary({
           label={t("study.library.title")}
           value={editing.title}
           onSave={(name) =>
-            renameStudyBook(editing, name).catch((error: Error) => {
-              toast.error(error.message);
-            })
+            (editing.kind === "book" ? renameStudyBook(editing.book, name) : renameSource(editing.id, name)).catch(
+              (error: Error) => {
+                toast.error(error.message);
+              },
+            )
           }
         />
       ) : null}
-      <ConfirmDialog
-        open={deleting !== null}
-        onOpenChange={(open) => !open && setDeleting(null)}
-        title={t("study.library.deleteTitle")}
-        body={
-          deleting?.attachedToNotebook
-            ? deletingIn
-              ? t("study.library.removeBody", { notebook: deletingIn })
-              : t("study.library.removeBodyUnnamed")
-            : t("study.library.deleteBody")
-        }
-        confirmLabel={t("study.library.delete")}
-        onConfirm={async () => {
-          if (deleting) await deleteStudyDocument(deleting);
-          setDeleting(null);
-        }}
-      />
+      <StudyDocumentRemovalDialog removal={removing} notebook={removingFrom} onClose={() => setRemoving(null)} />
     </section>
   );
 }
 
-/** One document on a shelf: its cover, title, menu and how far it has been read. */
-function ShelfBook({
-  book,
+/**
+ * One document on a shelf: its cover, title, menu and how far it has been
+ * read. A source not opened in Study yet shows as not started; a book whose
+ * source was deleted from its notebook says so, and stays readable.
+ */
+function ShelfEntry({
+  entry,
   highlights: count,
-  openBook,
+  opening,
+  open,
   rename,
   remove,
 }: {
-  book: StudyBook;
+  entry: Entry;
   highlights: number;
-  openBook: (book: StudyBook) => void;
-  rename: (book: StudyBook) => void;
-  remove: (book: StudyBook) => void;
+  opening: string | undefined;
+  open: (entry: Entry) => void;
+  rename: (entry: Entry) => void;
+  remove: (removal: StudyDocumentRemoval) => void;
 }) {
   const { t, i18n } = useTranslation("home");
+  const { t: tSources } = useTranslation("sources");
   const percent = new Intl.NumberFormat(i18n.language, { style: "percent" });
-  const position = studyReadingProgress(book);
+  const book = entry.kind === "book" ? entry.book : undefined;
+  const position = book ? studyReadingProgress(book) : 0;
   const shown = position < 1 ? Math.min(0.99, position) : 1;
+  const kind = book
+    ? book.sections.some((section) => section.markdown !== undefined)
+      ? "Markdown"
+      : book.format.toUpperCase()
+    : entry.kind === "source"
+      ? tSources(`kinds.${entry.source.kind}`)
+      : "";
+  const document = { notebookId: entry.notebookId, sourceId: book ? book.sourceId : entry.id };
   return (
     <li className="flex min-w-0 flex-col gap-2">
       <button
         type="button"
-        aria-label={t("study.today.openBook", { title: book.title })}
-        className="cursor-pointer rounded-e-xl outline-none transition-transform hover:-translate-y-1 focus-visible:ring-[3px] focus-visible:ring-ring/40 motion-reduce:transition-none"
-        onClick={() => openBook(book)}
+        aria-label={t("study.today.openBook", { title: entry.title })}
+        disabled={!book && opening !== undefined}
+        aria-busy={!book && opening === entry.id}
+        className="cursor-pointer rounded-e-xl outline-none transition-transform hover:-translate-y-1 focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:cursor-progress disabled:opacity-60 motion-reduce:transition-none"
+        onClick={() => open(entry)}
       >
-        <StudyBookCover book={book} className="w-full" />
+        <StudyBookCover
+          book={{ title: entry.title, format: book?.format ?? "text" }}
+          byline={book ? undefined : kind}
+          className="w-full"
+        />
       </button>
       <div className="flex min-w-0 items-start gap-1">
         <div className="min-w-0 flex-1">
           <h4 className="truncate text-sm font-semibold" dir="auto">
-            {book.title}
+            {entry.title}
           </h4>
           <p className="truncate text-xs text-muted-foreground" dir="auto">
-            {book.sections.some((section) => section.markdown !== undefined) ? "Markdown" : book.format.toUpperCase()}
+            {entry.kind === "book" && entry.sourceRemoved ? `${kind} · ${t("study.library.sourceRemoved")}` : kind}
           </p>
         </div>
         <Menu>
           <Menu.Trigger
             render={<Button variant="ghost" shape="pill" size="icon-sm" className="-me-1.5 shrink-0" />}
-            aria-label={t("study.library.options", { title: book.title })}
+            aria-label={t("study.library.options", { title: entry.title })}
           >
             <Icon icon={MoreHorizontalIcon} />
           </Menu.Trigger>
           <Menu.Content align="end">
-            <Menu.Item onClick={() => rename(book)}>
+            <Menu.Item onClick={() => rename(entry)}>
               <Icon icon={PencilEdit01Icon} />
               {t("study.library.rename")}
             </Menu.Item>
-            <Menu.Item variant="destructive" onClick={() => remove(book)}>
+            {book ? (
+              <Menu.Item onClick={() => remove({ kind: "progress", book })}>
+                <Icon icon={BookmarkRemove01Icon} />
+                {t("study.library.removeProgress")}
+              </Menu.Item>
+            ) : null}
+            <Menu.Item variant="destructive" onClick={() => remove({ kind: "delete", document })}>
               <Icon icon={Delete02Icon} />
               {t("study.library.delete")}
             </Menu.Item>

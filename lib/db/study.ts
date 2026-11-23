@@ -733,8 +733,12 @@ export async function removeStudyReadingProgress(book: StudyBook) {
 }
 
 /** Every source of every notebook, without its text, for the Study Library. `undefined` while loading. */
-export function useStudySources() {
-  return useStoreQuery(() => store().listSourceSummaries(), [], ["sources"]);
+export function useStudySources(enabled = true) {
+  return useStoreQuery(
+    async () => (enabled ? store().listSourceSummaries() : []),
+    [enabled],
+    ["sources"],
+  );
 }
 
 export type StudyCard = StudyRecordOf<"card">;

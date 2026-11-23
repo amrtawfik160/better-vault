@@ -92,6 +92,7 @@ import type { StudyImageCapture } from "@/lib/study/visual-card";
 import { locateStudyMark, resolveStudyRange, studyTextRevision } from "@/lib/study/text-edits";
 import { studyDocumentFormulaMode } from "@/lib/study/markdown-document";
 import { canEditStudyText } from "@/lib/study/library";
+import { StudyDocumentRemovalDialog, type StudyDocumentRemoval } from "./study-document-dialogs";
 import { cn } from "@/lib/utils";
 
 type Selection = StudySelection;
@@ -204,6 +205,7 @@ export function StudyReader({
   back,
   reviewHighlights,
   reviewWords,
+  notebookTitle,
 }: {
   book: StudyBook;
   scanDraft?: StudyOcrDraft;
@@ -241,7 +243,10 @@ export function StudyReader({
   back: () => void;
   reviewHighlights: () => void;
   reviewWords: (cardIds: string[]) => void;
+  /** The title of the book's notebook, for the delete and remove-progress questions. */
+  notebookTitle?: string;
 }) {
+  const [removal, setRemoval] = useState<StudyDocumentRemoval | null>(null);
   const [openedSection] = useState(book.section);
   const index = Math.min(Math.max(0, requestedPage ?? openedSection), book.sections.length - 1);
   const section = book.sections[index];
@@ -1043,7 +1048,8 @@ export function StudyReader({
     !scanDraft?.pages.some(({ section }) => section === index);
   const canScanBook = book.format === "pdf" && !!fileId && book.sections.length > 1 &&
     book.sections.some(({ text }) => !text.trim());
-  const canEditText = canEditStudyText(book);
+  // The edit rewrites the source's text too, so it needs the source.
+  const canEditText = canEditStudyText(book) && source !== null;
   const bookmarked = book.bookmarks.includes(index);
   const searchKeys = [/Mac|iPhone|iPad/.test(navigator.userAgent) ? "⌘" : "Ctrl", "F"];
 
@@ -1341,10 +1347,28 @@ export function StudyReader({
               </Menu.Item>
               <Menu.Separator />
               <Menu.Item onClick={toggleFocus}>{focusLabel}</Menu.Item>
+              <Menu.Separator />
+              <Menu.Item onClick={() => setRemoval({ kind: "progress", book })}>
+                {t("study.library.removeProgress")}
+              </Menu.Item>
+              <Menu.Item
+                variant="destructive"
+                onClick={() =>
+                  setRemoval({ kind: "delete", document: { notebookId: book.notebookId, sourceId: book.sourceId } })
+                }
+              >
+                {t("study.library.delete")}
+              </Menu.Item>
             </Menu.Content>
           </Menu>
         </div>
       </header>
+      <StudyDocumentRemovalDialog
+        removal={removal}
+        notebook={notebookTitle}
+        onClose={() => setRemoval(null)}
+        onDone={back}
+      />
       {searchOpen && hasBookText ? (
         <div data-study-reader-search="" className="shrink-0 border-b px-3 py-2">
           <div className="mx-auto max-w-3xl">
