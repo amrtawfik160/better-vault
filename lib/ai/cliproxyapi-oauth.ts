@@ -52,6 +52,19 @@ export const cliProxySnapshotSchema = z.object({
 
 export const subscriptionRoute = /^dpl-([0-9a-f]{20})\/(.+)$/;
 
+/**
+ * Models a subscription lists but can't chat with. A ChatGPT plan used through
+ * Codex refuses the ChatGPT app's own chat models (`gpt-6-chat-thinking`), and
+ * `codex-auto-review` only reviews code.
+ */
+const unusableModels: Partial<Record<CliProxySignInProvider, RegExp>> = {
+  codex: /(^|-)chat(-|$)|^codex-auto-review$/i,
+};
+
+export function usableSubscriptionModel(provider: CliProxySignInProvider, model: string) {
+  return !unusableModels[provider]?.test(model);
+}
+
 export const cliProxyErrorSchema = z.enum([
   "proxyUnavailable",
   "proxySetup",

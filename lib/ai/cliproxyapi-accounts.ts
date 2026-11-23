@@ -6,6 +6,7 @@ import {
   cliProxyBrands,
   cliProxySignInProviders,
   subscriptionRoute,
+  usableSubscriptionModel,
   type CliProxyAccount,
 } from "./cliproxyapi-oauth";
 
@@ -122,6 +123,7 @@ async function readSnapshot() {
     const match = subscriptionRoute.exec(registeredId);
     const account = match && byId.get(match[1]);
     if (!account || account.status !== "connected") return false;
+    if (!usableSubscriptionModel(account.provider, match[2])) return false;
     const peers = accounts.filter(({ provider }) => provider === account.provider);
     const suffix = peers.length > 1 ? ` · ${account.email ?? peers.indexOf(account) + 1}` : "";
     modelLabels[registeredId] = `${cliProxyBrands[account.provider]} · ${match[2]}${suffix}`;

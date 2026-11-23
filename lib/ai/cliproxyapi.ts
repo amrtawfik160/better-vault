@@ -2,7 +2,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { wrapLanguageModel } from "ai";
 import { z } from "zod";
 import type { ProviderId } from "./catalog";
-import { imageInputErrorStatuses, rejectsImageInput } from "./errors";
+import { imageInputErrorStatuses, redactSecrets, rejectsImageInput } from "./errors";
 import { isLocalAppRequest, isLoopbackHost, localProvidersAllowed } from "./server-config";
 
 import { subscriptionRoute } from "./cliproxyapi-oauth";
@@ -65,6 +65,42 @@ export function cliProxyError(status: number, management = false): string {
   return `CLIProxyAPI returned HTTP ${status}. Check the proxy logs for details.`;
 }
 
+const upstreamErrorSchema = z.object({
+  error: z.object({ message: z.string().optional(), code: z.string().optional() }).optional(),
+  detail: z.string().optional(),
+});
+
+/**
+ * What a failed subscription request tells the person. The proxy reports the
+ * provider's reason in its body; a plain HTTP status would hide which choice to change.
+ */
+export function cliProxyRequestError(status: number, body: string): string {
+  let parsed: z.infer<typeof upstreamErrorSchema> | undefined;
+  try {
+    parsed = upstreamErrorSchema.safeParse(JSON.parse(body)).data;
+  } catch {
+    parsed = undefined;
+  }
+  const reason = [parsed?.error?.code, parsed?.error?.message, parsed?.detail]
+    .filter(Boolean)
+    .join(" ");
+  if (imageInputErrorStatuses.includes(status) && rejectsImageInput(reason || body)) {
+    return "The selected model does not support image input.";
+  }
+  if (/model_not_found|not supported|unknown provider for model|does not exist/i.test(reason)) {
+    return "This model isn't available on your subscription. Choose another model.";
+  }
+  if (status === 429 || /usage.?limit|rate.?limit|quota/i.test(reason)) {
+    return "Your subscription has reached a usage limit for now. Try again later, or choose another model.";
+  }
+  if (/no auth available|auth_unavailable/i.test(reason)) {
+    return "This subscription can't be reached just now. Reconnect it in Settings → AI subscriptions, or choose another model.";
+  }
+  if (status === 401 || status === 403) return cliProxyError(status);
+  const message = parsed?.error?.message ?? parsed?.detail;
+  return message ? redactSecrets(message).slice(0, 300) : cliProxyError(status);
+}
+
 const modelListSchema = z.object({
   data: z.array(z.object({ id: z.string().trim().min(1).max(200) })),
 });
@@ -102,13 +138,8 @@ export async function cliProxyLanguageModel(modelId: string) {
     fetch: async (input, init) => {
       const response = await cliProxyFetch(input, init);
       if (response.ok) return response;
-      let message = cliProxyError(response.status);
-      if (imageInputErrorStatuses.includes(response.status)) {
-        const detail = await response.text().catch(() => "");
-        if (rejectsImageInput(detail)) message = "The selected model does not support image input.";
-      } else {
-        await response.body?.cancel();
-      }
+      const body = await response.text().catch(() => "");
+      const message = cliProxyRequestError(response.status, body);
       return Response.json({ error: { message } }, { status: response.status });
     },
   });

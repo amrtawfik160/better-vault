@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/server/routes/cliproxyapi";
-import { rejectCliProxyRequest } from "./cliproxyapi";
+import { cliProxyRequestError, rejectCliProxyRequest } from "./cliproxyapi";
+import { usableSubscriptionModel } from "./cliproxyapi-oauth";
 import { setDesktopRuntime, setLoopbackRuntime } from "./server-config";
 
 function request(origin?: string, address = "http://127.0.0.1:3000") {
@@ -86,5 +87,32 @@ describe("managed subscription access", () => {
     expect(
       rejectCliProxyRequest(request("https://example.com", "app://better-vault"))?.status,
     ).toBe(403);
+  });
+});
+
+describe("subscription models", () => {
+  it("hides models a ChatGPT plan can't chat with", () => {
+    expect(usableSubscriptionModel("codex", "gpt-6-chat-thinking")).toBe(false);
+    expect(usableSubscriptionModel("codex", "codex-auto-review")).toBe(false);
+    expect(usableSubscriptionModel("codex", "gpt-6.2-sol")).toBe(true);
+    expect(usableSubscriptionModel("claude", "claude-chat-thing")).toBe(true);
+  });
+
+  it("explains why a subscription request failed", () => {
+    const refused = JSON.stringify({
+      error: {
+        message:
+          "auth_unavailable: no auth available (last upstream error: model_not_found: The 'x' model is not supported when using Codex with a ChatGPT account.)",
+      },
+    });
+    expect(cliProxyRequestError(503, refused)).toMatch(/isn't available on your subscription/);
+    expect(cliProxyRequestError(429, "")).toMatch(/usage limit/);
+    expect(cliProxyRequestError(503, JSON.stringify({ error: { message: "no auth available" } }))).toMatch(
+      /Reconnect it/,
+    );
+    expect(cliProxyRequestError(500, JSON.stringify({ error: { message: "Upstream broke" } }))).toBe(
+      "Upstream broke",
+    );
+    expect(cliProxyRequestError(502, "not json")).toMatch(/HTTP 502/);
   });
 });
