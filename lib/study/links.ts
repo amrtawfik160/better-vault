@@ -10,8 +10,44 @@ function withQuery(path: string, values: Record<string, string | number | undefi
   return `${path}?${params}`;
 }
 
+export const studyTabs = ["today", "library", "review", "collection", "tutor"] as const;
+export type StudyTab = (typeof studyTabs)[number];
+export const studyCollectionFilters = ["all", "highlights", "cards", "words"] as const;
+export type StudyCollectionFilter = (typeof studyCollectionFilters)[number];
+
+/** Flashcards, Highlights and Vocabulary were tabs of their own; they are now filters of Collection. */
+const legacyCollectionTabs: Partial<Record<string, StudyCollectionFilter>> = {
+  cards: "cards",
+  highlights: "highlights",
+  vocabulary: "words",
+};
+
 export function studyHref(tab: string, params: Record<string, string | number | undefined> = {}) {
+  const filter = legacyCollectionTabs[tab];
+  if (filter) return withQuery(routes.home, { view: "study", tab: "collection", filter, ...params });
   return withQuery(routes.home, { view: "study", tab, ...params });
+}
+
+export function studyCollectionHref(
+  filter: StudyCollectionFilter,
+  params: Record<string, string | number | undefined> = {},
+) {
+  return withQuery(routes.home, {
+    view: "study",
+    tab: "collection",
+    filter: filter === "all" ? undefined : filter,
+    ...params,
+  });
+}
+
+/** The Study tab and Collection filter a query names, reading the old tab names too. */
+export function studyLocation(params: URLSearchParams): { tab: StudyTab; filter: StudyCollectionFilter } {
+  const name = params.get("tab") ?? "";
+  const legacy = legacyCollectionTabs[name];
+  if (legacy) return { tab: "collection", filter: legacy };
+  const tab = studyTabs.find((entry) => entry === name) ?? "today";
+  const filter = studyCollectionFilters.find((entry) => entry === params.get("filter")) ?? "all";
+  return { tab, filter: tab === "collection" ? filter : "all" };
 }
 
 export function tutorCardsScope(origin?: StudyOrigin) {
