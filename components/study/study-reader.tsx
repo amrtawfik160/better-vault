@@ -28,7 +28,12 @@ import { StudyMarkdown, StudyText } from "./study-text";
 import { StudyDocumentEdits } from "./study-document-edits";
 import { StudyDocumentSearch } from "./study-document-search";
 import { StudyReaderSettings } from "./study-reader-settings";
-import { StudyReaderPanel, type ReaderPanelTab, type ReaderTutor } from "./study-reader-panel";
+import {
+  StudyReaderPanel,
+  type ReaderConversations,
+  type ReaderPanelTab,
+  type ReaderTutor,
+} from "./study-reader-panel";
 import { ReaderTip } from "./study-reader-tip";
 import { StudySelectionMenu, type SelectionMenuHandle, type StudySelection } from "./study-selection-menu";
 import { highlightColors } from "./study-highlight-colors";
@@ -177,6 +182,7 @@ export function StudyReader({
   highlights,
   words,
   tutor,
+  conversations,
   tutorPane,
   wide,
   openPage,
@@ -205,6 +211,8 @@ export function StudyReader({
   highlights: Highlight[];
   words: StudyWord[];
   tutor?: ReaderTutor;
+  /** This document's earlier conversations, for the Ask AI panel. */
+  conversations: ReaderConversations;
   tutorPane: RefObject<HTMLElement | null>;
   /** The panel sits beside the page; on a narrow screen it covers it. */
   wide: boolean;
@@ -290,10 +298,13 @@ export function StudyReader({
   const tutorShown = tutor?.visible ? tutor.thread.id : undefined;
   const [panel, setPanel] = useState<ReaderPanelTab | null>(tutorShown ? "ai" : null);
   const [shownTutor, setShownTutor] = useState(tutorShown);
+  // Set while the Ask AI panel goes back from a conversation to the list, so it stays open.
+  const [listingConversations, setListingConversations] = useState(false);
   if (shownTutor !== tutorShown) {
     setShownTutor(tutorShown);
     if (tutorShown) setPanel("ai");
-    else if (panel === "ai" && shownTutor) setPanel(null);
+    else if (panel === "ai" && shownTutor && !listingConversations) setPanel(null);
+    if (listingConversations) setListingConversations(false);
   }
   const [within, setWithin] = useState(0);
   const appearance = { ...defaultStudyReadingAppearance, ...book.readingAppearance };
@@ -1521,6 +1532,13 @@ export function StudyReader({
             highlights={highlights}
             words={words}
             tutor={tutor}
+            conversations={{
+              ...conversations,
+              leave: () => {
+                if (tutor?.visible) setListingConversations(true);
+                conversations.leave();
+              },
+            }}
             openingTutor={openingTutor}
             canDiscussPage={hasPageText}
             canDiscussBook={hasBookText}

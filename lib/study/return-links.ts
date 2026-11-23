@@ -13,7 +13,8 @@ function tutorSearch(path: string) {
   if (params.get("view") !== "study") return;
   const tab = params.get("tab");
   if (
-    (tab === "tutor" && params.get("thread")) ||
+    // "tutor" is the Practice tab's old name, kept in saved history entries.
+    ((tab === "practice" || tab === "tutor") && params.get("thread")) ||
     (tab === "library" && params.get("book") && params.get("readerTutor"))
   ) {
     return params;

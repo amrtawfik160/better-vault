@@ -1,16 +1,25 @@
-import { Cancel01Icon, MoreHorizontalIcon, VolumeHighIcon } from "@hugeicons/core-free-icons";
+import {
+  ArrowLeft01Icon,
+  Cancel01Icon,
+  Chatting01Icon,
+  MoreHorizontalIcon,
+  VolumeHighIcon,
+} from "@hugeicons/core-free-icons";
 import { useRef, useState, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { DirectionalText } from "@/components/common/directional-text";
 import { Icon } from "@/components/icon";
-import { Button } from "@/components/panelui/button";
+import { Button, buttonVariants } from "@/components/panelui/button";
 import { Menu } from "@/components/panelui/menu";
 import { Tabs } from "@/components/panelui/tabs";
 import { Textarea } from "@/components/panelui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { removeStudyRecord, studyVocabularyCards, updateStudyReviewItem } from "@/lib/db/study";
+import { notebookChatHref } from "@/lib/study/links";
+import { goalLabel } from "@/lib/study/practice";
 import {
   studyHighlightColor,
   type StudyBook,
@@ -32,12 +41,20 @@ type Highlight = StudyRecordOf<"highlight">;
 
 export type ReaderTutor = {
   thread: StudyThread;
-  /** The Tutor pane is showing, as the address says. */
+  /** The conversation is showing in the Ask AI panel, as the address says. */
   visible: boolean;
   content: ReactNode;
   show: () => void;
   hide: () => void;
   openFull: () => void;
+};
+
+/** This document's conversations, listed in the Ask AI panel to reopen. */
+export type ReaderConversations = {
+  threads: StudyThread[];
+  open: (thread: StudyThread) => void;
+  /** Closes the open conversation and lists them all. */
+  leave: () => void;
 };
 
 function speak(text: string, unavailable: string) {
@@ -176,7 +193,7 @@ function HighlightCard({
   );
 }
 
-/** The reader's side panel: this book's highlights, its words, and the Tutor beside the page. */
+/** The reader's side panel: this book's highlights, its words, what to make from it, and Ask AI beside the page. */
 export function StudyReaderPanel({
   tab,
   chooseTab,
@@ -187,6 +204,7 @@ export function StudyReaderPanel({
   highlights,
   words,
   tutor,
+  conversations,
   openingTutor,
   canDiscussPage,
   canDiscussBook,
@@ -207,6 +225,7 @@ export function StudyReaderPanel({
   highlights: Highlight[];
   words: StudyWord[];
   tutor?: ReaderTutor;
+  conversations: ReaderConversations;
   openingTutor: boolean;
   canDiscussPage: boolean;
   canDiscussBook: boolean;
@@ -360,8 +379,25 @@ export function StudyReaderPanel({
         <Tabs.Content value="ai" keepMounted className="flex min-h-0 flex-col focus-visible:ring-offset-0">
           {tutor ? (
             <>
-              <div className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
-                <p className="min-w-0 truncate text-sm font-medium" dir="auto">{tutor.thread.title}</p>
+              <div className="flex shrink-0 items-center gap-1 border-b px-2 py-2">
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label={t("study.reader.panel.allConversations")}
+                  title={t("study.reader.panel.allConversations")}
+                  onClick={conversations.leave}
+                >
+                  <Icon icon={ArrowLeft01Icon} size={16} className="rtl:rotate-180" />
+                </Button>
+                <p className="min-w-0 flex-1 truncate text-sm font-medium" dir="auto">{tutor.thread.title}</p>
+                <Link
+                  to={notebookChatHref(book.notebookId)}
+                  aria-label={t("study.reader.panel.openInNotebook")}
+                  title={t("study.reader.panel.openInNotebook")}
+                  className={buttonVariants({ size: "icon-sm", variant: "ghost" })}
+                >
+                  <Icon icon={Chatting01Icon} size={16} />
+                </Link>
                 <Button size="sm" variant="outline" onClick={tutor.openFull}>{t("study.reader.fullTutor")}</Button>
               </div>
               <section ref={tutorPane} tabIndex={-1} aria-label={t("study.reader.tutorPane")} className="flex min-h-0 flex-1 flex-col outline-none">
@@ -371,20 +407,64 @@ export function StudyReaderPanel({
               </section>
             </>
           ) : (
-            <Empty>
-              <p>{t("study.reader.panel.askHint")}</p>
-              <div className="flex flex-wrap justify-center gap-1.5">
-                <Button size="sm" variant="outline" disabled={openingTutor || !canDiscussPage} onClick={() => discuss("chapter")}>
-                  {t(`study.reader.discuss.${pageNoun}`)}
-                </Button>
-                <Button size="sm" variant="outline" disabled={openingTutor || !canDiscussBook} onClick={() => discuss("book")}>
-                  {t("study.reader.discuss.book")}
-                </Button>
-                <Button size="sm" variant="outline" disabled={openingTutor || !canDiscussPage} onClick={() => discuss("teach-back")}>
-                  {t("study.reader.teachBack")}
-                </Button>
+            <ScrollArea className="min-h-0 flex-1">
+              <div className="flex flex-col gap-5 p-3">
+                <Empty>
+                  <p>{t("study.reader.panel.askHint")}</p>
+                  <div className="flex flex-wrap justify-center gap-1.5">
+                    <Button size="sm" variant="outline" disabled={openingTutor || !canDiscussPage} onClick={() => discuss("chapter")}>
+                      {t(`study.reader.discuss.${pageNoun}`)}
+                    </Button>
+                    <Button size="sm" variant="outline" disabled={openingTutor || !canDiscussBook} onClick={() => discuss("book")}>
+                      {t("study.reader.discuss.book")}
+                    </Button>
+                    <Button size="sm" variant="outline" disabled={openingTutor || !canDiscussPage} onClick={() => discuss("teach-back")}>
+                      {t("study.reader.teachBack")}
+                    </Button>
+                  </div>
+                </Empty>
+                {conversations.threads.length ? (
+                  <section className="flex flex-col gap-1.5" aria-labelledby="reader-conversations">
+                    <h3 id="reader-conversations" className="px-1 text-xs font-medium text-muted-foreground">
+                      {t("study.reader.panel.conversations")}
+                    </h3>
+                    <ul className="flex flex-col gap-1">
+                      {conversations.threads.map((thread) => {
+                        const detail = [
+                          goalLabel(thread, t(`study.goals.labels.${thread.goal}`)),
+                          thread.section === undefined ? undefined : book.sections[thread.section]?.title,
+                        ].filter(Boolean).join(" · ");
+                        return (
+                          <li key={thread.id}>
+                            <button
+                              type="button"
+                              disabled={openingTutor}
+                              onClick={() => conversations.open(thread)}
+                              className="flex w-full min-w-0 cursor-pointer flex-col items-start gap-0.5 rounded-xl px-2.5 py-2 text-start outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-60"
+                            >
+                              <DirectionalText as="span" text={thread.title} className="w-full truncate text-sm font-medium" />
+                              {detail ? (
+                                <span className="w-full truncate text-xs text-muted-foreground" dir="auto">{detail}</span>
+                              ) : null}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </section>
+                ) : null}
+                <div className="flex flex-col items-start gap-2 rounded-2xl border p-3">
+                  <p className="text-xs text-muted-foreground">{t("study.reader.panel.notebookHint")}</p>
+                  <Link
+                    to={notebookChatHref(book.notebookId)}
+                    className={buttonVariants({ size: "sm", variant: "outline" })}
+                  >
+                    <Icon icon={Chatting01Icon} size={16} />
+                    {t("study.reader.panel.openInNotebook")}
+                  </Link>
+                </div>
               </div>
-            </Empty>
+            </ScrollArea>
           )}
         </Tabs.Content>
       </Tabs>

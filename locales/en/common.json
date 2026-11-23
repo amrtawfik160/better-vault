@@ -77,8 +77,8 @@
       "card": "Flashcard",
       "highlight": "Highlight",
       "word": "Vocabulary",
-      "thread": "Tutor conversation",
-      "message": "Tutor message",
+      "thread": "Study conversation",
+      "message": "Study conversation message",
       "report": "Session report"
     },
     "groups": {

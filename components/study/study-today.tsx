@@ -17,6 +17,7 @@ import { studyVocabularyCards } from "@/lib/db/study";
 import { studyActivityGroups } from "@/lib/study/activity";
 import { studyCollectionHref, studyHighlightOrigin, studyHref } from "@/lib/study/links";
 import { difficultStudyItems, studyHighlightPreview, studyReviewFeedback } from "@/lib/study/recall";
+import { isPracticeThread } from "@/lib/study/practice";
 import { studyReadingProgress } from "@/lib/study/reading-progress";
 import { studyReportKey } from "@/lib/study/reports";
 import {
@@ -310,7 +311,7 @@ export function DailyStudy({
               ) : null}
             </Panel>
           ) : null}
-          {threads.length ? (
+          {threads.some(isPracticeThread) ? (
             <TutorPanel
               threads={threads}
               books={books}
@@ -539,14 +540,15 @@ function TutorPanel({
   report: ReactNode;
 }) {
   const { t } = useTranslation("home");
-  const recent = threads.filter(({ messages }) => messages.length > 0).slice(0, 3);
+  // MERGE SLOT: written practice sessions join this list when that feature lands.
+  const recent = threads.filter((thread) => isPracticeThread(thread) && thread.messages.length > 0).slice(0, 3);
   const fromThread = (threadId: string, origin?: { kind: string; threadId?: string }) =>
     (origin?.kind === "tutor" || origin?.kind === "report") && origin.threadId === threadId;
   return (
     <Panel label={t("study.today.fromTutor")}>
       <div className="flex items-center justify-between gap-2">
         <h3 className="font-semibold">{t("study.today.fromTutor")}</h3>
-        <Button variant="link" size="sm" className="h-auto px-0 text-muted-foreground" onClick={() => go("tutor")}>
+        <Button variant="link" size="sm" className="h-auto px-0 text-muted-foreground" onClick={() => go("practice")}>
           {t("study.today.openTutor")}
         </Button>
       </div>
@@ -566,7 +568,7 @@ function TutorPanel({
             return (
               <li key={thread.id}>
                 <Link
-                  to={studyHref("tutor", { thread: thread.id, vault: vaultId })}
+                  to={studyHref("practice", { thread: thread.id, vault: vaultId })}
                   className="flex min-w-0 flex-col gap-1 rounded-xl px-2 py-2 outline-none hover:bg-muted/60 focus-visible:ring-[3px] focus-visible:ring-ring/40"
                 >
                   <DirectionalText as="span" text={thread.title} className="truncate text-sm font-medium" />
@@ -635,11 +637,11 @@ function StudyProgress({
       value: reviews.reduce((total, item) => total + item.count, 0),
       href: studyHref("review", { vault: vaultId }),
     },
-    { key: "speakingSessions", value: studyActivityGroups(speaking).length, href: studyHref("tutor", { vault: vaultId }) },
+    { key: "speakingSessions", value: studyActivityGroups(speaking).length, href: studyHref("practice", { vault: vaultId }) },
     {
       key: "speakingMinutes",
       value: Math.round(speaking.reduce((total, item) => total + item.seconds, 0) / 60),
-      href: studyHref("tutor", { vault: vaultId }),
+      href: studyHref("practice", { vault: vaultId }),
     },
   ] as const;
   const reading = books

@@ -31,7 +31,7 @@ describe("Tutor return links", () => {
     const links = returnFromTutorCards("/?view=study&tab=cards", review, origin);
     expect(links).toEqual({
       ...review,
-      studyTutorReturn: "/?view=study&tab=tutor&thread=t1&message=0",
+      studyTutorReturn: "/?view=study&tab=practice&thread=t1&message=0",
     });
     const sourceVisit = {
       studyReturn: {
@@ -46,6 +46,7 @@ describe("Tutor return links", () => {
     "https://example.test/?view=study&tab=tutor&thread=t1",
     "//example.test/?view=study&tab=tutor&thread=t1",
     "/?view=study&tab=tutor",
+    "/?view=study&tab=practice",
     "/?view=study&tab=library&readerTutor=t1",
     "/notebook/n1?view=study&tab=tutor&thread=t1",
   ])("ignores a return that cannot open a Tutor conversation at %s", (studyTutorReturn) => {

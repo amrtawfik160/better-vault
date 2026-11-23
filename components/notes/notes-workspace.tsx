@@ -727,7 +727,7 @@ export default function NotesWorkspace() {
                   onClick={() => {
                     void startNoteTutor(note)
                       .then((thread) =>
-                        navigate(studyHref("tutor", { thread: thread.id }), {
+                        navigate(studyHref("practice", { thread: thread.id }), {
                           state: studyReturnState(state),
                         }),
                       )

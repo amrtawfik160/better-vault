@@ -13,7 +13,7 @@ import {
   studyVisualFromReader,
   type StudyTab as Tab,
 } from "@/lib/study/links";
-import { tutorBookOrigin } from "@/lib/study/passages";
+import { readerThreadHref, threadReaderBook } from "@/lib/study/practice";
 import { captureStudyImage, type StudyImageCapture } from "@/lib/study/visual-card";
 import { studyHighlightPreview } from "@/lib/study/recall";
 import { scanDraftId } from "@/lib/study/ocr-write";
@@ -53,7 +53,8 @@ import { StudyOriginLink } from "./study-origin-link";
 import { StudyReader } from "./study-reader";
 import { StudyReview } from "./study-review";
 import { DailyStudy } from "./study-today";
-import { StudyTutor, TutorIndex } from "./study-tutor";
+import { StudyPracticeTab } from "./study-practice-tab";
+import { StudyTutor } from "./study-tutor";
 import { useStudyClock } from "./use-study-clock";
 import { useStudyReaderFullscreen } from "./use-study-reader-fullscreen";
 
@@ -94,7 +95,7 @@ export default function StudyWorkspace({
   const notes = useNotes();
   const { tab, filter: collectionFilter } = studyLocation(params);
   const requestedReaderTutor = tab === "library" ? params.get("readerTutor") : null;
-  const tutoring = tab === "tutor" || Boolean(requestedReaderTutor);
+  const tutoring = tab === "practice" || Boolean(requestedReaderTutor);
   const [directReviewId] = useState(() => {
     const id = studyId();
     return tab === "review" && location.key === "default"
@@ -314,8 +315,15 @@ export default function StudyWorkspace({
   function read(what: StudyBook) {
     go("library", { ...libraryScope, book: what.id });
   }
+  /** Shows a thread on the Practice tab, as a page of its own. */
   function openThread(what: StudyThread) {
-    go("tutor", { thread: what.id });
+    go("practice", { thread: what.id });
+  }
+  /** Opens a question about a document beside it in the reader's Ask AI panel; anything else on Practice. */
+  function openConversation(what: StudyThread) {
+    const document = threadReaderBook(what, books);
+    if (document) openReadingPanel(what, document);
+    else openThread(what);
   }
   function showReaderTutor(id?: string, showBook = false) {
     readerCheckpoint.current?.();
@@ -399,10 +407,8 @@ export default function StudyWorkspace({
   }
 
   function openReadingPanel(what: StudyThread, document: StudyBook) {
-    const target = new URLSearchParams(
-      originHref(tutorBookOrigin(what, document)).split("?", 2)[1],
-    );
-    target.set("readerTutor", what.id);
+    const target = new URLSearchParams(readerThreadHref(what, document).split("?", 2)[1]);
+    target.set("vault", studyVaultId);
     setParams(target, { state: studyReturnState(location.state) });
   }
 
@@ -425,7 +431,7 @@ export default function StudyWorkspace({
         reportCards={cards}
         vaultWords={words}
         focusMessage={queryIndex(params.get("message"))}
-        back={inReader ? undefined : () => go("tutor")}
+        back={inReader ? undefined : () => go("practice")}
         openBesideReader={
           !inReader && document ? () => openReadingPanel(what, document) : undefined
         }
@@ -451,7 +457,7 @@ export default function StudyWorkspace({
         setParams(
           {
             view: "study",
-            tab: "tutor",
+            tab: "practice",
             vault: studyVaultId,
             thread: thread.id,
             ...(feedback && tab === "today" ? { fromToday: "1" } : {}),
@@ -481,7 +487,7 @@ export default function StudyWorkspace({
         offset: selection?.offset,
         revision: selection?.revision,
       });
-      openThread(created);
+      openConversation(created);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     }
@@ -546,6 +552,11 @@ export default function StudyWorkspace({
               hide: () => (sideBySide ? showReaderTutor() : showReaderTutor(readerThread.id, true)),
               openFull: () => openThread(readerThread),
             } : undefined}
+            conversations={{
+              threads: threads.filter((entry) => entry.bookId === book.id),
+              open: (entry) => showReaderTutor(entry.id),
+              leave: () => showReaderTutor(),
+            }}
             reviewHighlights={() => go("review", { kind: "highlights", book: book.id })}
             reviewWords={(ids) => go("review", { kind: "vocabulary" }, ids)}
             back={leaveReader}
@@ -710,7 +721,7 @@ export default function StudyWorkspace({
           }
         />
       ) : null}
-      {ready && tab === "tutor" ? (
+      {ready && tab === "practice" ? (
         thread ? (
           <>
             {params.get("fromToday") === "1" ? (
@@ -724,7 +735,7 @@ export default function StudyWorkspace({
             {conversation(thread)}
           </>
         ) : (
-          <TutorIndex
+          <StudyPracticeTab
             books={books}
             notes={vaultNotes}
             vaultHighlights={vaultHighlights}
@@ -732,7 +743,7 @@ export default function StudyWorkspace({
             notebookSources={notebookSources}
             threads={threads}
             vaultId={studyVaultId}
-            open={openThread}
+            open={openConversation}
             practice={(ids) => void openTutorSelection("card", ids)}
             openingPractice={openingPractice}
           />

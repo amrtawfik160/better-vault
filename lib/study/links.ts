@@ -10,7 +10,7 @@ function withQuery(path: string, values: Record<string, string | number | undefi
   return `${path}?${params}`;
 }
 
-export const studyTabs = ["today", "library", "review", "collection", "tutor"] as const;
+export const studyTabs = ["today", "library", "review", "collection", "practice"] as const;
 export type StudyTab = (typeof studyTabs)[number];
 export const studyCollectionFilters = ["all", "highlights", "cards", "words"] as const;
 export type StudyCollectionFilter = (typeof studyCollectionFilters)[number];
@@ -22,10 +22,18 @@ const legacyCollectionTabs: Partial<Record<string, StudyCollectionFilter>> = {
   vocabulary: "words",
 };
 
+/** Tutor was a tab of its own; its conversations and exercises now live in Practice. */
+const legacyTabs: Partial<Record<string, StudyTab>> = { tutor: "practice" };
+
 export function studyHref(tab: string, params: Record<string, string | number | undefined> = {}) {
   const filter = legacyCollectionTabs[tab];
   if (filter) return withQuery(routes.home, { view: "study", tab: "collection", filter, ...params });
-  return withQuery(routes.home, { view: "study", tab, ...params });
+  return withQuery(routes.home, { view: "study", tab: legacyTabs[tab] ?? tab, ...params });
+}
+
+/** The Chat tab of a notebook, where its sources can be asked about. */
+export function notebookChatHref(notebookId: string) {
+  return withQuery(routes.notebook(notebookId), { tab: "chat" });
 }
 
 export function studyCollectionHref(
@@ -40,12 +48,12 @@ export function studyCollectionHref(
   });
 }
 
-/** The Study tab and Collection filter a query names, reading the old tab names too. */
+/** The Study tab and Collection filter a query names, reading the old tab names (Tutor, Flashcards…) too. */
 export function studyLocation(params: URLSearchParams): { tab: StudyTab; filter: StudyCollectionFilter } {
   const name = params.get("tab") ?? "";
   const legacy = legacyCollectionTabs[name];
   if (legacy) return { tab: "collection", filter: legacy };
-  const tab = studyTabs.find((entry) => entry === name) ?? "today";
+  const tab = legacyTabs[name] ?? studyTabs.find((entry) => entry === name) ?? "today";
   const filter = studyCollectionFilters.find((entry) => entry === params.get("filter")) ?? "all";
   return { tab, filter: tab === "collection" ? filter : "all" };
 }
@@ -120,7 +128,7 @@ export function originHref(origin: StudyOrigin, reader?: URLSearchParams) {
         passage: origin.chunkId,
       });
     case "tutor":
-      return studyHref("tutor", { thread: origin.threadId, message: origin.message });
+      return studyHref("practice", { thread: origin.threadId, message: origin.message });
     case "notebook-answer":
       return withQuery(routes.notebook(origin.notebookId), {
         tab: "chat",
@@ -128,7 +136,7 @@ export function originHref(origin: StudyOrigin, reader?: URLSearchParams) {
         answer: origin.messageId,
       });
     case "report":
-      return studyHref("tutor", {
+      return studyHref("practice", {
         thread: origin.threadId,
         report: "1",
         reportId: origin.reportId,

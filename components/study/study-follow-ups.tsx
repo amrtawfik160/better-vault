@@ -42,7 +42,7 @@ export function StudyFollowUpButton({
       const id = await startStudyFollowUp(target, vaultId);
       if (loading.signal.aborted) return;
       if (id)
-        void navigate(studyHref("tutor", { thread: id }), { state: studyReturnState(state) });
+        void navigate(studyHref("practice", { thread: id }), { state: studyReturnState(state) });
       else toast.error(t("study.followUps.practiceUnavailable"));
     } catch (error) {
       if (!loading.signal.aborted)

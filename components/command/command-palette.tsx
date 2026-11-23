@@ -141,6 +141,7 @@ export function CommandPalette() {
           "flashcards",
           "library",
           "vocabulary",
+          "practice",
           "tutor",
           "reading",
           "epub",
