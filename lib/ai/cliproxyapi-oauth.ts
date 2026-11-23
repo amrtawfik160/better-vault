@@ -48,7 +48,28 @@ export const cliProxySnapshotSchema = z.object({
   accounts: z.array(cliProxyAccountSchema),
   models: z.array(z.string()),
   modelLabels: z.record(z.string(), z.string()),
+  /** The subscription each model comes from, so the model picker can group them. */
+  modelBrands: z.record(z.string(), z.enum(cliProxySignInProviders)).default({}),
 });
+
+/**
+ * A model id as people say it: `claude-opus-5-5` is "Opus 5.5", `gpt-6.2-sol`
+ * is "GPT-6.2 Sol". Release dates are dropped, and the subscription's own
+ * name, which the picker shows beside it, is left out.
+ */
+export function subscriptionModelName(id: string): string {
+  const words: string[] = [];
+  for (const word of id.replace(/[-_]\d{8}$/, "").split(/[-_]/).filter(Boolean)) {
+    const previous = words.at(-1);
+    if (/^\d+$/.test(word) && previous && /^\d+$/.test(previous)) {
+      words[words.length - 1] = `${previous}.${word}`;
+    } else {
+      words.push(/^gpt$/i.test(word) ? "GPT" : word.charAt(0).toUpperCase() + word.slice(1));
+    }
+  }
+  const name = words.join(" ").replace(/^GPT (\d)/, "GPT-$1");
+  return name.replace(/^Claude (?=\D)/, "") || id;
+}
 
 export const subscriptionRoute = /^dpl-([0-9a-f]{20})\/(.+)$/;
 

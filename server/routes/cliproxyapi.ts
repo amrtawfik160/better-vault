@@ -37,7 +37,7 @@ export async function POST(request: Request, openSignIn?: (url: string) => Promi
     if (data.action === "snapshot") {
       const snapshot = cliProxyConnection().management
         ? await proxySnapshot()
-        : { models: await listRawCliProxyModels(), accounts: [], modelLabels: {} };
+        : { models: await listRawCliProxyModels(), accounts: [], modelLabels: {}, modelBrands: {} };
       return Response.json(snapshot, { headers });
     }
 

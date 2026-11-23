@@ -3,8 +3,8 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import { cliProxyFetch, cliProxyKey, cliProxyURL, listRawCliProxyModels } from "./cliproxyapi";
 import {
-  cliProxyBrands,
   cliProxySignInProviders,
+  subscriptionModelName,
   subscriptionRoute,
   usableSubscriptionModel,
   type CliProxyAccount,
@@ -117,6 +117,7 @@ async function readSnapshot() {
   const accounts = entries.map(({ account }) => account);
   const byId = new Map(accounts.map((account) => [account.id, account]));
   const modelLabels: Record<string, string> = {};
+  const modelBrands: Record<string, CliProxyAccount["provider"]> = {};
   const models = registered.filter((registeredId) => {
     if (entries.length === 0)
       return !usesManagedCliProxy() && !subscriptionRoute.test(registeredId);
@@ -126,10 +127,11 @@ async function readSnapshot() {
     if (!usableSubscriptionModel(account.provider, match[2])) return false;
     const peers = accounts.filter(({ provider }) => provider === account.provider);
     const suffix = peers.length > 1 ? ` · ${account.email ?? peers.indexOf(account) + 1}` : "";
-    modelLabels[registeredId] = `${cliProxyBrands[account.provider]} · ${match[2]}${suffix}`;
+    modelLabels[registeredId] = `${subscriptionModelName(match[2])}${suffix}`;
+    modelBrands[registeredId] = account.provider;
     return true;
   });
-  return { accounts, models, modelLabels };
+  return { accounts, models, modelLabels, modelBrands };
 }
 
 export function proxySnapshot() {

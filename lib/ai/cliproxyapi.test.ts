@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/server/routes/cliproxyapi";
 import { cliProxyRequestError, rejectCliProxyRequest } from "./cliproxyapi";
-import { usableSubscriptionModel } from "./cliproxyapi-oauth";
+import { subscriptionModelName, usableSubscriptionModel } from "./cliproxyapi-oauth";
 import { setDesktopRuntime, setLoopbackRuntime } from "./server-config";
 
 function request(origin?: string, address = "http://127.0.0.1:3000") {
@@ -114,5 +114,15 @@ describe("subscription models", () => {
       "Upstream broke",
     );
     expect(cliProxyRequestError(502, "not json")).toMatch(/HTTP 502/);
+  });
+});
+
+describe("subscription model names", () => {
+  it("names models as people say them", () => {
+    expect(subscriptionModelName("claude-opus-5-5")).toBe("Opus 5.5");
+    expect(subscriptionModelName("claude-sonnet-4-5-20250929")).toBe("Sonnet 4.5");
+    expect(subscriptionModelName("claude-3-7-sonnet-20250219")).toBe("Claude 3.7 Sonnet");
+    expect(subscriptionModelName("gpt-6.2-sol")).toBe("GPT-6.2 Sol");
+    expect(subscriptionModelName("gemini-3.8-flash")).toBe("Gemini 3.8 Flash");
   });
 });

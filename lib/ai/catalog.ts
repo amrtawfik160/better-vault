@@ -208,7 +208,8 @@ export const providers: Record<ProviderId, ProviderInfo> = {
     contextChars: 300_000,
     contextTokens: 200_000,
     imageModels: [],
-    efforts: [],
+    // Sent as `reasoning_effort`; the proxy maps it to each subscription. ChatGPT refuses `minimal`.
+    efforts: ["provider-default", "none", "low", "medium", "high", "xhigh", "max"],
   },
   ollama: {
     id: "ollama",
