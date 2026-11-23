@@ -61,4 +61,5 @@ export function returnFromTutorCards(path: string, state: unknown, origin?: Stud
     return returnToTutor(tutorPath, state, { message: origin.message });
   if (origin?.kind === "report")
     return returnToTutor(tutorPath, state, { report: { id: origin.reportId ?? "legacy" } });
+  return returnToTutor(tutorPath, state);
 }

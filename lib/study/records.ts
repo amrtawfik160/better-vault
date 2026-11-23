@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { visualSchemas, type VisualKind } from "@/lib/chat/visuals";
 import { notePassageSchema } from "@/lib/notes/search-match";
 import { maxOcrText, ocrLanguages, ocrText } from "./ocr-format";
 
@@ -233,6 +234,21 @@ const studyReportSchema = studyReportReplySchema.extend({
   languageStatus: z.enum(["not-requested", "insufficient", "reviewed"]).optional(),
 });
 
+const visualOf = <K extends VisualKind>(kind: K) =>
+  z.object({ kind: z.literal(kind), data: visualSchemas[kind] });
+/** A Tutor visual: one of the chat's visual kinds, checked by the same schema. */
+export const studyVisualSchema = z.discriminatedUnion("kind", [
+  visualOf("diagram"),
+  visualOf("table"),
+  visualOf("chart"),
+  visualOf("timeline"),
+  visualOf("steps"),
+  visualOf("comparison"),
+  visualOf("facts"),
+  visualOf("flashcards"),
+]);
+export type StudyVisual = z.infer<typeof studyVisualSchema>;
+
 export const studyRecordSchema = z.discriminatedUnion("kind", [
   studyDocumentDraftSchema,
   studyOcrDraftSchema,
@@ -327,6 +343,7 @@ export const studyRecordSchema = z.discriminatedUnion("kind", [
         practiceCardId: z.string().optional(),
         draftId: z.string().optional(),
         starter: z.literal(true).optional(),
+        visual: studyVisualSchema.optional(),
       }),
     ),
     report: studyReportSchema.optional(),
