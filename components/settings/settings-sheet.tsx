@@ -9,6 +9,7 @@ import {
   Settings01Icon,
   SparklesIcon,
   PlugSocketIcon,
+  Key01Icon,
 } from "@hugeicons/core-free-icons";
 import { useNavigate } from "react-router";
 import { useEffect, useRef, useState, type ReactElement } from "react";
@@ -43,6 +44,11 @@ import { ChatGPTDialog } from "./chatgpt-dialog";
 import { DataPanel } from "./data-panel";
 import { LanguagePanel } from "./language-panel";
 import { CliProxyPanel } from "./cliproxyapi-sign-in";
+import {
+  subscriptionConnectionsAllowed,
+  useSubscriptionConnections,
+} from "@/lib/ai/cliproxyapi-client";
+import { cliProxyBrands } from "@/lib/ai/cliproxyapi-oauth";
 import { ProvidersPanel } from "./providers-panel";
 import { SettingsRow } from "./settings-row";
 import { routes } from "@/lib/routes";
@@ -113,6 +119,7 @@ export function SettingsSheet({ open: openProp, onOpenChange, trigger, page }: S
   const storage = useStorageSettings();
   const studio = useStudioSettings();
   const account = useAccount();
+  const subscriptions = useSubscriptionConnections();
   const hiddenTools = studio?.hidden.length ?? 0;
   const connected = storage ? storageIds.filter((id) => isStorageReady(storage, id)).length : 0;
   const updateVersion =
@@ -162,9 +169,30 @@ export function SettingsSheet({ open: openProp, onOpenChange, trigger, page }: S
                       : t("rows.accountSetUp")
                 }
               />
+              {subscriptionConnectionsAllowed() ? (
+                <SettingsRow
+                  to="subscriptions"
+                  icon={AiBrain01Icon}
+                  label={t("rows.subscriptions")}
+                  hint={
+                    subscriptions.accounts.length > 0
+                      ? [
+                          ...new Set(
+                            subscriptions.accounts.map(({ provider }) => cliProxyBrands[provider]),
+                          ),
+                        ].join(", ")
+                      : t("rows.subscriptionsNone")
+                  }
+                  end={
+                    subscriptions.accounts.some(({ status }) => status === "connected") ? (
+                      <span aria-hidden className="size-2 rounded-full bg-success" />
+                    ) : undefined
+                  }
+                />
+              ) : null}
               <SettingsRow
                 to="providers"
-                icon={AiBrain01Icon}
+                icon={Key01Icon}
                 label={t("rows.providers")}
                 hint={
                   ready > 0 ? t("rows.providersHint", { count: ready }) : t("rows.providersNone")

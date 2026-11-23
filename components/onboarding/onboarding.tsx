@@ -15,6 +15,7 @@ import {
   Mail01Icon,
   MagicWand01Icon,
   Note01Icon,
+  Key01Icon,
   Tick02Icon,
 } from "@hugeicons/core-free-icons";
 import { useEffect, useId, useRef, useState } from "react";
@@ -23,8 +24,13 @@ import { toast } from "sonner";
 import { Avatar } from "@/components/account/avatar";
 import { Logo } from "@/components/brand/logo";
 import { Field } from "@/components/common/field";
-import { SettingsSheet } from "@/components/settings/settings-sheet";
-import { subscriptionConnectionsAllowed } from "@/lib/ai/cliproxyapi-client";
+import { SubscriptionConnect } from "@/components/settings/cliproxyapi-sign-in";
+import {
+  subscriptionConnectionsAllowed,
+  useSubscriptionConnections,
+} from "@/lib/ai/cliproxyapi-client";
+import { cliProxyBrands } from "@/lib/ai/cliproxyapi-oauth";
+import { useSettings } from "@/lib/db/settings";
 import { Icon } from "@/components/icon";
 import { Button } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
@@ -36,7 +42,7 @@ import { avatarFromFile } from "@/lib/profile/avatar";
 import { cn } from "@/lib/utils";
 
 const KEY = "onboarding";
-type Step = "profile" | "account" | "username";
+type Step = "profile" | "ai" | "account" | "username";
 
 /**
  * The first screens of the app, two columns like a setup wizard: the step's
@@ -50,25 +56,12 @@ export function OnboardingGate() {
     [],
     ["settings"],
   );
-  const [connectOpen, setConnectOpen] = useState(false);
-  return (
-    <>
-      {done === false ? <Onboarding onConnect={() => setConnectOpen(true)} /> : null}
-      {connectOpen ? (
-        <SettingsSheet
-          open
-          onOpenChange={setConnectOpen}
-          page="subscriptions"
-          trigger={<button type="button" hidden />}
-        />
-      ) : null}
-    </>
-  );
+  return done === false ? <Onboarding /> : null;
 }
 
 const finish = () => store().putSetting(KEY, { done: true, at: Date.now() });
 
-function Onboarding({ onConnect }: { onConnect: () => void }) {
+function Onboarding() {
   const { t } = useTranslation("common");
   const account = useAccount();
   const profile = useProfile();
@@ -76,13 +69,18 @@ function Onboarding({ onConnect }: { onConnect: () => void }) {
   const [name, setName] = useState<string | null>(null);
   const [username, setUsernameDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const settings = useSettings();
   const shownName = name ?? profile?.name ?? "";
 
+  // Connecting AI comes first: nothing in deepLe that thinks works without it.
+  const connectAI = subscriptionConnectionsAllowed();
   const needsUsername = account != null && !account.user.username;
-  const steps: Step[] =
-    step === "username" || needsUsername
-      ? ["profile", "account", "username"]
-      : ["profile", "account"];
+  const steps: Step[] = [
+    "profile",
+    ...(connectAI ? (["ai"] as const) : []),
+    "account",
+    ...(step === "username" || needsUsername ? (["username"] as const) : []),
+  ];
   const at = steps.indexOf(step);
   const back = () => setStep(steps[Math.max(0, at - 1)]);
 
@@ -154,6 +152,12 @@ function Onboarding({ onConnect }: { onConnect: () => void }) {
           <div className="flex flex-1 flex-col justify-center gap-6 py-8">
             {step === "profile" ? (
               <ProfileStep name={shownName} onName={setName} />
+            ) : step === "ai" ? (
+              <>
+                <Heading title={t("onboarding.ai.title")} body={t("onboarding.ai.body")} />
+                <SubscriptionConnect saved={settings?.providers.cliproxyapi} />
+                <p className="text-xs text-muted-foreground">{t("onboarding.ai.later")}</p>
+              </>
             ) : step === "account" ? (
               <>
                 <Heading
@@ -161,16 +165,6 @@ function Onboarding({ onConnect }: { onConnect: () => void }) {
                   body={t("onboarding.account.body")}
                 />
                 <div className="flex flex-col gap-2">
-                  {subscriptionConnectionsAllowed() ? (
-                    <Button
-                      size="lg"
-                      disabled={busy}
-                      onClick={() => void complete().then(onConnect)}
-                    >
-                      <Icon icon={AiBrain01Icon} size={18} />
-                      {t("onboarding.account.connectAI")}
-                    </Button>
-                  ) : null}
                   {account ? (
                     <div className="flex items-center gap-3 rounded-2xl bg-muted/50 p-3 text-sm">
                       <Icon icon={Tick02Icon} size={18} className="text-success" />
@@ -210,7 +204,7 @@ function Onboarding({ onConnect }: { onConnect: () => void }) {
             ) : null}
             {step === "profile" ? (
               <>
-                {!account ? (
+                {!account && !connectAI ? (
                   <Button variant="ghost" disabled={busy} onClick={() => void finishSetup()}>
                     {t("onboarding.withoutAccount")}
                   </Button>
@@ -222,12 +216,16 @@ function Onboarding({ onConnect }: { onConnect: () => void }) {
                     void saveName().catch((error: unknown) =>
                       toast.error(error instanceof Error ? error.message : String(error)),
                     );
-                    setStep("account");
+                    setStep(connectAI ? "ai" : "account");
                   }}
                 >
                   {t("onboarding.next")}
                 </Button>
               </>
+            ) : step === "ai" ? (
+              <Button className="ms-auto" disabled={busy} onClick={() => setStep("account")}>
+                {t("onboarding.next")}
+              </Button>
             ) : (
               <Button
                 className="ms-auto"
@@ -433,6 +431,8 @@ function Preview({
   const { t: tNotes } = useTranslation("notes");
   const { t: tSettings } = useTranslation("settings");
   const profile = useProfile();
+  const { accounts } = useSubscriptionConnections();
+  const subscriptions = [...new Set(accounts.map(({ provider }) => cliProxyBrands[provider]))];
   const frame = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.4);
   useEffect(() => {
@@ -561,7 +561,7 @@ function Preview({
             <p className="pb-4 text-sm text-muted-foreground">{tSettings("description")}</p>
             <div className="-mx-2 flex flex-col gap-0.5">
               <SheetRow
-                className="ring-2 ring-primary/70"
+                className={step === "ai" ? undefined : "ring-2 ring-primary/70"}
                 icon={<Avatar profile={profile ? { ...profile, name } : undefined} size={36} />}
                 label={name || tSettings("rows.account")}
                 hint={
@@ -572,7 +572,17 @@ function Preview({
                 }
               />
               <SheetRow
+                className={step === "ai" ? "ring-2 ring-primary/70" : undefined}
                 icon={<Icon icon={AiBrain01Icon} />}
+                label={tSettings("rows.subscriptions")}
+                hint={
+                  subscriptions.length > 0
+                    ? subscriptions.join(", ")
+                    : tSettings("rows.subscriptionsNone")
+                }
+              />
+              <SheetRow
+                icon={<Icon icon={Key01Icon} />}
                 label={tSettings("rows.providers")}
                 hint={tSettings("rows.providersNone")}
               />

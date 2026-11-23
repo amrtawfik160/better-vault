@@ -58,7 +58,24 @@ function SubscriptionLogo({ provider }: { provider: CliProxySignInProvider }) {
   );
 }
 
+/** The AI subscriptions page in Settings. */
 export function CliProxyPanel({ saved }: { saved?: ProviderSettings }) {
+  const { t } = useTranslation("settings");
+  return (
+    <>
+      <Sheet.Header title={t("cliproxyapi.title")} description={t("cliproxyapi.description")} />
+      <Sheet.Body>
+        <SubscriptionConnect saved={saved} />
+      </Sheet.Body>
+    </>
+  );
+}
+
+/**
+ * Sign-in buttons for each subscription, the sign-in in progress, and the
+ * connected accounts. Shared by Settings and the welcome screens.
+ */
+export function SubscriptionConnect({ saved }: { saved?: ProviderSettings }) {
   const { t } = useTranslation("settings");
   const { login, accounts, busy, refreshing, error } = useSubscriptionConnections();
   const [copiedCode, setCopiedCode] = useState("");
@@ -76,145 +93,137 @@ export function CliProxyPanel({ saved }: { saved?: ProviderSettings }) {
   }
 
   return (
-    <>
-      <Sheet.Header title={t("cliproxyapi.title")} description={t("cliproxyapi.description")} />
-      <Sheet.Body>
-        <div className="flex flex-col gap-4">
-          {login ? (
-            <div className="flex flex-col gap-3">
-              {userCode ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <code
-                    dir="ltr"
-                    className="rounded-lg bg-muted px-3 py-2 font-mono text-base font-semibold tracking-wide break-all select-all"
-                  >
-                    {userCode}
-                  </code>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void copyCode(userCode)}
-                  >
-                    {t(copiedCode === userCode ? "cliproxyapi.codeCopied" : "cliproxyapi.copyCode")}
-                  </Button>
+    <div className="flex flex-col gap-4">
+      {login ? (
+        <div className="flex flex-col gap-3">
+          {userCode ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <code
+                dir="ltr"
+                className="rounded-lg bg-muted px-3 py-2 font-mono text-base font-semibold tracking-wide break-all select-all"
+              >
+                {userCode}
+              </code>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => void copyCode(userCode)}
+              >
+                {t(copiedCode === userCode ? "cliproxyapi.codeCopied" : "cliproxyapi.copyCode")}
+              </Button>
+            </div>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            <a
+              href={login.url}
+              target="_blank"
+              rel="noreferrer"
+              className={buttonVariants({ variant: login.opened ? "secondary" : "default" })}
+            >
+              {t(login.opened ? "cliproxyapi.reopenSignIn" : "cliproxyapi.openSignIn", {
+                provider: cliProxyBrands[login.provider],
+              })}
+            </a>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => void cancelSubscriptionLogin()}
+            >
+              {t("cliproxyapi.cancel")}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {cliProxySignInProviders
+            .filter((provider) => !accounts.some((account) => account.provider === provider))
+            .map((provider) => (
+              <Button
+                key={provider}
+                type="button"
+                variant="secondary"
+                className="h-auto min-h-11 min-w-0 justify-start px-3 py-2 text-start whitespace-normal"
+                aria-label={t("cliproxyapi.connect", { provider: cliProxyBrands[provider] })}
+                disabled={busy || refreshing}
+                onClick={() => void startSubscriptionLogin(provider)}
+              >
+                <SubscriptionLogo provider={provider} />
+                {cliProxyBrands[provider]}
+              </Button>
+            ))}
+        </div>
+      )}
+      {!login && accounts.length > 0 ? (
+        <ul className="divide-y">
+          {accounts.map((account) => (
+            <li key={account.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <SubscriptionLogo provider={account.provider} />
+                <div className="min-w-0">
+                  <p className="font-medium">{cliProxyBrands[account.provider]}</p>
+                  <p className="text-sm break-all text-muted-foreground">
+                    {[account.email, t(`cliproxyapi.accountStatus.${account.status}`)]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
                 </div>
-              ) : null}
-              <div className="flex flex-wrap gap-2">
-                <a
-                  href={login.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className={buttonVariants({ variant: login.opened ? "secondary" : "default" })}
-                >
-                  {t(login.opened ? "cliproxyapi.reopenSignIn" : "cliproxyapi.openSignIn", {
-                    provider: cliProxyBrands[login.provider],
-                  })}
-                </a>
+              </div>
+              <div className="flex flex-wrap gap-1">
                 <Button
                   type="button"
                   variant="ghost"
+                  size="sm"
                   disabled={busy}
-                  onClick={() => void cancelSubscriptionLogin()}
+                  onClick={() => void startSubscriptionLogin(account.provider, account.id)}
                 >
-                  {t("cliproxyapi.cancel")}
+                  {t("cliproxyapi.reconnect")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => void disconnectSubscriptionAccount(account.id)}
+                >
+                  {t("cliproxyapi.disconnect")}
                 </Button>
               </div>
-            </div>
-          ) : (
-            <div className="grid gap-2 sm:grid-cols-2">
-              {cliProxySignInProviders
-                .filter((provider) => !accounts.some((account) => account.provider === provider))
-                .map((provider) => (
-                  <Button
-                    key={provider}
-                    type="button"
-                    variant="secondary"
-                    className="h-auto min-h-11 min-w-0 justify-start px-3 py-2 text-start whitespace-normal"
-                    aria-label={t("cliproxyapi.connect", { provider: cliProxyBrands[provider] })}
-                    disabled={busy || refreshing}
-                    onClick={() => void startSubscriptionLogin(provider)}
-                  >
-                    <SubscriptionLogo provider={provider} />
-                    {cliProxyBrands[provider]}
-                  </Button>
-                ))}
-            </div>
-          )}
-          {!login && accounts.length > 0 ? (
-            <ul className="divide-y">
-              {accounts.map((account) => (
-                <li
-                  key={account.id}
-                  className="flex flex-wrap items-center justify-between gap-2 py-3"
-                >
-                  <div className="flex min-w-0 items-center gap-2">
-                    <SubscriptionLogo provider={account.provider} />
-                    <div className="min-w-0">
-                      <p className="font-medium">{cliProxyBrands[account.provider]}</p>
-                      <p className="text-sm break-all text-muted-foreground">
-                        {[account.email, t(`cliproxyapi.accountStatus.${account.status}`)]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      disabled={busy}
-                      onClick={() => void startSubscriptionLogin(account.provider, account.id)}
-                    >
-                      {t("cliproxyapi.reconnect")}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      disabled={busy}
-                      onClick={() => void disconnectSubscriptionAccount(account.id)}
-                    >
-                      {t("cliproxyapi.disconnect")}
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          <p role="status" className="text-sm text-muted-foreground">
-            {busy
-              ? t(login ? "cliproxyapi.cancelling" : "cliproxyapi.starting")
-              : login
-                ? t(
-                    login.userCode
-                      ? "cliproxyapi.devicePrompt"
-                      : login.opened
-                        ? "cliproxyapi.waiting"
-                        : "cliproxyapi.openPrompt",
-                  )
-                : saved?.enabled
-                  ? t("providers.modelsLoaded", { count: saved.models.length })
-                  : t("cliproxyapi.modelsEmpty")}
-          </p>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="self-start"
-            disabled={busy || refreshing || login !== null}
-            onClick={() => void refreshSubscriptionConnections()}
-          >
-            {refreshing ? t("providers.refreshing") : t("cliproxyapi.refreshModels")}
-          </Button>
-          {error || (userCode && copyError) ? (
-            <p role="alert" className="text-sm text-destructive">
-              {t(`cliproxyapi.${error ?? "copyCodeFailed"}`)}
-            </p>
-          ) : null}
-        </div>
-      </Sheet.Body>
-    </>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <p role="status" className="text-sm text-muted-foreground">
+        {busy
+          ? t(login ? "cliproxyapi.cancelling" : "cliproxyapi.starting")
+          : login
+            ? t(
+                login.userCode
+                  ? "cliproxyapi.devicePrompt"
+                  : login.opened
+                    ? "cliproxyapi.waiting"
+                    : "cliproxyapi.openPrompt",
+              )
+            : saved?.enabled
+              ? t("providers.modelsLoaded", { count: saved.models.length })
+              : t("cliproxyapi.modelsEmpty")}
+      </p>
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className="self-start"
+        disabled={busy || refreshing || login !== null}
+        onClick={() => void refreshSubscriptionConnections()}
+      >
+        {refreshing ? t("providers.refreshing") : t("cliproxyapi.refreshModels")}
+      </Button>
+      {error || (userCode && copyError) ? (
+        <p role="alert" className="text-sm text-destructive">
+          {t(`cliproxyapi.${error ?? "copyCodeFailed"}`)}
+        </p>
+      ) : null}
+    </div>
   );
 }

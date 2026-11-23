@@ -717,7 +717,7 @@
     "narrator": "Narrator",
     "writer": "Script written by",
     "writerHint": "This model reads your sources and writes what is said; ElevenLabs then speaks it.",
-    "noWriter": "No chat model yet. Add one in Settings → AI providers."
+    "noWriter": "No chat model yet. Connect one in Settings → AI subscriptions."
   },
   "allHidden": "Every tool is turned off. Turn some back on in Settings → Studio.",
   "canvas": {

@@ -106,9 +106,13 @@
       "body": "Sign in or create an account to choose a username.",
       "google": "Continue with Google",
       "email": "Continue with email",
-      "keys": "You can also connect AI later in Settings.",
-      "signedIn": "Signed in as {{email}}",
-      "connectAI": "Connect an AI subscription"
+      "keys": "An account is optional. Everything works on this device without one.",
+      "signedIn": "Signed in as {{email}}"
+    },
+    "ai": {
+      "title": "Connect your AI",
+      "body": "Sign in with a plan you already pay for, like ChatGPT or Claude. deepLe uses it to chat with your sources, make Studio outputs, and help you read and practise. No API key needed.",
+      "later": "You can connect more, or add an API key instead, in Settings."
     },
     "username": {
       "title": "Choose a username",
@@ -139,6 +143,7 @@
       "ownKey": "Your own key",
       "caption": {
         "profile": "Your name and picture appear in the app.",
+        "ai": "Connected subscriptions appear in Settings.",
         "account": "You can use deepLe with a local profile.",
         "username": "Your username, for your account."
       }

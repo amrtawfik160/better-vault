@@ -71,7 +71,7 @@ bun install
 bun run dev
 ```
 
-Open <http://localhost:3000> and choose **Use without an account**. In **Settings → AI providers**, connect an AI subscription or choose a local model.
+Open <http://localhost:3000> and choose **Use without an account**. The welcome screens ask you to connect your AI: sign in with ChatGPT, Claude or another plan you already pay for. You can do this later in **Settings → AI subscriptions**, or add an API key or a local model in **Settings → AI providers**.
 
 ### Production build
 
@@ -98,7 +98,7 @@ Filter or select flashcards or highlights to review a subset. Choose **Practice 
 
 For scanned PDFs, choose **Recognize page text** in the reader and review the result before saving. Use **Recognize multiple pages** to process a range. You can close the dialog and pick up your corrections and approvals under **Continue scan review**. The pages you save become searchable in Study and join the notebook source. Recognition runs on your computer in the desktop app or on localhost. Install [Tesseract](https://tesseract-ocr.github.io/tessdoc/Installation) and its language data, then make the executable available on `PATH` or set `DEEPLE_TESSERACT_BIN` to its absolute path.
 
-Choose **Discuss in Study** on a note to get answers that cite it. Session reports can save corrections as flashcards and suggested terms to Vocabulary. Reading, reviewing, and speaking time appear in Today. The local library and review work without an account. AI requests use the model you choose in **Settings → AI providers**, including a local provider when you want to work without an AI subscription.
+Choose **Discuss in Study** on a note to get answers that cite it. Session reports can save corrections as flashcards and suggested terms to Vocabulary. Reading, reviewing, and speaking time appear in Today. The local library and review work without an account. AI requests use the model you choose in the model picker: a connected AI subscription, an API key, or a local provider when you want to work without one.
 
 When you choose **Draft cards from this answer** during flashcard practice, the draft can use the original card and the available source passages behind it. Links the model cites appear on the draft for you to check before you save. Open **View flashcards** to see the cards from that answer, or choose **Save and review** to review the cards you just saved. **Back to conversation** reopens the answer.
 
@@ -110,7 +110,7 @@ deepLe builds on [Better Vault](https://github.com/better-vault/better-vault). T
 
 ### Connect an AI subscription
 
-Open **Settings → AI providers → AI subscriptions**, choose a provider, and approve the sign-in in your browser. ChatGPT, Claude, Antigravity, Grok, both Kimi portals, Devin, and Muse Code are available. When a provider shows a one-time code, enter it in the provider's sign-in page. Connected models appear in the Chat, Bots, and Studio model pickers.
+Open **Settings → AI subscriptions**, choose a provider, and approve the sign-in in your browser. ChatGPT, Claude, Antigravity, Grok, both Kimi portals, Devin, and Muse Code are available. When a provider shows a one-time code, enter it in the provider's sign-in page. Connected models appear in the Chat, Bots, and Studio model pickers.
 
 The desktop installer includes CLIProxyAPI. A web app started on loopback with `bun run dev` or `bun run start` installs the pinned, checksum-verified proxy on first use. The app starts and restarts it automatically. The proxy keeps credentials under `~/.better-vault/cliproxyapi` by default. The app sends relevant notebook context through the proxy to the provider you select.
 

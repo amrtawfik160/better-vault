@@ -5,7 +5,7 @@
     "providers": "AI providers",
     "providersHint_one": "{{count}} ready",
     "providersHint_other": "{{count}} ready",
-    "providersNone": "None set up",
+    "providersNone": "API keys and local models",
     "appearance": "Appearance",
     "language": "Language",
     "data": "Data",
@@ -26,11 +26,12 @@
     "mcp": "MCP",
     "mcpOn": "Agents can connect",
     "mcpOff": "Let AI agents use your notes and skills",
-    "subscriptions": "AI subscriptions"
+    "subscriptions": "AI subscriptions",
+    "subscriptionsNone": "Sign in with ChatGPT, Claude and more"
   },
   "providers": {
     "title": "AI providers",
-    "description": "Add a key, connect a subscription or use a local model. Saved keys stay on this device and are sent with provider requests.",
+    "description": "Add an API key or use a local model. Saved keys stay on this device and are sent with provider requests. To use a plan you already pay for, connect it in AI subscriptions.",
     "ready": "Ready",
     "off": "Off",
     "needsKey": "Needs a key",
@@ -74,7 +75,7 @@
   },
   "cliproxyapi": {
     "title": "AI subscriptions",
-    "description": "Connect ChatGPT, Claude, or another account to use its models in chat and Studio.",
+    "description": "Use the AI plan you already pay for. Sign in with ChatGPT, Claude or another account, and its models work in chat, Studio, Study and bots. No API key needed.",
     "connect": "Connect {{provider}}",
     "modelsEmpty": "Connected models will appear in the model picker.",
     "refreshModels": "Refresh models",

@@ -824,7 +824,7 @@
       "more": "More passage actions",
       "practicePrompt": "Ask me to explain the core idea in my own words. Ask one question at a time and wait for my attempt.",
       "startPractice": "Start practice",
-      "chooseModel": "Choose a model in AI providers to ask and practice.",
+      "chooseModel": "Connect an AI subscription in Settings to ask and practice.",
       "draftFromFeedback": "Draft cards from this feedback",
       "noMatches": "No matching passages",
       "sourceRemoved": "The notebook source was removed. You can still study the saved text.",
@@ -1096,7 +1096,7 @@
       "errorTitle": "That didn’t work",
       "modelMissingTitle": "Choose an AI model first",
       "modelMissingBody": "Practice uses your AI model to write questions and give feedback. Set one up to continue.",
-      "modelMissingSettings": "Practice uses your AI model to write questions and give feedback. Choose one in Settings → AI providers.",
+      "modelMissingSettings": "Practice uses your AI model to write questions and give feedback. Connect one in Settings → AI subscriptions.",
       "verdicts": {
         "correct": "Correct",
         "partial": "Partly right",
