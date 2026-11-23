@@ -8,12 +8,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Added
 
 - AI subscription sign-in buttons with provider logos for ChatGPT, Claude, Antigravity, Grok, Kimi on both sites, Devin and Muse Code. The local CLIProxyAPI launcher handles proxy authentication and the app loads models after sign-in.
-- The Study Library shows every readable source of your notebooks, marked "Not started" until you open it.
-- Two clear ways to remove a document in the Library and the reader: "Delete document" and "Remove reading progress".
-
-### Changed
-
-- A Study document and its notebook source are now one document: editing, renaming and deleting work the same however it was added, and a document read twice by mistake is merged into one.
 
 ### Removed
 
