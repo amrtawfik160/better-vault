@@ -2702,6 +2702,30 @@ describe.each(backends)("%s store", (name, create) => {
       settings.model = { provider: "anthropic", modelId: "y" };
       expect(activeModel(settings)).toEqual({ provider: "anthropic", modelId: "y" });
     });
+
+    it("keeps a subscription choice on the same account when its model is gone", () => {
+      const account = "dpl-0123456789abcdef0123";
+      const other = "dpl-fedcba9876543210fedc";
+      const settings = defaultSettings();
+      settings.providers.anthropic = {
+        ...settings.providers.anthropic,
+        enabled: true,
+        apiKey: "k",
+        models: ["x"],
+      };
+      settings.providers.cliproxyapi = {
+        ...settings.providers.cliproxyapi,
+        enabled: true,
+        models: [`${other}/a`, `${account}/b`],
+      };
+      settings.model = { provider: "cliproxyapi", modelId: `${account}/gone` };
+      expect(activeModel(settings)).toEqual({
+        provider: "cliproxyapi",
+        modelId: `${account}/b`,
+      });
+      settings.model = { provider: "cliproxyapi", modelId: "dpl-00000000000000000000/gone" };
+      expect(activeModel(settings)).toBeNull();
+    });
   });
 });
 

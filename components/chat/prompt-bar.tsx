@@ -120,7 +120,7 @@ export function PromptBar() {
           }}
         >
           <Prompt.Banner open={settings !== undefined && !model}>
-            {t("setup.banner")}
+            {t(models.length > 0 ? "setup.choose" : "setup.banner")}
             <Prompt.BannerAction onClick={openModelSetup}>{t("setup.action")}</Prompt.BannerAction>
           </Prompt.Banner>
           <Prompt.Field>
@@ -207,12 +207,12 @@ export function PromptBar() {
                     },
                   ]}
                 />
-                {modelItems.length > 0 && model && settings ? (
+                {modelItems.length > 0 && settings ? (
                   <ModelPicker
                     variant="rail"
                     items={modelItems}
                     providers={pickerProviders}
-                    value={modelKey(model)}
+                    value={model ? modelKey(model) : null}
                     label={t("model")}
                     favorites={settings.favoriteModels}
                     onFavoritesChange={(favorites) =>

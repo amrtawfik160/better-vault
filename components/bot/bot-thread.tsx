@@ -27,7 +27,6 @@ import { updateBot } from "@/lib/db/bots";
 import {
   activeModel,
   modelDisplayLabel,
-  resolveModel,
   availableModels,
   updateSettings,
   useSettings,
@@ -194,7 +193,7 @@ function ThreadBody({
 
   const models = settings ? availableModels(settings) : [];
   const appModel = settings ? activeModel(settings) : null;
-  const model = bot.model && settings ? resolveModel(settings, bot.model) : appModel;
+  const model = bot.model && settings ? activeModel(settings, bot.model) : appModel;
   const busy = status === "submitted" || status === "streaming";
   const promptStatus: PromptState = status === "ready" || status === "error" ? "idle" : status;
   const local = model ? providers[model.provider].local : false;
@@ -339,12 +338,12 @@ function ThreadBody({
               />
               <Prompt.Footer>
                 <Prompt.Tools>
-                  {modelItems.length > 0 && model && settings ? (
+                  {modelItems.length > 0 && settings ? (
                     <ModelPicker
                       variant="rail"
                       items={modelItems}
                       providers={pickerProviders}
-                      value={modelKey(model)}
+                      value={model ? modelKey(model) : null}
                       label={tChat("model")}
                       favorites={settings.favoriteModels}
                       onFavoritesChange={(favorites) =>

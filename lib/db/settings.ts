@@ -237,12 +237,31 @@ export function modelDisplayLabel(settings: AppSettings | undefined, model: Mode
   );
 }
 
-/** Keeps a chosen subscription unavailable until its account returns or the user chooses another. */
-export function activeModel(settings: AppSettings): ModelRef | null {
-  const chosen = settings.model;
+/**
+ * The model requests use. A chosen subscription model that its plan no longer
+ * offers falls back to another model of the same account; while the account
+ * itself is gone, nothing is chosen, so requests never move to another
+ * provider unasked.
+ */
+export function activeModel(
+  settings: AppSettings,
+  chosen: ModelRef | null = settings.model,
+): ModelRef | null {
   if (chosen) {
     const available = resolveModel(settings, chosen);
-    if (available || chosen.provider === "cliproxyapi") return available;
+    if (available) return available;
+    if (chosen.provider === "cliproxyapi") {
+      const account = subscriptionRoute.exec(chosen.modelId)?.[1];
+      return (
+        (account &&
+          availableModels(settings).find(
+            (model) =>
+              model.provider === "cliproxyapi" &&
+              subscriptionRoute.exec(model.modelId)?.[1] === account,
+          )) ||
+        null
+      );
+    }
   }
   return availableModels(settings)[0] ?? null;
 }

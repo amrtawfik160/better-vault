@@ -18,6 +18,7 @@
   "addSource": "Add a source",
   "setup": {
     "banner": "Connect an AI subscription, add an API key, or use a local model.",
+    "choose": "The model you chose isn't available. Choose another model below.",
     "action": "Set up"
   },
   "noSources": "Select a source, or switch to Web.",
