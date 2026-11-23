@@ -25,6 +25,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { StudyMarkdown, StudyText } from "./study-text";
+import { timestampEnd, withTimestampChip } from "./study-timestamp";
 import { StudyDocumentEdits } from "./study-document-edits";
 import { StudyDocumentSearch } from "./study-document-search";
 import { StudyReaderSettings } from "./study-reader-settings";
@@ -34,7 +35,7 @@ import { StudySelectionMenu, type SelectionMenuHandle, type StudySelection } fro
 import { highlightColors } from "./study-highlight-colors";
 import { flashcardMaterialLimit, flashcardPassageSize } from "@/lib/study/ai";
 import { flashcardDraftRanges } from "@/lib/study/flashcard-material";
-import { directionalInline, DirectionalText } from "@/components/common/directional-text";
+import { DirectionalText } from "@/components/common/directional-text";
 import { Icon } from "@/components/icon";
 import { Button } from "@/components/panelui/button";
 import { StudyEpubChapter } from "./study-epub-chapter";
@@ -125,6 +126,11 @@ function highlighted(
   return textLines(text).map((line) => {
     const direction = textDirection(line);
     const end = start + line.length;
+    // A transcript's `[mm:ss]` at the start of the line is drawn as a chip, same text.
+    const markerStart = start;
+    const markerEnd = start + timestampEnd(line);
+    const inline = (from: number, to: number) =>
+      withTimestampChip(text, from, to, markerStart, markerEnd, direction);
     let at = start;
     const content: ReactNode[] = [];
     for (; rangeIndex < ranges.length; rangeIndex++) {
@@ -132,20 +138,20 @@ function highlighted(
       if (range.offset >= end) break;
       const from = Math.max(at, range.offset);
       const to = Math.min(end, range.end);
-      if (from > at) content.push(directionalInline(text.slice(at, from), direction));
+      if (from > at) content.push(inline(at, from));
       content.push(
         <mark
           id={range.offset >= start ? range.id : undefined}
           key={range.id}
           className={cn("rounded-[0.2em]", highlightColors[range.color])}
         >
-          {directionalInline(text.slice(from, to), direction)}
+          {inline(from, to)}
         </mark>,
       );
       at = to;
       if (range.end > end) break;
     }
-    if (at < end) content.push(directionalInline(text.slice(at, end), direction));
+    if (at < end) content.push(inline(at, end));
     const lineOffset = start;
     start = end;
     return (
