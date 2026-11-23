@@ -1,4 +1,19 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
+import {
+  BulbIcon,
+  Cards01Icon,
+  Flowchart01Icon,
+  MagicWand01Icon,
+  Note01Icon,
+} from "@hugeicons/core-free-icons";
 import { toast } from "sonner";
 import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
@@ -18,6 +33,9 @@ import {
   type TutorMaterialSelection,
 } from "./tutor-material-picker";
 import { StudyFlashcardDraftDialog, type FlashcardSource } from "./study-flashcard-generator";
+import { Visual } from "@/components/chat/visual/visual-part";
+import { Icon, type IconSvgElement } from "@/components/icon";
+import { visualText } from "@/lib/chat/visual-text";
 import { originHref, studyCitationOrigin, studyHref, tutorCardsScope } from "@/lib/study/links";
 import { Button, buttonVariants } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
@@ -47,7 +65,7 @@ import {
   useStudyDocumentImage,
 } from "@/lib/db/study";
 import { askStudyModel } from "@/lib/study/client";
-import { studyConversationMaterial, studyPracticeImages } from "@/lib/study/ai";
+import { studyConversationMaterial, studyMessageText, studyPracticeImages } from "@/lib/study/ai";
 import { passagesFor, tutorBookOrigin } from "@/lib/study/passages";
 import { activeStudyCard, selectedStudyCards } from "@/lib/study/recall";
 import { returnFromTutorCards, returnToTutor, studyReturnState } from "@/lib/study/return-links";
@@ -107,8 +125,10 @@ type TutorDelivery = {
   session?: AbortSignal;
   starter?: true;
 };
+type TutorTurn = { entry: StudyThread["messages"][number]; index: number | undefined };
 type TutorFailure =
   | { kind: "answer"; text: string; delivery: Omit<TutorDelivery, "session">; detail?: string }
+  | { kind: "visual"; target: TutorTurn; detail?: string }
   | { kind: "report"; detail?: string };
 const stoppedTutorRequest = Symbol("stopped-tutor-request");
 
@@ -204,6 +224,13 @@ export function TutorIndex({
   const selected = availableTutorSelection(materialOptions, selection);
   const selectedCount = tutorSelectionCount(selected);
   const ready = !curated || selectedCount > 0;
+  const location = useLocation();
+  const threadCards = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const { origin } of cards)
+      if (origin?.kind === "tutor") counts.set(origin.threadId, (counts.get(origin.threadId) ?? 0) + 1);
+    return counts;
+  }, [cards]);
 
   return (
     <section className="space-y-5">
@@ -379,22 +406,21 @@ export function TutorIndex({
           .filter((thread) => thread.title.toLowerCase().includes(query.toLowerCase()))
           .map((thread) => (
             <li className="flex flex-wrap items-center justify-between gap-2 p-4" key={thread.id}>
-              <button
-                type="button"
-                className="min-w-0 cursor-pointer text-start font-medium wrap-break-word hover:underline"
-                onClick={() => open(thread)}
-              >
-                {thread.title}
-              </button>
-              {thread.report ? (
-                <StudyOriginLink
-                  origin={{
-                    kind: "report",
-                    threadId: thread.id,
-                    reportId: studyReportKey(thread.report),
-                  }}
+              <div className="min-w-0 flex-1 space-y-2">
+                <button
+                  type="button"
+                  className="min-w-0 cursor-pointer text-start font-medium wrap-break-word hover:underline"
+                  onClick={() => open(thread)}
+                >
+                  {thread.title}
+                </button>
+                <TutorOutputs
+                  thread={thread}
+                  cardCount={threadCards.get(thread.id) ?? 0}
+                  vaultId={vaultId}
+                  returnState={studyReturnState(location.state)}
                 />
-              ) : null}
+              </div>
               <Button size="sm" variant="ghost" onClick={() => setDeleting(thread)}>
                 Delete
               </Button>
@@ -467,7 +493,7 @@ export function StudyTutor({
     : -1);
   const focusMessage = requestedMessage ?? (fromReviewFeedback && feedbackReply >= 0 ? feedbackReply : undefined);
   const focusDraft = fromReviewFeedback && focusMessage === undefined;
-  const [operation, setOperation] = useState<"answer" | "report" | null>(null);
+  const [operation, setOperation] = useState<"answer" | "visual" | "report" | null>(null);
   const [failed, setFailed] = useState<TutorFailure>();
   const busy = operation !== null;
   const [changingCard, setChangingCard] = useState(false);
@@ -577,6 +603,14 @@ export function StudyTutor({
   const answersWithCards = new Set(reportCards.flatMap(({ origin }) =>
     origin?.kind === "tutor" && origin.threadId === thread.id && origin.message !== undefined ? [origin.message] : [],
   ));
+  const conversationCardCount = reportCards.filter(
+    ({ origin }) => origin?.kind === "tutor" && origin.threadId === thread.id,
+  ).length;
+  const lastTurn = currentTurns.at(-1);
+  const quickTurn =
+    lastTurn?.entry.role === "assistant" && lastTurn.entry.text.trim() && !workPending
+      ? lastTurn
+      : undefined;
 
   useEffect(() => {
     const probe = new AbortController();
@@ -976,11 +1010,89 @@ export function StudyTutor({
     }
   }
 
-  function saveNote(text: string, origin: StudyOrigin, imageReferences?: StudyOrigin[]) {
+  async function explainVisually(target: TutorTurn) {
+    if (controller.current || !model) return;
+    setOperation("visual");
+    setFailed(undefined);
+    const abort = new AbortController();
+    controller.current = abort;
+    const { signal } = abort;
+    try {
+      const current = await currentConversation();
+      const sources = await readStudyTutorSources(current, vaultId);
+      signal.throwIfAborted();
+      const { practiceCardId } = target.entry;
+      const answer = await askStudyModel({
+        action: "visual",
+        input: studyMessageText(target.entry).slice(0, 20_000),
+        passages: passagesFor(current, sources, target.entry.text),
+        thread: practiceCardId
+          ? { ...current, messages: current.messages.filter((turn) => turn.practiceCardId === practiceCardId) }
+          : current,
+        signal,
+      });
+      signal.throwIfAborted();
+      if (!answer.visual) throw new Error(t("study.tutorActions.visualEmpty"));
+      const at = Date.now();
+      const turns: StudyThread["messages"] = [
+        { role: "user", text: t("study.tutorActions.visualPrompt"), at, practiceCardId, starter: true },
+        { role: "assistant", text: t("study.tutorActions.visualMessage"), visual: answer.visual, at, practiceCardId },
+      ];
+      if (target.index === undefined) saveTemporaryTurns([...recentTurns.current, ...turns]);
+      else await updateStudyThread(thread.id, {}, turns);
+    } catch (error) {
+      if (!signal.aborted || signal.reason === stoppedTutorRequest)
+        setFailed({
+          kind: "visual",
+          target,
+          detail: signal.aborted ? undefined : error instanceof Error ? error.message : String(error),
+        });
+    } finally {
+      controller.current = null;
+      setOperation(null);
+    }
+  }
+
+  function turnOrigin(index: number | undefined): StudyOrigin {
+    return { kind: "tutor", threadId: thread.id, message: index };
+  }
+
+  function saveTurnNote({ entry, index }: TutorTurn) {
+    if (entry.visual)
+      saveNote(
+        visualText(entry.visual.kind, entry.visual.data),
+        turnOrigin(index),
+        undefined,
+        entry.visual.data.title,
+      );
+    else saveNote(entry.text, turnOrigin(index), entry.citations?.map(studyCitationOrigin));
+  }
+
+  function draftTurnCards({ entry, index }: TutorTurn) {
+    draftCards(studyMessageText(entry), turnOrigin(index), [
+      ...(entry.citations ?? []).map(studyCitationOrigin),
+      ...(entry.practiceCardId ? [{ kind: "card" as const, cardId: entry.practiceCardId }] : []),
+    ]);
+  }
+
+  function draftConversationCards() {
+    const { text, evidence } = studyConversationMaterial(thread.messages, {
+      learner: t("study.capture.learner"),
+      tutor: t("study.capture.tutor"),
+    });
+    draftCards(text, { kind: "tutor", threadId: thread.id }, evidence);
+  }
+
+  function saveNote(
+    text: string,
+    origin: StudyOrigin,
+    imageReferences?: StudyOrigin[],
+    title = thread.title,
+  ) {
     void saveStudyNote({
       notebookId: thread.notebookId,
       vaultId,
-      title: thread.title,
+      title,
       body: text,
       origin,
       imageReferences,
@@ -1072,13 +1184,7 @@ export function StudyTutor({
               variant="outline"
               size="sm"
               disabled={workPending || !model}
-              onClick={() => {
-                const { text, evidence } = studyConversationMaterial(thread.messages, {
-                  learner: t("study.capture.learner"),
-                  tutor: t("study.capture.tutor"),
-                });
-                draftCards(text, { kind: "tutor", threadId: thread.id }, evidence);
-              }}
+              onClick={draftConversationCards}
             >
               {t("study.capture.cardsFromConversation")}
             </Button>
@@ -1338,7 +1444,10 @@ export function StudyTutor({
       ) : null}
       {currentTurns.length ? (
         <div className="space-y-3" aria-label="Conversation">
-          {currentTurns.map(({ entry, index }) => (
+          {currentTurns.map((turn) => {
+            const { entry, index } = turn;
+            const quick = quickTurn?.entry === entry;
+            return (
             <div
               key={index === undefined ? `temporary-${entry.at}-${entry.role}` : index}
               id={index === undefined ? undefined : `study-message-${index}`}
@@ -1357,6 +1466,9 @@ export function StudyTutor({
                   className="wrap-break-word whitespace-pre-wrap"
                 />
               )}
+              {entry.role === "assistant" && entry.visual ? (
+                <Visual kind={entry.visual.kind} data={entry.visual.data as never} />
+              ) : null}
               <div className="flex flex-wrap gap-1.5">
                 {entry.citations?.map((citation) => (
                   <StudyOriginLink
@@ -1368,35 +1480,16 @@ export function StudyTutor({
                 ))}
                 {entry.role === "assistant" ? (
                   <>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        saveNote(
-                          entry.text,
-                          { kind: "tutor", threadId: thread.id, message: index },
-                          entry.citations?.map(studyCitationOrigin),
-                        )
-                      }
-                    >
-                      Save to Notes
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        draftCards(
-                          entry.text,
-                          { kind: "tutor", threadId: thread.id, message: index },
-                          [
-                            ...(entry.citations ?? []).map(studyCitationOrigin),
-                            ...(entry.practiceCardId ? [{ kind: "card" as const, cardId: entry.practiceCardId }] : []),
-                          ],
-                        )
-                      }
-                    >
-                      {t("study.capture.cardsFromAnswer")}
-                    </Button>
+                    {quick ? null : (
+                      <>
+                        <Button variant="ghost" size="sm" onClick={() => saveTurnNote(turn)}>
+                          {entry.visual ? t("study.tutorActions.saveVisual") : "Save to Notes"}
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => draftTurnCards(turn)}>
+                          {t("study.capture.cardsFromAnswer")}
+                        </Button>
+                      </>
+                    )}
                     {index !== undefined && answersWithCards.has(index) ? (
                       <Link
                         to={studyHref("cards", { vault: vaultId, thread: thread.id, fromAnswer: index })}
@@ -1409,8 +1502,42 @@ export function StudyTutor({
                   </>
                 ) : null}
               </div>
+              {quick ? (
+                <div
+                  role="group"
+                  aria-label={t("study.tutorActions.label")}
+                  className="flex flex-wrap gap-1.5 border-t pt-3"
+                >
+                  {entry.visual ? null : (
+                    <QuickAction icon={Flowchart01Icon} disabled={!model} onClick={() => void explainVisually(turn)}>
+                      {t("study.tutorActions.visual")}
+                    </QuickAction>
+                  )}
+                  <QuickAction
+                    icon={BulbIcon}
+                    disabled={!model || !contextReady}
+                    onClick={() => void send(t("study.tutorActions.examplePrompt"), Date.now())}
+                  >
+                    {t("study.tutorActions.example")}
+                  </QuickAction>
+                  <QuickAction
+                    icon={MagicWand01Icon}
+                    disabled={!model || !contextReady}
+                    onClick={() => void send(t("study.tutorActions.simplerPrompt"), Date.now())}
+                  >
+                    {t("study.tutorActions.simpler")}
+                  </QuickAction>
+                  <QuickAction icon={Cards01Icon} onClick={() => draftTurnCards(turn)}>
+                    {t("study.tutorActions.flashcards")}
+                  </QuickAction>
+                  <QuickAction icon={Note01Icon} onClick={() => saveTurnNote(turn)}>
+                    {t(entry.visual ? "study.tutorActions.saveVisual" : "study.tutorActions.saveNote")}
+                  </QuickAction>
+                </div>
+              ) : null}
             </div>
-          ))}
+            );
+          })}
         </div>
       ) : simulation ? (
         <Button
@@ -1453,6 +1580,29 @@ export function StudyTutor({
               {prompt}
             </Button>
           ))}
+        </div>
+      ) : null}
+      {hasSavedAnswer ? (
+        <div className="flex flex-wrap items-center gap-3 rounded-2xl border bg-muted/40 p-4">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-background text-muted-foreground">
+            <Icon icon={Cards01Icon} size={18} />
+          </span>
+          <div className="min-w-0 flex-[1_1_14rem]">
+            <p className="text-sm font-medium">{t("study.tutorActions.rememberTitle")}</p>
+            <p className="text-sm text-muted-foreground">{t("study.tutorActions.rememberHint")}</p>
+            {conversationCardCount ? (
+              <Link
+                to={studyHref("cards", { vault: vaultId, thread: thread.id, fromThread: "1" })}
+                state={returnToTutor(location.pathname + location.search, location.state)}
+                className="mt-1 inline-flex rounded text-sm text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {t("study.tutorActions.cardsMade", { count: conversationCardCount })}
+              </Link>
+            ) : null}
+          </div>
+          <Button size="sm" disabled={workPending || !model} onClick={draftConversationCards}>
+            {t("study.tutorActions.flashcards")}
+          </Button>
         </div>
       ) : null}
       <form
@@ -1592,7 +1742,13 @@ export function StudyTutor({
         </div>
         {!livePhase && operation ? (
           <p role="status" className="text-sm text-muted-foreground">
-            {t(operation === "answer" ? "study.recovery.answerPending" : "study.recovery.reportPending")}
+            {t(
+              operation === "answer"
+                ? "study.recovery.answerPending"
+                : operation === "visual"
+                  ? "study.tutorActions.visualPending"
+                  : "study.recovery.reportPending",
+            )}
           </p>
         ) : null}
         {!operation && failed ? (
@@ -1601,7 +1757,9 @@ export function StudyTutor({
               <p className="font-medium">
                 {failed.kind === "answer"
                   ? t(failed.detail ? "study.recovery.answerFailed" : "study.recovery.answerStopped")
-                  : t(failed.detail ? "study.recovery.reportFailed" : "study.recovery.reportStopped")}
+                  : failed.kind === "visual"
+                    ? t(failed.detail ? "study.tutorActions.visualFailed" : "study.tutorActions.visualStopped")
+                    : t(failed.detail ? "study.recovery.reportFailed" : "study.recovery.reportStopped")}
               </p>
               {failed.detail ? <p className="mt-1 text-muted-foreground">{failed.detail}</p> : null}
               {failed.kind === "answer" && failed.delivery.draft?.id !== composer.draft.id ? (
@@ -1618,6 +1776,7 @@ export function StudyTutor({
                 disabled={workPending || !model || (failed.kind === "answer" && !contextReady)}
                 onClick={() => {
                   if (failed.kind === "answer") void send(failed.text, Date.now(), failed.delivery);
+                  else if (failed.kind === "visual") void explainVisually(failed.target);
                   else void report(Date.now());
                 }}
               >
@@ -1871,5 +2030,78 @@ export function StudyTutor({
         />
       ) : null}
     </section>
+  );
+}
+
+function QuickAction({
+  icon,
+  children,
+  ...props
+}: { icon: IconSvgElement; children: ReactNode } & Omit<ComponentProps<typeof Button>, "children">) {
+  return (
+    <Button variant="outline" size="sm" shape="pill" {...props}>
+      <Icon icon={icon} size={15} />
+      {children}
+    </Button>
+  );
+}
+
+const outputChip =
+  "inline-flex h-7 items-center gap-1.5 rounded-full border px-2.5 text-xs text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring";
+
+/** What a conversation produced: its flashcards, report and visuals, each a link. */
+function TutorOutputs({
+  thread,
+  cardCount,
+  vaultId,
+  returnState,
+}: {
+  thread: StudyThread;
+  cardCount: number;
+  vaultId: string;
+  returnState: ReturnType<typeof studyReturnState>;
+}) {
+  const { t } = useTranslation("home");
+  const visuals = thread.messages.flatMap(({ visual }, index) => (visual ? [index] : []));
+  if (!cardCount && !thread.report && !visuals.length) return null;
+  return (
+    <ul aria-label={t("study.tutorActions.outputs")} className="flex flex-wrap gap-1.5">
+      {cardCount ? (
+        <li>
+          <Link
+            className={outputChip}
+            to={studyHref("cards", { vault: vaultId, thread: thread.id, fromThread: "1" })}
+            state={returnState}
+          >
+            <Icon icon={Cards01Icon} size={13} />
+            {t("study.tutorActions.cards", { count: cardCount })}
+          </Link>
+        </li>
+      ) : null}
+      {thread.report ? (
+        <li>
+          <Link
+            className={outputChip}
+            to={originHref({ kind: "report", threadId: thread.id, reportId: studyReportKey(thread.report) })}
+            state={returnState}
+          >
+            <Icon icon={Note01Icon} size={13} />
+            {t("study.tutorActions.report")}
+          </Link>
+        </li>
+      ) : null}
+      {visuals.length ? (
+        <li>
+          <Link
+            className={outputChip}
+            to={originHref({ kind: "tutor", threadId: thread.id, message: visuals[0] })}
+            state={returnState}
+          >
+            <Icon icon={Flowchart01Icon} size={13} />
+            {t("study.tutorActions.visuals", { count: visuals.length })}
+          </Link>
+        </li>
+      ) : null}
+    </ul>
   );
 }
