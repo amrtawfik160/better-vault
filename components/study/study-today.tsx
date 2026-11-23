@@ -31,6 +31,7 @@ import {
 import { studyRatings, type StudyBook, type StudyRecord, type StudyThread } from "@/lib/study/records";
 import type { StudyTab } from "@/lib/study/links";
 import { vocabularyCardSides } from "@/lib/study/vocabulary";
+import { recentPracticeSessions } from "@/lib/study/writing-practice";
 import { textDirection } from "@/lib/text/direction";
 import { cn } from "@/lib/utils";
 import { StudyActivity } from "./study-activity";
@@ -38,6 +39,7 @@ import { StudyBookCover, StudyProgressBar } from "./study-book-cover";
 import { studyDueLabel } from "./study-due";
 import { StudyFollowUps } from "./study-follow-ups";
 import { StudyListenButton } from "./study-listen";
+import { PracticeSessionLink } from "./practice/study-writing-practice";
 import { StudyMakeFromBook } from "./study-make-from-book";
 import { StudyOriginLink } from "./study-origin-link";
 import { useStudyClock } from "./use-study-clock";
@@ -311,7 +313,7 @@ export function DailyStudy({
               ) : null}
             </Panel>
           ) : null}
-          {threads.some(isPracticeThread) ? (
+          {threads.some(isPracticeThread) || rows.some((row) => row.kind === "practice") ? (
             <TutorPanel
               threads={threads}
               books={books}
@@ -540,8 +542,10 @@ function TutorPanel({
   report: ReactNode;
 }) {
   const { t } = useTranslation("home");
-  // MERGE SLOT: written practice sessions join this list when that feature lands.
-  const recent = threads.filter((thread) => isPracticeThread(thread) && thread.messages.length > 0).slice(0, 3);
+  const written = recentPracticeSessions(rows, 2);
+  const recent = threads
+    .filter((thread) => isPracticeThread(thread) && thread.messages.length > 0)
+    .slice(0, Math.max(1, 3 - written.length));
   const fromThread = (threadId: string, origin?: { kind: string; threadId?: string }) =>
     (origin?.kind === "tutor" || origin?.kind === "report") && origin.threadId === threadId;
   return (
@@ -552,6 +556,13 @@ function TutorPanel({
           {t("study.today.openTutor")}
         </Button>
       </div>
+      {written.length ? (
+        <div className="flex flex-col gap-2">
+          {written.map((session) => (
+            <PracticeSessionLink key={session.id} session={session} />
+          ))}
+        </div>
+      ) : null}
       {recent.length ? (
         <ul className="-mx-2 space-y-1">
           {recent.map((thread) => {
@@ -591,7 +602,7 @@ function TutorPanel({
             );
           })}
         </ul>
-      ) : (
+      ) : written.length ? null : (
         <p className="text-sm text-muted-foreground">{t("study.today.noTutor")}</p>
       )}
       {report ? <div className="mt-auto">{report}</div> : null}

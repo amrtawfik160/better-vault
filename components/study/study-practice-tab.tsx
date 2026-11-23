@@ -30,7 +30,7 @@ import {
 } from "@/lib/study/records";
 import { studyReturnState } from "@/lib/study/return-links";
 import { cn } from "@/lib/utils";
-import { PracticeWritingSlot } from "./practice-slot";
+import { StudyWritingPractice } from "./practice/study-writing-practice";
 import { materialChanges, simulationGoal, tutorMaterialOptions, TutorOutputs } from "./study-tutor";
 import {
   TutorMaterialPicker,
@@ -386,9 +386,12 @@ export function StudyPracticeTab({
   open,
   practice,
   openingPractice,
+  setupModel,
 }: Materials & {
   threads: StudyThread[];
   vaultId: string;
+  /** Opens Settings → AI providers. */
+  setupModel?: () => void;
   /** Opens a thread: beside its document when it is a question about one, here otherwise. */
   open: (thread: StudyThread) => void;
   practice: (cardIds: string[]) => void;
@@ -396,6 +399,7 @@ export function StudyPracticeTab({
 }) {
   const { t } = useTranslation("home");
   const [setup, setSetup] = useState<Setup>();
+  const [writing, setWriting] = useState(false);
   const [query, setQuery] = useState("");
   const [deleting, setDeleting] = useState<StudyThread | null>(null);
   const materials = { books, notes, cards, notebookSources, vaultHighlights };
@@ -426,8 +430,18 @@ export function StudyPracticeTab({
         <p className="text-sm text-muted-foreground">{t("study.practice.intro")}</p>
       </header>
 
-      <PracticeWritingSlot />
+      <StudyWritingPractice
+        vaultId={vaultId}
+        books={books}
+        notes={notes}
+        cards={cards}
+        highlights={vaultHighlights}
+        setup={setupModel}
+        onActiveChange={setWriting}
+      />
 
+      {writing ? null : (
+      <>
       <section className="space-y-3" aria-labelledby="study-practice-speaking">
         <div className="space-y-1">
           <h3 id="study-practice-speaking" className="font-semibold">
@@ -524,6 +538,8 @@ export function StudyPracticeTab({
           <p className="text-sm text-muted-foreground">{t("study.practice.noMatches")}</p>
         ) : null}
       </section>
+      </>
+      )}
 
       <ConfirmDialog
         open={deleting !== null}

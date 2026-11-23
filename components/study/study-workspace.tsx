@@ -746,6 +746,7 @@ export default function StudyWorkspace({
             open={openConversation}
             practice={(ids) => void openTutorSelection("card", ids)}
             openingPractice={openingPractice}
+            setupModel={() => setSettings(true)}
           />
         )
       ) : null}
