@@ -91,6 +91,7 @@ import {
 import type { StudyImageCapture } from "@/lib/study/visual-card";
 import { locateStudyMark, resolveStudyRange, studyTextRevision } from "@/lib/study/text-edits";
 import { studyDocumentFormulaMode } from "@/lib/study/markdown-document";
+import { canEditStudyText } from "@/lib/study/library";
 import { cn } from "@/lib/utils";
 
 type Selection = StudySelection;
@@ -1042,7 +1043,7 @@ export function StudyReader({
     !scanDraft?.pages.some(({ section }) => section === index);
   const canScanBook = book.format === "pdf" && !!fileId && book.sections.length > 1 &&
     book.sections.some(({ text }) => !text.trim());
-  const canEditText = book.format === "text" && !book.attachedToNotebook;
+  const canEditText = canEditStudyText(book);
   const bookmarked = book.bookmarks.includes(index);
   const searchKeys = [/Mac|iPhone|iPad/.test(navigator.userAgent) ? "⌘" : "Ctrl", "F"];
 

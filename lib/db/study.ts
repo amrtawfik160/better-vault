@@ -22,6 +22,7 @@ import { isDifficultRating, recentPracticeCards, selectedStudyCards, studyHighli
 import { legacyQuizCardSource, quizCardContent } from "@/lib/study/quiz-cards";
 import { studyFollowUpId, studyReportKey, studyReports } from "@/lib/study/reports";
 import { studyTutorContextSchema } from "@/lib/study/records";
+import { canEditStudyText, sourceStudyBookId } from "@/lib/study/library";
 import { studyOriginRecordId, studyVaultIndex } from "@/lib/study/vault";
 import { clearTutorDraftRecovery } from "@/lib/study/tutor-draft-recovery";
 import { studyImageCropKey, studyImageFile, studyImageId, type StudyImageSnapshot } from "@/lib/study/visual-card";
@@ -579,9 +580,16 @@ export async function addStudyBook(input: {
   vaultId?: string;
   /** Where it came from, e.g. the video a transcript is of. Kept on the notebook source. */
   url?: string;
+  /**
+   * The notebook to add it to, as one more source. Without one, a notebook of
+   * its own is made, named after the document.
+   */
+  notebookId?: string;
 }): Promise<StudyBook> {
   const title = input.title.trim() || "Untitled";
-  const notebookId = await createNotebook(title, { vaultId: input.vaultId ?? currentVaultId() });
+  const existing = input.notebookId;
+  if (existing && !(await store().getNotebook(existing))) throw new Error("This notebook was removed.");
+  const notebookId = existing ?? (await createNotebook(title, { vaultId: input.vaultId ?? currentVaultId() }));
   try {
     const text =
       input.format === "text" && input.sections.length === 1
@@ -609,12 +617,13 @@ export async function addStudyBook(input: {
       sections: input.sections,
       section: 0,
       bookmarks: [],
+      ...(existing ? { attachedToNotebook: true as const } : {}),
       updatedAt: Date.now(),
     };
     await putStudyRecords(book);
     return book;
   } catch (error) {
-    await deleteNotebook(notebookId);
+    if (!existing) await deleteNotebook(notebookId);
     throw error;
   }
 }
@@ -627,7 +636,7 @@ export async function studyBookForSource(sourceId: string) {
   if (existing) return existing;
   const original = source.originalFileId ? await backend.getBlob(source.originalFileId) : undefined;
   const book: StudyBook = {
-    id: `source-${source.id}`,
+    id: sourceStudyBookId(source.id),
     kind: "book",
     notebookId: source.notebookId,
     sourceId: source.id,
@@ -1147,7 +1156,7 @@ export async function saveStudyText(
 ) {
   const backend = store();
   const book = await backend.getStudy(bookId);
-  if (book?.kind !== "book" || book.format !== "text" || book.attachedToNotebook)
+  if (book?.kind !== "book" || !canEditStudyText(book))
     throw new Error("Choose a text document created in Study.");
   const section = draft?.section ?? 0;
   const previous = book.sections[section];

@@ -1232,6 +1232,50 @@ describe.each(backends)("%s store", (name, create) => {
       });
     });
 
+    it("adds a Study document to an existing notebook as one more source", async () => {
+      const notebookId = await createNotebook("Cell biology");
+      const lecture = await addSource({ notebookId, title: "Lecture", kind: "text", text: "Cells divide." });
+      const book = await addStudyBook({
+        title: "Mitosis",
+        format: "text",
+        sections: [{ title: "Mitosis", text: "Prophase comes first." }],
+        notebookId,
+        url: "https://example.com/mitosis",
+      });
+      expect(book).toMatchObject({ notebookId, attachedToNotebook: true, title: "Mitosis" });
+      expect(await store().listNotebooks()).toHaveLength(1);
+      const sources = await store().listSources(notebookId);
+      expect(sources.map(({ id }) => id).sort()).toEqual([lecture.id, book.sourceId].sort());
+      expect(await store().getSource(book.sourceId)).toMatchObject({
+        title: "Mitosis",
+        text: "Prophase comes first.",
+        url: "https://example.com/mitosis",
+      });
+      expect(await getChunks([book.sourceId])).toMatchObject([{ text: "Prophase comes first." }]);
+      expect(await studyBookForSource(book.sourceId)).toMatchObject({ id: book.id });
+
+      await saveStudyText(book.id, "Prophase comes first, then metaphase.", {
+        section: 0,
+        original: "Prophase comes first.",
+      });
+      expect((await store().getSource(book.sourceId))?.text).toBe("Prophase comes first, then metaphase.");
+
+      await renameStudyBook(book, "Cell division");
+      expect((await store().getNotebook(notebookId))?.title).toBe("Cell biology");
+      expect((await store().getSource(book.sourceId))?.title).toBe("Cell division");
+
+      await deleteStudyBook({ ...book, title: "Cell division" });
+      expect(await store().getNotebook(notebookId)).toBeDefined();
+      expect(await store().getSource(lecture.id)).toBeDefined();
+      expect(await store().getStudy(book.id)).toBeUndefined();
+
+      await deleteNotebook(notebookId);
+      await expect(
+        addStudyBook({ title: "Late", format: "text", sections: [{ title: "Late", text: "Text" }], notebookId }),
+      ).rejects.toThrow();
+      expect(await store().listNotebooks()).toEqual([]);
+    });
+
     it("resolves a removed source's citation from its saved Study text in the notebook's vault", async () => {
       const otherVault = await createVault({ name: "Reference material" });
       const notebookId = await createNotebook("Control theory");
