@@ -39,6 +39,7 @@ import {
   tutorSelectionCount,
   type TutorMaterial,
 } from "./tutor-material-picker";
+import { StudyAcrossVaultsSwitch } from "./study-vault-scope";
 
 const goalIcons: Record<PracticeGoal, IconSvgElement> = {
   "teach-back": TeachingIcon,
@@ -296,6 +297,7 @@ function Preferences() {
           />
           {t("study.practice.keepTranscripts")}
         </label>
+        <StudyAcrossVaultsSwitch />
       </div>
     </details>
   );

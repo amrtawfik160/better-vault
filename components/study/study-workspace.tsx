@@ -27,6 +27,9 @@ import {
 } from "@/lib/study/review-session";
 import { studyReturnState, tutorReturnState } from "@/lib/study/return-links";
 import { studyVaultIndex } from "@/lib/study/vault";
+import { sharedStudyVault, studyVaultViews } from "@/lib/study/review-vaults";
+import { useSettings } from "@/lib/db/settings";
+import { useVaultName } from "@/components/home/vault-name";
 import { studyTextRevision } from "@/lib/study/text-edits";
 import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/components/panelui/button";
@@ -56,6 +59,7 @@ import { DailyStudy } from "./study-today";
 import { StudyPracticeTab } from "./study-practice-tab";
 import { StudyTutor } from "./study-tutor";
 import { useStudyClock } from "./use-study-clock";
+import { StudyVaultScopeContext, type StudyVaultScope } from "./study-vault-scope";
 import { useStudyReaderFullscreen } from "./use-study-reader-fullscreen";
 
 const wideReaderQuery = "(min-width: 64rem)";
@@ -122,9 +126,29 @@ export default function StudyWorkspace({
       scope.linkedVault(params))
     : undefined;
   const studyVaultId = linkedVault ?? vaultId;
-  const rows = (saved ?? [])
-    .filter((row) => row.kind !== "document-draft" && row.kind !== "ocr-draft" && scope.owner(row) === studyVaultId)
-    .sort((a, b) => b.updatedAt - a.updatedAt);
+  const acrossVaults = Boolean(useSettings()?.study?.reviewAcrossVaults);
+  const vaultName = useVaultName();
+  const views = studyVaultViews(
+    (saved ?? [])
+      .filter((row) => row.kind !== "document-draft" && row.kind !== "ocr-draft")
+      .sort((a, b) => b.updatedAt - a.updatedAt),
+    scope.owner,
+    studyVaultId,
+    acrossVaults,
+  );
+  const rows = views.rows;
+  const review = {
+    books: views.review.filter((row) => row.kind === "book"),
+    cards: views.review.filter((row) => row.kind === "card"),
+    highlights: views.review.filter((row) => row.kind === "highlight"),
+    words: views.review.filter((row) => row.kind === "word"),
+  };
+  const vaultScope: StudyVaultScope = {
+    acrossVaults,
+    vaultOf: scope.owner,
+    label: (row) =>
+      acrossVaults ? vaultName(vaults.find(({ id }) => id === scope.owner(row)) ?? { name: "" }) : undefined,
+  };
 
   useEffect(() => {
     if (linkedVault && linkedVault !== currentVaultId()) setCurrentVault(linkedVault);
@@ -214,9 +238,9 @@ export default function StudyWorkspace({
   const practiceMode = tab === "review" && params.get("mode") === "practice";
   const reviewSessionId =
     selection?.studyReviewSession ?? (location.key === "default" ? directReviewId : location.key);
-  const now = useStudyClock([...cards, ...highlights]);
-  const dueNow = dailyReview(rows, now).due.length;
-  const collected = tab === "collection" ? studyCollection(rows, params) : undefined;
+  const now = useStudyClock([...review.cards, ...review.highlights]);
+  const dueNow = dailyReview(views.review, now).due.length;
+  const collected = tab === "collection" ? studyCollection(views.collection, params) : undefined;
   const lastRead =
     books.filter((entry) => entry.lastReadAt !== undefined).toSorted((a, b) => (b.lastReadAt ?? 0) - (a.lastReadAt ?? 0))[0];
   const bookFilter = book ? { book: book.id } : undefined;
@@ -449,16 +473,17 @@ export default function StudyWorkspace({
     setOpeningPractice(true);
     try {
       const draft = feedback ? { id: studyId(), text: feedback.text, at: Date.now() } : undefined;
+      const itemsVault = sharedStudyVault(ids, views.review, scope.owner, studyVaultId);
       const thread = kind === "card"
-        ? await startCardTutor(ids, studyVaultId, t("study.recall.tutorTitle"), draft, feedback?.threadId)
-        : await startHighlightTutor(ids, studyVaultId, t("study.highlights.tutorTitle"), draft, feedback?.threadId);
+        ? await startCardTutor(ids, itemsVault, t("study.recall.tutorTitle"), draft, feedback?.threadId)
+        : await startHighlightTutor(ids, itemsVault, t("study.highlights.tutorTitle"), draft, feedback?.threadId);
       if (thread) {
         const returnState = state ?? studyReturnState(location.state);
         setParams(
           {
             view: "study",
             tab: "practice",
-            vault: studyVaultId,
+            vault: itemsVault,
             thread: thread.id,
             ...(feedback && tab === "today" ? { fromToday: "1" } : {}),
           },
@@ -494,7 +519,7 @@ export default function StudyWorkspace({
   }
 
   const content = (
-    <>
+    <StudyVaultScopeContext value={vaultScope}>
       {!ready ? (
         <p role="status" className="text-muted-foreground">
           {tCommon("status.loading")}
@@ -503,6 +528,7 @@ export default function StudyWorkspace({
       {ready && tab === "today" ? (
         <DailyStudy
           rows={rows}
+          review={views.review}
           books={books}
           notebookTitles={notebookTitles}
           vaultId={studyVaultId}
@@ -605,8 +631,8 @@ export default function StudyWorkspace({
           cards={collected.cards}
           highlights={collected.highlights}
           words={collected.words}
-          allCards={cards}
-          books={books}
+          allCards={review.cards}
+          books={review.books}
           vaultId={studyVaultId}
           chips={collectionChips}
           clearChip={(key) =>
@@ -669,10 +695,10 @@ export default function StudyWorkspace({
         <StudyReview
           key={`${location.key}:${studyVaultId}`}
           vaultId={studyVaultId}
-          items={reviewCollection(rows, params, requestedReview)}
+          items={reviewCollection(views.review, params, requestedReview)}
           useHighlights={reviewingHighlights}
-          books={books}
-          words={words}
+          books={review.books}
+          words={review.words}
           threads={threads}
           practice={(item, state, feedback) => void openTutorSelection(item.kind, [item.id], state, feedback)}
           practiceDifficult={(ids) =>
@@ -681,7 +707,7 @@ export default function StudyWorkspace({
           openingPractice={openingPractice}
           initialPractice={weakMode || practiceMode}
           sessionId={reviewSessionId}
-          history={rows.filter((row) => row.kind === "session")}
+          history={views.review.filter((row) => row.kind === "session")}
           continueReading={lastRead}
           collectionSource={studioReturn ?? (tutorAnswer ? {
             href: originHref({ kind: "tutor", ...tutorAnswer }),
@@ -750,7 +776,7 @@ export default function StudyWorkspace({
           />
         )
       ) : null}
-    </>
+    </StudyVaultScopeContext>
   );
 
   return (

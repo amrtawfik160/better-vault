@@ -55,6 +55,8 @@ import { StudyListenButton } from "./study-listen";
 import { StudyOriginLink } from "./study-origin-link";
 import { StudyText } from "./study-text";
 import { useStudyClock } from "./use-study-clock";
+import { StudyVaultLabel, useStudyVaultScope } from "./study-vault-scope";
+import { studyIdsByVault } from "@/lib/study/review-vaults";
 
 type Card = StudyRecordOf<"card">;
 type Highlight = StudyRecordOf<"highlight">;
@@ -117,6 +119,8 @@ export function StudyCollection({
   locate: (highlight: Highlight) => void;
 }) {
   const { t, i18n } = useTranslation("home");
+  const { vaultOf } = useStudyVaultScope();
+  const wordVault = (word: StudyWord) => vaultOf(word) ?? vaultId;
   const now = useStudyClock([...cards, ...highlights]);
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
@@ -171,7 +175,9 @@ export function StudyCollection({
     setOpening(true);
     try {
       const fromWords = targetWords.length
-        ? await studyVocabularyCards(targetWords.map(({ id }) => id), vaultId)
+        ? (await Promise.all(
+            studyIdsByVault(targetWords, wordVault).map(([vault, ids]) => studyVocabularyCards(ids, vault)),
+          )).flat()
         : [];
       if (request.signal.aborted) return;
       const ids = [...targetCards, ...targetHighlights].map(({ id }) => id).concat(fromWords);
@@ -456,7 +462,7 @@ export function StudyCollection({
                   const request = new AbortController();
                   openingCards.current = request;
                   setOpening(true);
-                  void studyVocabularyCards([item.id], vaultId)
+                  void studyVocabularyCards([item.id], wordVault(item))
                     .then((ids) => {
                       if (request.signal.aborted) return;
                       if (ids.length) review("vocabulary", ids);
@@ -492,7 +498,11 @@ export function StudyCollection({
         />
       ) : null}
       {wordEditor ? (
-        <WordEditorDialog editor={wordEditor} setEditor={setWordEditor} vaultId={vaultId} />
+        <WordEditorDialog
+          editor={wordEditor}
+          setEditor={setWordEditor}
+          vaultId={wordEditor.mode === "edit" ? wordVault(wordEditor.word) : vaultId}
+        />
       ) : null}
       <ConfirmDialog
         open={deleting.length > 0}
@@ -517,6 +527,7 @@ type Selectable = { checked: boolean; change: (checked: boolean) => void };
 
 function ItemShell({
   kind,
+  row,
   dot,
   source,
   label,
@@ -529,6 +540,7 @@ function ItemShell({
   id,
 }: {
   kind: string;
+  row: StudyCollectionItem;
   dot: string;
   source?: string;
   label: string;
@@ -563,6 +575,7 @@ function ItemShell({
             <span aria-hidden="true" className={cn("size-2 rounded-full", dot)} />
             {kind}
           </span>
+          <StudyVaultLabel row={row} />
           {source ? (
             <span className="ms-auto min-w-0 truncate" dir="auto">
               {source}
@@ -659,6 +672,7 @@ function HighlightItem({
   return (
     <ItemShell
       kind={t("study.collection.kinds.highlight")}
+      row={item}
       dot={highlightColors[item.color]}
       source={book}
       label={preview}
@@ -773,6 +787,7 @@ function CardItem({
   return (
     <ItemShell
       kind={t("study.collection.kinds.card")}
+      row={item}
       dot={kindDots.card}
       source={item.tags.join(", ")}
       label={item.front}
@@ -850,6 +865,7 @@ function WordItem({
       id={`study-word-${item.id}`}
       focused={focused}
       kind={t("study.collection.kinds.word")}
+      row={item}
       dot={kindDots.word}
       source={book ?? item.language}
       label={item.term}

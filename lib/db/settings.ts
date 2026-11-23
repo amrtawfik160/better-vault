@@ -46,6 +46,11 @@ export interface AppSettings {
   study?: Pick<StudyThread, "corrections" | "keepVoiceTranscripts"> & {
     /** The language the Study reader translates selections into, as a BCP 47 code. */
     translateTo?: string;
+    /**
+     * Review, Today's due counts and saved words show items of every vault, not
+     * only the current one. Reading, Library and Practice stay in the vault.
+     */
+    reviewAcrossVaults?: boolean;
   };
 }
 

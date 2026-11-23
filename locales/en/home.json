@@ -949,7 +949,9 @@
       "practiceDifficult_other": "Practice {{count}} difficult items",
       "weakItems": "Items you found difficult",
       "selection_one": "{{count}} chosen item",
-      "selection_other": "{{count}} chosen items"
+      "selection_other": "{{count}} chosen items",
+      "acrossVaults": "Review all vaults",
+      "acrossVaultsHint": "Due items and saved words come from every vault. Reading, Library and Practice stay in this vault."
     },
     "collection": {
       "title": "Everything you kept",

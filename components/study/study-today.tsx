@@ -31,6 +31,7 @@ import {
 import { studyRatings, type StudyBook, type StudyRecord, type StudyThread } from "@/lib/study/records";
 import type { StudyTab } from "@/lib/study/links";
 import { vocabularyCardSides } from "@/lib/study/vocabulary";
+import { studyIdsByVault } from "@/lib/study/review-vaults";
 import { recentPracticeSessions } from "@/lib/study/writing-practice";
 import { textDirection } from "@/lib/text/direction";
 import { cn } from "@/lib/utils";
@@ -43,6 +44,7 @@ import { PracticeSessionLink } from "./practice/study-writing-practice";
 import { StudyMakeFromBook } from "./study-make-from-book";
 import { StudyOriginLink } from "./study-origin-link";
 import { useStudyClock } from "./use-study-clock";
+import { StudyVaultLabel, useStudyVaultScope } from "./study-vault-scope";
 
 type Go = (tab: StudyTab, params?: Record<string, string>, review?: string[]) => void;
 
@@ -66,6 +68,7 @@ export function studyBookByline(book: StudyBook, notebookTitles: ReadonlyMap<str
 
 export function DailyStudy({
   rows,
+  review = rows,
   books,
   notebookTitles,
   vaultId,
@@ -77,6 +80,8 @@ export function DailyStudy({
   openingPractice,
 }: {
   rows: StudyRecord[];
+  /** What the due counts, difficult items and saved words read: this vault's rows, or every vault's. */
+  review?: StudyRecord[];
   books: StudyBook[];
   notebookTitles: ReadonlyMap<string, string>;
   vaultId: string;
@@ -92,7 +97,10 @@ export function DailyStudy({
   const [expanded, setExpanded] = useState({ card: false, highlight: false });
   const [openingWords, setOpeningWords] = useState(false);
   const wordRequest = useRef(false);
-  const reviewable = rows.filter((row) => row.kind === "card" || row.kind === "highlight");
+  const { vaultOf } = useStudyVaultScope();
+  const reviewable = review.filter((row) => row.kind === "card" || row.kind === "highlight");
+  const reviewSessions = review.filter((item) => item.kind === "session");
+  const savedWords = review.filter((item) => item.kind === "word");
   const now = useStudyClock(reviewable);
   const today = new Date(now);
   today.setHours(0, 0, 0, 0);
@@ -109,12 +117,12 @@ export function DailyStudy({
         (b.report.generatedAt ?? b.thread.updatedAt) - (a.report.generatedAt ?? a.thread.updatedAt),
     )[0];
   const activity = sessions.filter((item) => item.updatedAt >= today.getTime());
-  const daily = dailyReview(rows, now);
-  const difficult = difficultStudyItems(reviewable, sessions);
+  const daily = dailyReview(review, now);
+  const difficult = difficultStudyItems(reviewable, reviewSessions);
   const paused = savedReview(vaultId);
   const pausedItems = paused
     ? reviewCollection(
-        rows,
+        review,
         new URLSearchParams(paused.path.split("?", 2)[1]),
         paused.state.studyReviewIds,
       )
@@ -123,7 +131,7 @@ export function DailyStudy({
     paused &&
     (reviewQueue(pausedItems, paused.snapshot.practiced, now).length > 0 ||
       (!paused.snapshot.practiced &&
-        pendingReviewLearning(pausedItems, sessions, paused.state.studyReviewSession, now).length > 0))
+        pendingReviewLearning(pausedItems, reviewSessions, paused.state.studyReviewSession, now).length > 0))
       ? paused
       : undefined;
   const lastRead =
@@ -139,14 +147,15 @@ export function DailyStudy({
     cursor.setDate(cursor.getDate() - 1);
   }
   const percent = new Intl.NumberFormat(i18n.language, { style: "percent" });
-  const practisable = words.filter((word) => vocabularyCardSides(word)).map(({ id }) => id);
+  const practisable = savedWords.filter((word) => vocabularyCardSides(word));
 
   async function practiseWords() {
     if (wordRequest.current || !practisable.length) return;
     wordRequest.current = true;
     setOpeningWords(true);
     try {
-      const ids = await studyVocabularyCards(practisable, vaultId);
+      const groups = studyIdsByVault(practisable, (word) => vaultOf(word) ?? vaultId);
+      const ids = (await Promise.all(groups.map(([vault, words]) => studyVocabularyCards(words, vault)))).flat();
       if (ids.length) go("review", { kind: "vocabulary" }, ids);
       else toast.info(t("study.vocabulary.noCards"));
     } catch (error) {
@@ -269,9 +278,9 @@ export function DailyStudy({
         </Panel>
       </div>
 
-      {words.length || threads.length || lastRead ? (
+      {savedWords.length || threads.length || lastRead ? (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {words.length ? (
+          {savedWords.length ? (
             <Panel label={t("study.today.yourWords")}>
               <div className="flex items-center justify-between gap-2">
                 <h3 className="font-semibold">{t("study.today.yourWords")}</h3>
@@ -279,15 +288,16 @@ export function DailyStudy({
                   to={studyCollectionHref("words", { vault: vaultId })}
                   className="text-sm text-muted-foreground underline-offset-4 hover:underline"
                 >
-                  {t("study.today.seeAllWords", { count: words.length })}
+                  {t("study.today.seeAllWords", { count: savedWords.length })}
                 </Link>
               </div>
               <ul className="divide-y">
-                {words.slice(0, 4).map((word) => (
+                {savedWords.slice(0, 4).map((word) => (
                   <li key={word.id} className="flex min-w-0 items-center gap-3 py-2">
                     <span className="min-w-0 flex-1 truncate font-medium" dir={textDirection(word.term)}>
                       {word.term}
                     </span>
+                    <StudyVaultLabel row={word} />
                     {word.translation ? (
                       <span
                         className="max-w-[50%] truncate text-sm text-muted-foreground"
@@ -407,6 +417,7 @@ export function DailyStudy({
                           <span dir="auto" className="min-w-0 flex-1 wrap-break-word">
                             {prompt}
                           </span>
+                          <StudyVaultLabel row={item} />
                           <span className="text-muted-foreground">{t(`study.recall.rating.${rating}`)}</span>
                           {origin ? <StudyOriginLink origin={origin} /> : null}
                           {attempt && feedbackLabel ? (

@@ -55,6 +55,7 @@ import { StudyListenButton } from "./study-listen";
 import { StudyOriginLink } from "./study-origin-link";
 import { StudyText } from "./study-text";
 import { useStudyClock } from "./use-study-clock";
+import { StudyAcrossVaultsSwitch, StudyVaultLabel } from "./study-vault-scope";
 
 type Card = StudyRecordOf<"card">;
 type Highlight = StudyRecordOf<"highlight">;
@@ -385,6 +386,7 @@ export function StudyReview({
             {collectionSource.label}
           </Link>
         ) : null}
+        <StudyAcrossVaultsSwitch compact className="text-sm text-muted-foreground" />
       </div>
       {item && kind ? (
         <div className="flex min-h-[24rem] flex-col gap-5 rounded-3xl border bg-card p-5 shadow-xs sm:p-7">
@@ -396,6 +398,7 @@ export function StudyReview({
               />
               {t(`study.collection.kinds.${kind}`)}
             </span>
+            <StudyVaultLabel row={item} className="me-auto" />
             {source ? (
               <span className="min-w-0 truncate text-muted-foreground" dir="auto">
                 {source}
