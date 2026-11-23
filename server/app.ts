@@ -8,6 +8,7 @@ import { POST as cliproxyapi } from "./routes/cliproxyapi";
 import { POST as models } from "./routes/models";
 import { POST as opencode } from "./routes/opencode";
 import { POST as sourcesParse } from "./routes/sources-parse";
+import { POST as sourcesTranscribe } from "./routes/sources-transcribe";
 import { POST as study } from "./routes/study";
 import { recognize as studyOcr, status as studyOcrStatus } from "./routes/study-ocr";
 import { status as studyVoiceStatus, transcribe as studyVoice } from "./routes/study-voice";
@@ -43,6 +44,7 @@ export function createApi({
   api.post("/models", (c) => models(c.req.raw));
   api.post("/opencode/detect", () => opencode());
   api.post("/sources/parse", (c) => sourcesParse(c.req.raw));
+  api.post("/sources/transcribe", (c) => sourcesTranscribe(c.req.raw));
   api.post("/study", (c) => study(c.req.raw));
   api.get("/study/ocr", (c) => studyOcrStatus(c.req.raw));
   api.post("/study/ocr", (c) => studyOcr(c.req.raw));
