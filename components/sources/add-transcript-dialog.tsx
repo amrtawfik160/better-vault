@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Button } from "@/components/panelui/button";
@@ -26,9 +26,12 @@ export interface SavedTranscript {
 export function AddTranscriptDialog({
   onClose,
   onSave,
+  fields,
 }: {
   onClose: () => void;
   onSave: (transcript: SavedTranscript) => Promise<void>;
+  /** More fields under the transcript's, e.g. the notebook it goes to; given whether it is saving. */
+  fields?: (saving: boolean) => ReactNode;
 }) {
   const { t } = useTranslation("sources");
   const { t: tCommon } = useTranslation();
@@ -70,6 +73,7 @@ export function AddTranscriptDialog({
               disabled={saving}
               onBusyChange={setBusy}
             />
+            {fields ? <div className="mt-4">{fields(saving)}</div> : null}
           </form>
         </Dialog.Body>
         <Dialog.Footer>

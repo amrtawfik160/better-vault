@@ -4,6 +4,7 @@ import {
   ArrowLeft01Icon,
   ArrowRight01Icon,
   Book02Icon,
+  Books01Icon,
   FileImportIcon,
   FileUploadIcon,
   FolderAddIcon,
@@ -35,7 +36,7 @@ import { SettingsSheet } from "@/components/settings/settings-sheet";
 import { StudyReturnLinks } from "@/components/study/study-return-links";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { openCommandPalette } from "@/lib/command";
-import type { Folder } from "@/lib/db/database";
+import type { Folder, Notebook } from "@/lib/db/database";
 import { ancestors, createFolder, moveFolder, useFolders } from "@/lib/db/folders";
 import {
   createNotebook,
@@ -56,7 +57,9 @@ import { shortcutKeys } from "@/lib/platform";
 import { routes } from "@/lib/routes";
 import { ACCEPTED_FILES, IngestError, ingestFile } from "@/lib/sources/ingest";
 import { sourceHasText } from "@/lib/db/source-text";
-import { isFocusedStudyReader } from "@/lib/study/links";
+import { useStudyBooks } from "@/lib/db/study";
+import { libraryNotebookIds } from "@/lib/study/library";
+import { isFocusedStudyReader, studyLocation, studySectionOf } from "@/lib/study/links";
 import { cn } from "@/lib/utils";
 import { FolderDialog } from "./folder-dialogs";
 import {
@@ -83,6 +86,7 @@ const StudyWorkspace = lazy(() => import("@/components/study/study-workspace"));
 
 const sortKey = "better-vault:home-sort";
 const viewKey = "better-vault:home-view";
+const groupKey = "better-vault:home-group-library";
 
 type Sort = "recent" | "name";
 
@@ -111,6 +115,11 @@ export function NotebookHome() {
   const allNotebooks = useNotebooks();
   const everyFolder = useFolders();
   const counts = useNotebookCounts();
+  const studyBooks = useStudyBooks();
+  const libraryIds = useMemo(
+    () => libraryNotebookIds(studyBooks ?? [], counts ?? new Map()),
+    [studyBooks, counts],
+  );
   const vaults = useVaults();
   const selectedVault = useCurrentVault(vaults);
   const studyVault = params.get("view") === "study" ? params.get("vault") : null;
@@ -130,6 +139,8 @@ export function NotebookHome() {
 
   const [sort, setSort] = useState<Sort>(() => saved(sortKey, ["recent", "name"], "recent"));
   const [view, setView] = useState<HomeView>(() => saved(viewKey, ["grid", "list"], "grid"));
+  // Notebooks made for one document added in Study can sit apart, under "From your library".
+  const [grouping, setGrouping] = useState(() => saved(groupKey, ["on", "off"], "on") === "on");
   const [creating, setCreating] = useState<{ files: File[] } | null>(null);
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [fileDrag, setFileDrag] = useState(false);
@@ -147,6 +158,9 @@ export function NotebookHome() {
       ? viewParam
       : "all";
   const studying = section === "study";
+  const studyTab = studying ? studyLocation(params).tab : undefined;
+  // Collection is Review's Browse mode, so the sidebar and the title say Review.
+  const studySection = studyTab && studySectionOf(studyTab);
   const focusedReader = isFocusedStudyReader(params);
   // The calendar, bot, notes and skills supply their own desktop toolbar.
   const fullPage =
@@ -171,8 +185,8 @@ export function NotebookHome() {
           ? t("calendar.title")
           : section === "bot"
             ? t("bot.title")
-            : studying
-              ? t("vaults.study")
+            : studySection
+              ? t(`study.tabs.${studySection}`)
               : section === "recents"
                 ? t("vaults.recent")
                 : (currentFolder?.name ?? (vault ? vaultName(vault) : ""));
@@ -244,7 +258,14 @@ export function NotebookHome() {
     });
   const showSection = (next: HomeSection, selectedVault?: string) =>
     setParams(
-      next === "all" ? {} : { view: next, ...(selectedVault ? { vault: selectedVault } : {}) },
+      next === "all"
+        ? {}
+        : {
+            view: next,
+            // Another vault keeps the part of Study that is open.
+            ...(next === "study" && studyTab ? { tab: studyTab } : {}),
+            ...(selectedVault ? { vault: selectedVault } : {}),
+          },
     );
 
   const order = <T extends { updatedAt: number }>(items: T[], name: (item: T) => string) =>
@@ -268,6 +289,24 @@ export function NotebookHome() {
     : undefined;
   const empty =
     shownNotebooks !== undefined && shownNotebooks.length === 0 && shownFolders.length === 0;
+  const grouped = grouping && listing;
+  const subjectNotebooks = grouped
+    ? shownNotebooks?.filter((notebook) => !libraryIds.has(notebook.id))
+    : shownNotebooks;
+  const bookNotebooks = grouped
+    ? (shownNotebooks ?? []).filter((notebook) => libraryIds.has(notebook.id))
+    : [];
+  const notebookItem = (notebook: Notebook, as: HomeView) => (
+    <NotebookItem
+      key={notebook.id}
+      notebook={notebook}
+      folders={folders}
+      vaults={vaults ?? []}
+      sources={counts?.get(notebook.id)?.sources ?? 0}
+      view={as}
+      book={libraryIds.has(notebook.id)}
+    />
+  );
   const pinned = (notebooks ?? []).filter((notebook) => notebook.pinned);
 
   /** What a folder holds, for its tile. */
@@ -331,6 +370,7 @@ export function NotebookHome() {
           vault={vault}
           pinned={pinned}
           section={section}
+          studySection={studySection}
           onSection={showSection}
           onDropCards={(event) => void dropCards(event, null)}
         />
@@ -410,6 +450,16 @@ export function NotebookHome() {
                     <Menu.RadioItem value="name">{t("sort.name")}</Menu.RadioItem>
                   </Menu.RadioGroup>
                 </Menu.Group>
+                <Menu.Separator />
+                <Menu.CheckboxItem
+                  checked={grouping}
+                  onCheckedChange={(next: boolean) => {
+                    setGrouping(next);
+                    remember(groupKey, next ? "on" : "off");
+                  }}
+                >
+                  {t("library.group")}
+                </Menu.CheckboxItem>
               </Menu.Content>
             </Menu>
           </Pill>
@@ -564,16 +614,7 @@ export function NotebookHome() {
                           onDropCards={(event) => void dropCards(event, folder.id)}
                         />
                       ))}
-                      {shownNotebooks?.map((notebook) => (
-                        <NotebookItem
-                          key={notebook.id}
-                          notebook={notebook}
-                          folders={folders}
-                          vaults={vaults ?? []}
-                          sources={counts?.get(notebook.id)?.sources ?? 0}
-                          view="grid"
-                        />
-                      ))}
+                      {subjectNotebooks?.map((notebook) => notebookItem(notebook, "grid"))}
                     </div>
                   ) : (
                     <div className="flex flex-col gap-0.5">
@@ -594,18 +635,35 @@ export function NotebookHome() {
                           onDropCards={(event) => void dropCards(event, folder.id)}
                         />
                       ))}
-                      {shownNotebooks?.map((notebook) => (
-                        <NotebookItem
-                          key={notebook.id}
-                          notebook={notebook}
-                          folders={folders}
-                          vaults={vaults ?? []}
-                          sources={counts?.get(notebook.id)?.sources ?? 0}
-                          view="list"
-                        />
-                      ))}
+                      {subjectNotebooks?.map((notebook) => notebookItem(notebook, "list"))}
                     </div>
                   )}
+                  {!empty && bookNotebooks.length ? (
+                    <details className="group/library mt-6 border-t pt-3">
+                      <summary className="flex w-fit cursor-pointer list-none items-center gap-2 rounded-lg px-1.5 py-1 text-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                        <span className="flex rtl:rotate-180">
+                          <Icon
+                            icon={ArrowRight01Icon}
+                            size={14}
+                            className="transition-transform group-open/library:rotate-90 motion-reduce:transition-none rtl:group-open/library:-rotate-90"
+                          />
+                        </span>
+                        <Icon icon={Books01Icon} size={16} />
+                        {t("library.title")}
+                        <span className="text-xs font-normal tabular-nums">{bookNotebooks.length}</span>
+                      </summary>
+                      <p className="mt-1 mb-3 px-1.5 text-xs text-muted-foreground">{t("library.description")}</p>
+                      {view === "grid" ? (
+                        <div className="grid grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-x-2 gap-y-1">
+                          {bookNotebooks.map((notebook) => notebookItem(notebook, "grid"))}
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-0.5">
+                          {bookNotebooks.map((notebook) => notebookItem(notebook, "list"))}
+                        </div>
+                      )}
+                    </details>
+                  ) : null}
                 </main>
               </ScrollArea>
             </ContextMenuTrigger>

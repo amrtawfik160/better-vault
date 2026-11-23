@@ -15,6 +15,7 @@ import { StudyReturnLinks } from "@/components/study/study-return-links";
 import { useNotebook } from "@/lib/db/notebooks";
 import { studyReturnState } from "@/lib/study/return-links";
 import { ChatView } from "./chat-view";
+import { NotebookStudyStrip } from "./notebook-study-strip";
 import { SourcesView } from "./sources-view";
 import { StudioView } from "./studio-view";
 import { TopBar } from "./top-bar";
@@ -99,6 +100,7 @@ function WorkspaceLayout() {
     >
       <TopBar />
       <StudyReturnLinks className="shrink-0 px-3 sm:px-5" />
+      <NotebookStudyStrip className="shrink-0 px-3 pb-2 sm:px-5" />
       <div className="relative min-h-0 flex-1">
         {/* The prompt belongs to the chat; kept mounted so a draft survives a tab switch. */}
         <Tabs.Content value="chat" keepMounted className="relative h-full">

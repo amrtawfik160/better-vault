@@ -6,7 +6,7 @@ import {
   PlusSignIcon,
   TeachingIcon,
 } from "@hugeicons/core-free-icons";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -38,6 +38,7 @@ import {
   emptyTutorSelection,
   tutorSelectionCount,
   type TutorMaterial,
+  type TutorMaterialSelection,
 } from "./tutor-material-picker";
 import { StudyAcrossVaultsSwitch } from "./study-vault-scope";
 
@@ -59,8 +60,16 @@ type Materials = {
   vaultHighlights: TutorMaterial[];
 };
 
-/** What a new session is about: a practice exercise, or a conversation about some material. */
-type Setup = { kind: "practice"; goal: PracticeGoal } | { kind: "conversation" };
+/**
+ * What a new session is about: a practice exercise, or a conversation about some material.
+ * `chosen` is material picked in advance, e.g. a notebook's documents.
+ */
+type Setup =
+  | { kind: "practice"; goal: PracticeGoal; chosen?: Pick<TutorMaterialSelection, "bookIds" | "sourceIds"> }
+  | { kind: "conversation" };
+
+/** Material chosen in advance: a notebook's documents and sources, for "Practise this subject". */
+export type PracticePreset = { key: string; bookIds: string[]; sourceIds: string[] };
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -97,7 +106,13 @@ function SessionSetup({
     practising && setup.goal === "teach-back" ? "materials" : practising ? "general" : "book",
   );
   const [bookId, setBookId] = useState("");
-  const [materialSelection, setSelection] = useState(emptyTutorSelection);
+  const chosen = setup.kind === "practice" ? setup.chosen : undefined;
+  const [materialSelection, setSelection] = useState(() => ({ ...emptyTutorSelection, ...chosen }));
+  const formRef = useRef<HTMLFormElement>(null);
+  const revealed = Boolean(chosen);
+  useEffect(() => {
+    if (revealed) formRef.current?.scrollIntoView({ block: "center" });
+  }, [revealed]);
   const [starting, setStarting] = useState(false);
   const goal: StudyThread["goal"] = practising ? setup.goal : scope === "general" ? "general" : "book";
   const cardPractice = scope === "cards";
@@ -174,6 +189,7 @@ function SessionSetup({
 
   return (
     <form
+      ref={formRef}
       aria-label={heading}
       className="grid gap-4 rounded-2xl border bg-background p-4 dark:bg-muted/30"
       onSubmit={(event) => {
@@ -389,6 +405,7 @@ export function StudyPracticeTab({
   practice,
   openingPractice,
   setupModel,
+  preset,
 }: Materials & {
   threads: StudyThread[];
   vaultId: string;
@@ -398,9 +415,20 @@ export function StudyPracticeTab({
   open: (thread: StudyThread) => void;
   practice: (cardIds: string[]) => void;
   openingPractice: boolean;
+  /** Opens Teach back on this material, once per preset. */
+  preset?: PracticePreset;
 }) {
   const { t } = useTranslation("home");
   const [setup, setSetup] = useState<Setup>();
+  const [presetKey, setPresetKey] = useState<string>();
+  if (preset && preset.key !== presetKey) {
+    setPresetKey(preset.key);
+    setSetup({
+      kind: "practice",
+      goal: "teach-back",
+      chosen: { bookIds: preset.bookIds, sourceIds: preset.sourceIds },
+    });
+  }
   const [writing, setWriting] = useState(false);
   const [query, setQuery] = useState("");
   const [deleting, setDeleting] = useState<StudyThread | null>(null);
@@ -412,7 +440,7 @@ export function StudyPracticeTab({
   const setupForm = (kind: Setup["kind"]) =>
     setup?.kind === kind ? (
       <SessionSetup
-        key={setup.kind === "practice" ? setup.goal : "conversation"}
+        key={setup.kind === "practice" ? `${setup.goal}:${presetKey ?? ""}:${Boolean(setup.chosen)}` : "conversation"}
         setup={setup}
         materials={materials}
         vaultId={vaultId}

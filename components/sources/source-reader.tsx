@@ -48,7 +48,8 @@ export function SourceReader({ notebookId, reading, onClose }: SourceReaderProps
   );
 }
 
-function readingLink(book: StudyBook, excerpt: string | undefined) {
+/** The Study reader on a document, at the passage an excerpt quotes when it is found. */
+export function readingLink(book: StudyBook, excerpt: string | undefined) {
   const anchor = excerpt ? findStudyDocumentExcerpt(book, excerpt) : undefined;
   return studyHref("library", {
     book: book.id,

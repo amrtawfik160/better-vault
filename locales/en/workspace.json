@@ -27,5 +27,13 @@
     "body": "It may have been deleted, or it was created in another browser.",
     "action": "Back to notebooks"
   },
-  "create": "Create"
+  "create": "Create",
+  "study": {
+    "label": "Study this notebook",
+    "due_one": "{{count}} due",
+    "due_other": "{{count}} due",
+    "nothingDue": "Nothing due",
+    "review": "Review this notebook",
+    "practise": "Practise this subject"
+  }
 }

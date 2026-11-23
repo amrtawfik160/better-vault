@@ -126,7 +126,8 @@
     "emptyFolder": "Nothing here yet",
     "itemCount_one": "{{count}} item",
     "itemCount_other": "{{count}} items",
-    "study": "Study"
+    "study": "Study",
+    "sections": "Go to"
   },
   "toolbar": {
     "back": "Back",
@@ -730,7 +731,12 @@
       "crop": "Crop image",
       "reset": "Reset crop",
       "cropHelp": "Drag on the image or set the crop edges as percentages.",
-      "edges": { "left": "Left", "top": "Top", "right": "Right", "bottom": "Bottom" },
+      "edges": {
+        "left": "Left",
+        "top": "Top",
+        "right": "Right",
+        "bottom": "Bottom"
+      },
       "imageSide": "Show the image on",
       "question": "Question",
       "answer": "Answer",
@@ -915,7 +921,7 @@
       "rename": "Rename document",
       "delete": "Delete document",
       "deleteTitle": "Delete document?",
-      "removeBody": "This removes its reading position, bookmarks, and highlights. The source stays in its notebook, and flashcards, words, and conversations made from it are kept.",
+      "removeBody": "This removes its reading position, bookmarks, and highlights. The document stays in “{{notebook}}” as a source, and flashcards, words, and conversations made from it are kept.",
       "deleteBody": "This deletes the document with its file, reading position, bookmarks, and highlights. Flashcards, words, and conversations made from it are kept. Its notebook is deleted too, unless it still holds other sources, chats, outputs, notes, or study items.",
       "shelfTitle": "Your books",
       "addBook": "Add a book",
@@ -924,7 +930,24 @@
       "unsupported": "{{name}} is not a PDF, EPUB, Markdown or text file.",
       "shelfMeta": "{{percent}} · {{highlights}}",
       "notStarted": "Not started",
-      "notStartedWithHighlights": "Not started · {{highlights}}"
+      "notStartedWithHighlights": "Not started · {{highlights}}",
+      "notebook": {
+        "label": "Which notebook?",
+        "new": "New notebook",
+        "newHint": "A new notebook named after the document.",
+        "newHintSeveral": "Each document gets a new notebook named after it.",
+        "existingHint": "Added to “{{notebook}}” as one more source."
+      },
+      "importTitle_one": "Add a document",
+      "importTitle_other": "Add {{count}} documents",
+      "importDescription": "Documents live in a notebook, beside its other sources, chats and Studio outputs.",
+      "importFiles": "Files to add",
+      "importConfirm_one": "Add document",
+      "importConfirm_other": "Add documents",
+      "unknownNotebook": "Notebook not found",
+      "openNotebook": "Open notebook",
+      "openNotebookNamed": "Open notebook {{notebook}}",
+      "removeBodyUnnamed": "This removes its reading position, bookmarks, and highlights. The document stays in its notebook as a source, and flashcards, words, and conversations made from it are kept."
     },
     "review": {
       "title": "Daily review",
@@ -951,7 +974,9 @@
       "selection_one": "{{count}} chosen item",
       "selection_other": "{{count}} chosen items",
       "acrossVaults": "Review all vaults",
-      "acrossVaultsHint": "Due items and saved words come from every vault. Reading, Library and Practice stay in this vault."
+      "acrossVaultsHint": "Due items and saved words come from every vault. Reading, Library and Practice stay in this vault.",
+      "modes": "Review or browse",
+      "browse": "Browse"
     },
     "collection": {
       "title": "Everything you kept",
@@ -1343,5 +1368,11 @@
   },
   "bot": {
     "title": "Bot"
+  },
+  "bookBadge": "Book",
+  "library": {
+    "group": "Group notebooks from your library",
+    "title": "From your library",
+    "description": "Notebooks made to hold one document added in Study."
   }
 }
