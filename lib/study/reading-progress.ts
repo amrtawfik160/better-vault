@@ -15,15 +15,25 @@ export function studyReadingProgress(book: StudyBook) {
         ? offset / current.text.length
         : (place?.progress ?? 0);
 
-  if (book.format === "pdf") return (book.section + withinSection) / book.sections.length;
+  return studyBookProgress(book, book.section, withinSection);
+}
+
+/** How far through the book a place is, from 0 to 1: pages count equally, other sections by length. */
+export function studyBookProgress(
+  book: Pick<StudyBook, "format" | "sections">,
+  section: number,
+  withinSection: number,
+) {
+  const within = Math.min(1, Math.max(0, withinSection));
+  if (book.format === "pdf") return (section + within) / book.sections.length;
 
   let total = 0;
   let reached = 0;
-  for (const [index, section] of book.sections.entries()) {
-    const size = Math.max(1, section.text.length);
+  for (const [index, entry] of book.sections.entries()) {
+    const size = Math.max(1, entry.text.length);
     total += size;
-    if (index < book.section) reached += size;
-    if (index === book.section) reached += size * withinSection;
+    if (index < section) reached += size;
+    if (index === section) reached += size * within;
   }
   return reached / total;
 }

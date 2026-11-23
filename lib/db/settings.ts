@@ -43,7 +43,10 @@ export interface AppSettings {
   model: ModelRef | null;
   /** Models starred in the model picker, as `provider:modelId`. */
   favoriteModels: string[];
-  study?: Pick<StudyThread, "corrections" | "keepVoiceTranscripts">;
+  study?: Pick<StudyThread, "corrections" | "keepVoiceTranscripts"> & {
+    /** The language the Study reader translates selections into, as a BCP 47 code. */
+    translateTo?: string;
+  };
 }
 
 const SETTINGS_KEY = "app";
