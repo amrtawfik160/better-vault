@@ -156,6 +156,7 @@ export function NotebookItem({
   vaults,
   sources,
   view,
+  book = false,
 }: {
   notebook: Notebook;
   folders: Folder[];
@@ -163,6 +164,8 @@ export function NotebookItem({
   vaults: Vault[];
   sources: number;
   view: HomeView;
+  /** It was made to hold one document added in Study. */
+  book?: boolean;
 }) {
   const { t, i18n } = useTranslation("home");
   const { t: tCommon } = useTranslation();
@@ -185,6 +188,11 @@ export function NotebookItem({
       className="absolute inset-0 rounded-[inherit] outline-none focus-visible:ring-2 focus-visible:ring-ring"
     />
   );
+  const badge = book ? (
+    <span className="me-1.5 inline-flex shrink-0 items-center rounded-full bg-muted px-1.5 align-[1px] text-[0.6875rem] leading-4 font-medium text-muted-foreground ring-1 ring-border">
+      {t("bookBadge")}
+    </span>
+  ) : null;
   const pin = notebook.pinned ? (
     <Icon
       icon={PinIcon}
@@ -205,7 +213,10 @@ export function NotebookItem({
               {notebook.title}
             </span>
           </span>
-          <span className="pointer-events-none truncate text-muted-foreground">{meta}</span>
+          <span className="pointer-events-none truncate text-muted-foreground">
+            {badge}
+            {meta}
+          </span>
           <span className="pointer-events-none truncate text-muted-foreground">
             {formatRelativeTime(notebook.updatedAt, i18n.language)}
           </span>
@@ -230,6 +241,7 @@ export function NotebookItem({
             className="block truncate text-xs text-muted-foreground"
             title={t("updated", { time: formatRelativeTime(notebook.updatedAt, i18n.language) })}
           >
+            {badge}
             {meta}
           </span>
         </span>

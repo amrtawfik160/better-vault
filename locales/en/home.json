@@ -1366,5 +1366,11 @@
   },
   "bot": {
     "title": "Bot"
+  },
+  "bookBadge": "Book",
+  "library": {
+    "group": "Group notebooks from your library",
+    "title": "From your library",
+    "description": "Notebooks made to hold one document added in Study."
   }
 }
