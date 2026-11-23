@@ -1,19 +1,18 @@
 import { Loading03Icon, PauseIcon, PlayIcon } from "@hugeicons/core-free-icons";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { AIModelPicker } from "@/components/ai/ai-model-picker";
 import { Field } from "@/components/common/field";
 import { Icon } from "@/components/icon";
 import { Alert } from "@/components/panelui/alert";
 import { Button } from "@/components/panelui/button";
 import { Select } from "@/components/panelui/select";
 import { useWorkspace } from "@/components/workspace/workspace-context";
-import { modelKey, parseModelKey, providers } from "@/lib/ai/catalog";
 import type { Voice } from "@/lib/ai/voices";
 import {
-  activeModel,
   availableModels,
+  modelFor,
   speechCredentialsFrom,
-  modelDisplayLabel,
   resolveModel,
   useSettings,
 } from "@/lib/db/settings";
@@ -316,41 +315,23 @@ function WriterField({
   const id = useId();
   const settings = useSettings();
   const models = settings ? availableModels(settings) : [];
-  const fallback = settings ? activeModel(settings) : null;
+  const fallback = settings ? (modelFor(settings, "studio")?.model ?? null) : null;
   const chosen = value && settings ? resolveModel(settings, value) : fallback;
-  const items = models.map((model) => ({
-    value: modelKey(model),
-    label:
-      model.provider === "cliproxyapi"
-        ? modelDisplayLabel(settings, model)
-        : `${providers[model.provider].name} · ${model.modelId}`,
-  }));
   return (
     <Field label={t("audio-overview.writer")} htmlFor={id} hint={t("audio-overview.writerHint")}>
-      {items.length === 0 ? (
+      {models.length === 0 ? (
         <p className="rounded-lg border border-dashed px-3 py-2 text-sm text-muted-foreground">
           {t("audio-overview.noWriter")}
         </p>
       ) : (
-        <Select
-          items={items}
-          value={chosen ? modelKey(chosen) : null}
-          onValueChange={(next) => {
-            const model = typeof next === "string" ? parseModelKey(next) : null;
-            if (model) onChange(model);
-          }}
-        >
-          <Select.Trigger id={id} className="w-full">
-            <Select.Value />
-          </Select.Trigger>
-          <Select.Content className="max-h-72">
-            {items.map((item) => (
-              <Select.Item key={item.value} value={item.value}>
-                {item.label}
-              </Select.Item>
-            ))}
-          </Select.Content>
-        </Select>
+        <AIModelPicker
+          id={id}
+          value={chosen}
+          onValueChange={onChange}
+          appearance="outline"
+          side="bottom"
+          className="w-full max-w-none"
+        />
       )}
     </Field>
   );

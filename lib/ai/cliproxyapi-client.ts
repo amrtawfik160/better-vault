@@ -116,13 +116,14 @@ export function refreshSubscriptionConnections() {
   patch({ refreshing: true });
   refreshInFlight = (async () => {
     try {
-      const { accounts, models, modelLabels } = await request(
+      const { accounts, models, modelLabels, modelBrands } = await request(
         { action: "snapshot" },
         cliProxySnapshotSchema,
       );
       await updateProvider("cliproxyapi", {
         models,
         modelLabels,
+        modelBrands,
         enabled: models.length > 0,
         apiKey: "",
       });

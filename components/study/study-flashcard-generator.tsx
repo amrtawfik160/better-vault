@@ -12,6 +12,7 @@ import { textDirection } from "@/lib/text/direction";
 import { newStudyCard, readFlashcardDraftPassages, saveStudyDraftCards, studyId } from "@/lib/db/study";
 import { flashcardCitationsFor, flashcardMaterialLimit, maxDraftImages } from "@/lib/study/ai";
 import { askStudyModel } from "@/lib/study/client";
+import { AIModelPicker } from "@/components/ai/ai-model-picker";
 import {
   clearFlashcardDraft,
   flashcardDraftKey,
@@ -167,6 +168,7 @@ export function StudyFlashcardGenerator({
       request.signal.throwIfAborted();
       const draftImages = passages.flatMap(({ image }, index) => image ? [{ passage: index + 1, image }] : []);
       const answer = await askStudyModel({
+        use: "cards",
         action: "cards",
         input: input.trim(),
         passages,
@@ -363,6 +365,7 @@ export function StudyFlashcardGenerator({
               className="w-20"
             />
           </label>
+          <AIModelPicker use="cards" appearance="outline" side="bottom" />
           <Button type="submit" size="sm" disabled={!input.trim() || working || saving}>
             {working ? "Generating…" : drafts.length ? "Generate again" : "Generate cards"}
           </Button>

@@ -2,7 +2,7 @@ import { APICallError, generateText, Output, type FilePart, type TextPart } from
 import { z } from "zod";
 import { rejectCliProxyRequest } from "@/lib/ai/cliproxyapi";
 import { describeError, imageInputErrorStatuses, rejectsImageInput } from "@/lib/ai/errors";
-import { credentialsSchema, modelRefSchema } from "@/lib/ai/request";
+import { credentialsSchema, effortSchema, modelRefSchema } from "@/lib/ai/request";
 import { createLanguageModel } from "@/lib/ai/providers";
 import { studyCorrections, studyGoal, studyReportReplySchema } from "@/lib/study/records";
 import {
@@ -19,6 +19,7 @@ const bodySchema = z.object({
   action: studyAction,
   model: modelRefSchema,
   credentials: credentialsSchema,
+  effort: effortSchema,
   input: z.string().trim().min(1).max(20_000),
   passages: z.array(studyPassageSchema).max(8).default([]),
   history: z
@@ -100,11 +101,12 @@ export async function POST(request: Request) {
     practiceLanguage,
     cardCount,
     spoken,
+    effort,
   } = decoded.data;
   const denied = rejectCliProxyRequest(request, model.provider);
   if (denied) return denied;
   try {
-    const languageModel = await createLanguageModel(model, credentials);
+    const languageModel = await createLanguageModel(model, credentials, effort);
     const simulation =
       goal === "technical-interview" || goal === "meeting-simulation"
         ? simulations[goal]

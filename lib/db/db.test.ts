@@ -80,9 +80,12 @@ import {
 import {
   activeModel,
   availableModels,
+  chooseEffort,
+  chooseModel,
   defaultSettings,
   getSettings,
   isProviderReady,
+  modelFor,
   updateProvider,
 } from "./settings";
 import { createNote, renameNote, saveNoteBody } from "./notes";
@@ -2725,6 +2728,26 @@ describe.each(backends)("%s store", (name, create) => {
       });
       settings.model = { provider: "cliproxyapi", modelId: "dpl-00000000000000000000/gone" };
       expect(activeModel(settings)).toBeNull();
+    });
+
+    it("remembers a model and effort for each feature", async () => {
+      await updateProvider("anthropic", { enabled: true, apiKey: "k", models: ["x", "y"] });
+      await updateProvider("openai", { enabled: true, apiKey: "k", models: ["o"] });
+      await chooseModel("chat", { provider: "anthropic", modelId: "y" });
+      await chooseModel("translate", { provider: "openai", modelId: "o" });
+      await chooseEffort("translate", { provider: "openai", modelId: "o" }, "high");
+      const settings = await getSettings();
+      // Chat's choice is the default for features that have none.
+      expect(modelFor(settings, "studio")?.model).toEqual({ provider: "anthropic", modelId: "y" });
+      expect(modelFor(settings, "translate")).toEqual({
+        model: { provider: "openai", modelId: "o" },
+        effort: "high",
+      });
+      // A bot's own saved model comes before the default.
+      expect(modelFor(settings, "bot:b1", { provider: "anthropic", modelId: "x" })?.model).toEqual({
+        provider: "anthropic",
+        modelId: "x",
+      });
     });
   });
 });

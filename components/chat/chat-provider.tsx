@@ -15,13 +15,7 @@ import { stableContext } from "@/lib/context";
 import { providers } from "@/lib/ai/catalog";
 import type { ChatMessage, ChatMode } from "@/lib/chat/types";
 import { latestConversation, loadChat, loadNotebookChat, saveChat } from "@/lib/db/messages";
-import {
-  activeModel,
-  contextCharsFor,
-  credentialsFor,
-  effortFor,
-  getSettings,
-} from "@/lib/db/settings";
+import { contextCharsFor, credentialsFor, getSettings, modelFor } from "@/lib/db/settings";
 import { getChunks, listSources } from "@/lib/db/sources";
 import { selectedTextSource } from "@/lib/db/source-text";
 import { selectPassages } from "@/lib/grounding/passages";
@@ -229,8 +223,9 @@ function ChatRunner({
   const requestFor = useCallback(
     async (question: string) => {
       const settings = await getSettings();
-      const model = activeModel(settings);
-      if (!model) throw new Error("No model is set up.");
+      const choice = modelFor(settings, "chat");
+      if (!choice) throw new Error("No model is set up.");
+      const { model, effort } = choice;
       const sources = (await listSources(notebookId)).filter(selectedTextSource);
       const chunks = await getChunks(sources.map((source) => source.id));
       const passages = selectPassages({
@@ -244,7 +239,7 @@ function ChatRunner({
         mode: mode === "web" && providers[model.provider].webSearch ? "web" : "sources",
         model,
         credentials: credentialsFor(settings, model.provider),
-        effort: effortFor(settings, model.provider),
+        effort,
         passages,
         skills: allSkills
           .filter((skill) => skills.includes(skill.id))

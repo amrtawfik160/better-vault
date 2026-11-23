@@ -1,9 +1,10 @@
-import { activeModel, credentialsFor, getSettings } from "@/lib/db/settings";
+import { credentialsFor, getSettings, modelFor, type ModelUse } from "@/lib/db/settings";
 import { studyAnswerSchema, studyMessageText, type StudyAction, type StudyCardImages, type StudyDraftImages } from "./ai";
 import type { StudyThread } from "./records";
 import type { StudyPassage } from "./passages";
 
 export async function askStudyModel({
+  use,
   action,
   input,
   passages = [],
@@ -15,6 +16,8 @@ export async function askStudyModel({
   draftImages,
   spoken,
 }: {
+  /** The feature asking, whose remembered model answers. */
+  use: ModelUse;
   action: StudyAction;
   input: string;
   passages?: Pick<StudyPassage, "title" | "text" | "previousCitations">[];
@@ -27,8 +30,9 @@ export async function askStudyModel({
   spoken?: boolean;
 }) {
   const settings = await getSettings();
-  const model = activeModel(settings);
-  if (!model) throw new Error("Connect or choose an AI model in Settings to continue.");
+  const choice = modelFor(settings, use);
+  if (!choice) throw new Error("Connect or choose an AI model in Settings to continue.");
+  const { model, effort } = choice;
   const response = await fetch("/api/study", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -37,6 +41,7 @@ export async function askStudyModel({
       input,
       model,
       credentials: credentialsFor(settings, model.provider),
+      effort,
       passages: passages
         .slice(0, 8)
         .map(({ title, text, previousCitations }) => ({

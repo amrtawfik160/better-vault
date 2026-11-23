@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button, buttonVariants } from "@/components/panelui/button";
 import { Sheet } from "@/components/panelui/sheet";
-import { ProviderIcon } from "@/components/provider-icon";
+import { SubscriptionLogo } from "@/components/ai/subscription-logo";
 import {
   cancelSubscriptionLogin,
   disconnectSubscriptionAccount,
@@ -10,53 +10,8 @@ import {
   startSubscriptionLogin,
   useSubscriptionConnections,
 } from "@/lib/ai/cliproxyapi-client";
-import {
-  cliProxyBrands,
-  cliProxySignInProviders,
-  type CliProxySignInProvider,
-} from "@/lib/ai/cliproxyapi-oauth";
+import { cliProxyBrands, cliProxySignInProviders } from "@/lib/ai/cliproxyapi-oauth";
 import type { ProviderSettings } from "@/lib/db/settings";
-
-const brands: Record<CliProxySignInProvider, { logo?: string; darkLogo?: string }> = {
-  codex: {},
-  claude: { logo: "claude" },
-  antigravity: { logo: "antigravity" },
-  xai: { logo: "grok", darkLogo: "grok-dark" },
-  kimi: { logo: "kimi-light", darkLogo: "kimi-dark" },
-  "kimi-ai": {
-    logo: "kimi-light",
-    darkLogo: "kimi-dark",
-  },
-  devin: { logo: "devin", darkLogo: "devin-dark" },
-  meta: { logo: "meta" },
-};
-
-function SubscriptionLogo({ provider }: { provider: CliProxySignInProvider }) {
-  const { logo, darkLogo } = brands[provider];
-  if (!logo) return <ProviderIcon provider="openai" className="size-5" />;
-  return (
-    <>
-      <img
-        src={`/providers/subscriptions/${logo}.svg`}
-        alt=""
-        width={20}
-        height={20}
-        className={
-          darkLogo ? "size-5 shrink-0 object-contain dark:hidden" : "size-5 shrink-0 object-contain"
-        }
-      />
-      {darkLogo ? (
-        <img
-          src={`/providers/subscriptions/${darkLogo}.svg`}
-          alt=""
-          width={20}
-          height={20}
-          className="hidden size-5 shrink-0 object-contain dark:block"
-        />
-      ) : null}
-    </>
-  );
-}
 
 /** The AI subscriptions page in Settings. */
 export function CliProxyPanel({ saved }: { saved?: ProviderSettings }) {

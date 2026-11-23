@@ -32,6 +32,7 @@ import { Textarea } from "@/components/panelui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { saveStudyCard, saveStudyWord } from "@/lib/db/study";
 import { askStudyModel } from "@/lib/study/client";
+import { AIModelPicker } from "@/components/ai/ai-model-picker";
 import {
   studyHighlightColor,
   type StudyBook,
@@ -275,6 +276,7 @@ export function StudySelectionMenu({
     setBusy(true);
     try {
       const response = await askStudyModel({
+        use: action === "translate" ? "translate" : "ask",
         action,
         input: language
           ? `Language: ${translationLanguageLabel(language)}\nText: ${selection.text}`
@@ -573,6 +575,14 @@ export function StudySelectionMenu({
                     <Button size="sm" variant="ghost" onClick={() => setChoosingLanguage(true)}>
                       {t("study.reader.changeLanguage")}
                     </Button>
+                    <AIModelPicker
+                      use="translate"
+                      className="ms-auto"
+                      onModelChange={() => {
+                        setTranslation(undefined);
+                        void request("translate", translateTo).then((answer) => answer && setTranslation(answer));
+                      }}
+                    />
                   </div>
                 </>
               )}
@@ -672,6 +682,13 @@ export function StudySelectionMenu({
           <ViewHeader title={t("study.selection.explain")} back={backToActions} close={onClose} />
           <div ref={body}>
             <Body>
+              <AIModelPicker
+                use="ask"
+                onModelChange={() => {
+                  setExplanation(undefined);
+                  void request("explain").then((answer) => answer && setExplanation(answer));
+                }}
+              />
               <div aria-live="polite">
                 {busy ? (
                   <p role="status" className="text-sm text-muted-foreground">{t("study.capture.working")}</p>

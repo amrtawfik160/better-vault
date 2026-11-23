@@ -39,14 +39,9 @@ import { visualText } from "@/lib/chat/visual-text";
 import { notebookChatHref, originHref, studyCitationOrigin, studyHref, tutorCardsScope } from "@/lib/study/links";
 import { Button, buttonVariants } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
-import { modelKey, parseModelKey } from "@/lib/ai/catalog";
-import {
-  activeModel,
-  availableModels,
-  modelDisplayLabel,
-  updateSettings,
-  useSettings,
-} from "@/lib/db/settings";
+import { AIModelPicker } from "@/components/ai/ai-model-picker";
+import { modelFor, useSettings, type ModelUse } from "@/lib/db/settings";
+import { isPracticeThread } from "@/lib/study/practice";
 import type { Note } from "@/lib/db/types";
 import {
   saveStudyCard,
@@ -206,6 +201,7 @@ export function StudyTutor({
 }) {
   const { t, i18n } = useTranslation("home");
   const { t: common } = useTranslation();
+  const { t: tChat } = useTranslation("chat");
   const location = useLocation();
   const composer = useStudyTutorDraft(thread);
   const input = composer.draft.text;
@@ -288,8 +284,9 @@ export function StudyTutor({
   const voice = useRef<VoiceCapture | null>(null);
   const live = useRef<LiveVoice | null>(null);
   const settings = useSettings();
-  const model = settings ? activeModel(settings) : null;
-  const models = settings ? availableModels(settings) : [];
+  // Practice conversations and the reader's Ask AI each remember their own model.
+  const modelUse: ModelUse = isPracticeThread(thread) ? "practice" : "ask";
+  const model = settings ? (modelFor(settings, modelUse)?.model ?? null) : null;
   const reports = studyReports(thread);
   const followUp = thread.followUp;
   const simulation = !cardPractice && !followUp ? simulationGoal(thread.goal) : undefined;
@@ -472,6 +469,7 @@ export function StudyTutor({
       const images = studyPracticeImages(sources.cards?.find(({ id }) => id === practiceCardId));
       const answerImage = revealedCardId === practiceCardId ? images.answer : undefined;
       const answer = await askStudyModel({
+        use: modelUse,
         action: "chat",
         input: text,
         passages,
@@ -669,6 +667,7 @@ export function StudyTutor({
         .join(" ");
       const reportThread = { ...context, messages: history };
       const result = await askStudyModel({
+        use: modelUse,
         action: "report",
         input: "Write a report on the study conversation.",
         passages: passagesFor(reportThread, sources, topic, "report"),
@@ -746,6 +745,7 @@ export function StudyTutor({
       signal.throwIfAborted();
       const { practiceCardId } = target.entry;
       const answer = await askStudyModel({
+        use: modelUse,
         action: "visual",
         input: studyMessageText(target.entry).slice(0, 20_000),
         passages: passagesFor(current, sources, target.entry.text),
@@ -974,29 +974,10 @@ export function StudyTutor({
         </div>
       ) : null}
       <div className="flex flex-wrap gap-3 rounded-xl border p-3 text-sm">
-        <label className="grid gap-1">
-          AI model
-          <select
-            aria-label="AI model"
-            className={optionClass}
-            disabled={workPending || !models.length}
-            value={model ? modelKey(model) : ""}
-            onChange={(event) => {
-              const chosen = parseModelKey(event.target.value);
-              if (chosen)
-                void updateSettings((saved) => {
-                  saved.model = chosen;
-                });
-            }}
-          >
-            {model ? null : <option value="">Choose a model</option>}
-            {models.map((option) => (
-              <option key={modelKey(option)} value={modelKey(option)}>
-                {modelDisplayLabel(settings, option)}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="grid gap-1">
+          <span aria-hidden>{tChat("model")}</span>
+          <AIModelPicker use={modelUse} appearance="outline" side="bottom" />
+        </div>
         <label className="grid gap-1">
           {t("study.materials.context")}
           <select

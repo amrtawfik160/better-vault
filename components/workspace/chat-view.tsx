@@ -14,7 +14,7 @@ import {
 } from "@/components/study/study-flashcard-generator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { providers } from "@/lib/ai/catalog";
-import { activeModel, useSettings } from "@/lib/db/settings";
+import { modelFor, useSettings } from "@/lib/db/settings";
 import { useSources } from "@/lib/db/sources";
 import { vaultOf } from "@/lib/db/vaults";
 import { studyHref } from "@/lib/study/links";
@@ -177,7 +177,7 @@ function EmptyChat({ missingAnswer }: { missingAnswer: boolean }) {
   const { notebook, setAddSourceOpen } = useWorkspace();
   const sources = useSources(notebook.id);
   const settings = useSettings();
-  const model = settings && activeModel(settings);
+  const model = settings && modelFor(settings, "chat")?.model;
   const webAvailable = model && providers[model.provider].webSearch;
   const selected = sources?.filter((source) => source.selected).length ?? 0;
 

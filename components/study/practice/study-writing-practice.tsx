@@ -1,4 +1,5 @@
 import { ArrowLeft01Icon, Delete02Icon, PencilEdit02Icon, QuillWrite01Icon, TeachingIcon } from "@hugeicons/core-free-icons";
+import { AIModelPicker } from "@/components/ai/ai-model-picker";
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
@@ -282,6 +283,10 @@ export function StudyWritingPractice({
 
   return (
     <section ref={top} aria-label={t("study.writingPractice.home.title")}>
+      {/* Questions, feedback and Teach it back remember their own model. */}
+      <div className="mb-3 flex justify-end">
+        <AIModelPicker use="writing" appearance="outline" side="bottom" align="end" />
+      </div>
       {content}
       <ConfirmDialog
         open={deleting !== null}

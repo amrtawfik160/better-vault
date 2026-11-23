@@ -482,11 +482,13 @@ export interface ModelPickerTriggerProps extends Omit<Popover.Trigger.Props, 'ch
   appearance?: 'ghost' | 'outline';
   /** What it says before a model is chosen. Default `Choose a model`. */
   placeholder?: ReactNode;
+  /** Shown after the model's name, such as its reasoning level. Added for better-vault's AIModelPicker. */
+  suffix?: ReactNode;
   className?: string;
 }
 
 /** The button that opens the list, showing the chosen model's icon and name. */
-function ModelPickerTrigger({ appearance, placeholder = 'Choose a model', className, ...props }: ModelPickerTriggerProps) {
+function ModelPickerTrigger({ appearance, placeholder = 'Choose a model', suffix, className, ...props }: ModelPickerTriggerProps) {
   const picker = usePicker('ModelPicker.Trigger');
   const slots = pickerVariants({ appearance });
   const chosen = picker.items.find((item) => item.value === picker.value);
@@ -503,7 +505,10 @@ function ModelPickerTrigger({ appearance, placeholder = 'Choose a model', classN
           {icon}
         </span>
       ) : null}
-      <span className={slots.triggerLabel()}>{chosen?.label ?? placeholder}</span>
+      <span className={slots.triggerLabel()}>
+        {chosen?.label ?? placeholder}
+        {chosen && suffix ? <span className="text-muted-foreground"> {suffix}</span> : null}
+      </span>
       <ChevronIcon className={slots.chevron()} />
     </Popover.Trigger>
   );
@@ -832,6 +837,11 @@ export interface ModelPickerContentProps extends Omit<Popover.Popup.Props, 'chil
   emptyText?: ReactNode;
   /** Where in the document it is put. Default `document.body`. */
   container?: Popover.Portal.Props['container'];
+  /**
+   * A column after the list, such as the chosen model's reasoning levels.
+   * Added for better-vault's AIModelPicker; the vendored picker has no such slot.
+   */
+  aside?: ReactNode;
   className?: string;
 }
 
@@ -843,6 +853,7 @@ function ModelPickerContent({
   placeholder = 'Search models…',
   emptyText = 'No models match',
   container,
+  aside,
   className,
   ...props
 }: ModelPickerContentProps) {
@@ -1038,6 +1049,7 @@ function ModelPickerContent({
             </div>
 
             {variant === 'detail' && shown ? <Pane item={shown} /> : null}
+            {aside}
             </RowContext.Provider>
           </Autocomplete.Root>
         </Popover.Popup>

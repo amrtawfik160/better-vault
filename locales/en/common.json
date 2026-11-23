@@ -39,6 +39,7 @@
   },
   "effort": {
     "label": "Effort",
+    "reasoning": "Reasoning",
     "hint": "How much the model thinks before it answers. More effort is slower and uses more tokens; models that don't think ignore it.",
     "levels": {
       "provider-default": "Default",

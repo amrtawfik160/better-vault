@@ -1,4 +1,4 @@
-import { activeModel, credentialsFor, getSettings } from "@/lib/db/settings";
+import { credentialsFor, getSettings, modelFor } from "@/lib/db/settings";
 import {
   practiceExplainAnswerSchema,
   practiceFeedbackAnswerSchema,
@@ -18,12 +18,18 @@ export class PracticeModelMissing extends Error {
 
 async function ask(request: PracticeRequest, signal?: AbortSignal): Promise<unknown> {
   const settings = await getSettings();
-  const model = activeModel(settings);
-  if (!model) throw new PracticeModelMissing();
+  const choice = modelFor(settings, "writing");
+  if (!choice) throw new PracticeModelMissing();
+  const { model, effort } = choice;
   const response = await fetch("/api/study/practice", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ ...request, model, credentials: credentialsFor(settings, model.provider) }),
+    body: JSON.stringify({
+      ...request,
+      model,
+      effort,
+      credentials: credentialsFor(settings, model.provider),
+    }),
     signal,
   });
   const result = await response.json().catch(() => null);

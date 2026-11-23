@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { AIModelPicker } from "@/components/ai/ai-model-picker";
 import { Icon } from "@/components/icon";
 import { Button } from "@/components/panelui/button";
 import { Dialog } from "@/components/panelui/dialog";
@@ -127,6 +128,10 @@ function ToolForm({
         ) : null}
       </Dialog.Body>
       <Dialog.Footer>
+        {/* Tools that choose their own writer (the audio overview) show it in their form. */}
+        {toolDefinitions[toolId]?.textModel ? null : (
+          <AIModelPicker use="studio" appearance="outline" className="sm:me-auto" />
+        )}
         <Dialog.Close render={<Button variant="secondary" />}>
           {tCommon("actions.cancel")}
         </Dialog.Close>

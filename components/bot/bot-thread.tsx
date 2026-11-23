@@ -16,21 +16,14 @@ import { isVisualPart, VisualPart } from "@/components/chat/visual/visual-part";
 import { Icon } from "@/components/icon";
 import { Menu } from "@/components/panelui/menu";
 import { Message } from "@/components/panelui/message";
-import { ModelPicker } from "@/components/panelui/model-picker";
 import { Prompt, type PromptState } from "@/components/panelui/prompt";
-import { ProviderIcon } from "@/components/provider-icon";
+import { AIModelPicker } from "@/components/ai/ai-model-picker";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { chatProviderIds, modelKey, parseModelKey, providers } from "@/lib/ai/catalog";
+import { providers } from "@/lib/ai/catalog";
 import { botWriteTools, isBotTool } from "@/lib/bot/tools";
 import type { ChatMessage } from "@/lib/chat/types";
 import { updateBot } from "@/lib/db/bots";
-import {
-  activeModel,
-  modelDisplayLabel,
-  availableModels,
-  updateSettings,
-  useSettings,
-} from "@/lib/db/settings";
+import { modelFor, useSettings } from "@/lib/db/settings";
 import type { Bot } from "@/lib/db/types";
 import { cn } from "@/lib/utils";
 import { BotAvatar } from "./bot-avatar";
@@ -191,9 +184,7 @@ function ThreadBody({
   const [draft, setDraft] = useState("");
   const end = useRef<HTMLDivElement>(null);
 
-  const models = settings ? availableModels(settings) : [];
-  const appModel = settings ? activeModel(settings) : null;
-  const model = bot.model && settings ? activeModel(settings, bot.model) : appModel;
+  const model = settings ? (modelFor(settings, `bot:${bot.id}`, bot.model)?.model ?? null) : null;
   const busy = status === "submitted" || status === "streaming";
   const promptStatus: PromptState = status === "ready" || status === "error" ? "idle" : status;
   const local = model ? providers[model.provider].local : false;
@@ -225,24 +216,6 @@ function ThreadBody({
         : null,
     );
   }, [messages, i18n.language]);
-
-  const modelItems = models.map((ref) => ({
-    value: modelKey(ref),
-    label: modelDisplayLabel(settings, ref),
-    provider: ref.provider,
-    contextWindow: settings?.providers[ref.provider].contextTokens[ref.modelId],
-    tags: [
-      ...(providers[ref.provider].webSearch ? [tChat("modelTags.web")] : []),
-      ...(providers[ref.provider].local ? [tChat("modelTags.local")] : []),
-    ],
-  }));
-  const pickerProviders = chatProviderIds
-    .filter((id) => models.some((ref) => ref.provider === id))
-    .map((id) => ({
-      value: id,
-      label: providers[id].name,
-      icon: <ProviderIcon provider={id} size={20} />,
-    }));
 
   const errorText =
     error && !(error instanceof NoModelError) && error.message !== "no-model"
@@ -338,34 +311,12 @@ function ThreadBody({
               />
               <Prompt.Footer>
                 <Prompt.Tools>
-                  {modelItems.length > 0 && settings ? (
-                    <ModelPicker
-                      variant="rail"
-                      items={modelItems}
-                      providers={pickerProviders}
-                      value={model ? modelKey(model) : null}
-                      label={tChat("model")}
-                      favorites={settings.favoriteModels}
-                      onFavoritesChange={(favorites) =>
-                        void updateSettings((saved) => void (saved.favoriteModels = favorites))
-                      }
-                      onValueChange={(key) => {
-                        const next = parseModelKey(key);
-                        if (next) void updateBot(bot.id, { model: next });
-                      }}
-                    >
-                      <ModelPicker.Trigger
-                        appearance="ghost"
-                        className="max-w-48"
-                        placeholder={tChat("chooseModel")}
-                      />
-                      <ModelPicker.Content
-                        side="top"
-                        placeholder={tChat("searchModels")}
-                        emptyText={tChat("noModels")}
-                      />
-                    </ModelPicker>
-                  ) : null}
+                  <AIModelPicker
+                    use={`bot:${bot.id}`}
+                    fallback={bot.model}
+                    className="max-w-48"
+                    onModelChange={(next) => void updateBot(bot.id, { model: next })}
+                  />
                 </Prompt.Tools>
                 <Prompt.Submit sendLabel={tChat("send")} stopLabel={tChat("stop")} />
               </Prompt.Footer>

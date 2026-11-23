@@ -10,7 +10,7 @@ import {
   markInterruptedOutputs,
   restartOutput,
 } from "@/lib/db/outputs";
-import { activeModel, getSettings } from "@/lib/db/settings";
+import { modelFor, getSettings } from "@/lib/db/settings";
 import { store } from "@/lib/db/store";
 import {
   imageCredentialsFor,
@@ -130,7 +130,7 @@ export function StudioRunnerProvider({
     return {
       create: async (toolId, options) => {
         const settings = await getSettings();
-        const model = activeModel(settings);
+        const model = modelFor(settings, "studio")?.model;
         if (!model) throw new Error(t("errors.noModel"));
         const id = await createOutput({
           notebookId,

@@ -100,7 +100,7 @@ type Highlight = StudyRecordOf<"highlight">;
 
 /** Keys that belong to the control that has focus, not to the reader. */
 const ownKeys =
-  "input, textarea, select, [contenteditable]:not([contenteditable=false]), [role=menu], [role=listbox], [role=tablist], [role=radiogroup], [role=slider], [role=dialog]:not([data-study-selection-menu])";
+  "input, textarea, select, [contenteditable]:not([contenteditable=false]), [role=menu], [role=listbox], [role=tablist], [role=radiogroup], [role=slider], [role=dialog]:not([data-study-selection-menu]), [data-slot=model-picker-content]";
 
 function highlighted(
   text: string,
@@ -565,7 +565,11 @@ export function StudyReader({
     function down(event: PointerEvent) {
       const target = event.target;
       if (!(target instanceof Node) || selectionMenu.current?.contains(target)) return;
-      if (target instanceof Element && target.closest('[role="menu"], [role="listbox"], [data-sonner-toaster]')) return;
+      if (
+        target instanceof Element &&
+        target.closest('[role="menu"], [role="listbox"], [data-sonner-toaster], [data-slot="model-picker-content"]')
+      )
+        return;
       dismissSelection();
     }
     document.addEventListener("pointerdown", down, true);

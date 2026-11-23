@@ -30,6 +30,8 @@ export interface ProviderSettings {
   /** Each model's context window in tokens, where the provider's list said. */
   contextTokens: Record<string, number>;
   modelLabels?: Record<string, string>;
+  /** AI subscriptions only: the subscription each model comes from (`codex`, `claude`, …). */
+  modelBrands?: Record<string, string>;
 }
 
 export interface ChatGPTAccountLabel {
@@ -39,8 +41,10 @@ export interface ChatGPTAccountLabel {
 
 export interface AppSettings {
   providers: Record<ProviderId, ProviderSettings>;
-  /** The model chosen in the prompt bar. */
+  /** The model chosen in the prompt bar, and the default for features with no choice of their own. */
   model: ModelRef | null;
+  /** The model and effort each AI feature remembers (see `modelFor`). */
+  modelChoices?: Partial<Record<ModelUse, ModelChoice>>;
   /** Models starred in the model picker, as `provider:modelId`. */
   favoriteModels: string[];
   study?: Pick<StudyThread, "corrections" | "keepVoiceTranscripts"> & {
@@ -52,6 +56,26 @@ export interface AppSettings {
      */
     reviewAcrossVaults?: boolean;
   };
+}
+
+/**
+ * The AI features that each remember their own model: notebook chat, Studio,
+ * translation, the reader's Ask AI, Practice, written practice, drafting
+ * flashcards, and each bot.
+ */
+export type ModelUse =
+  | "chat"
+  | "studio"
+  | "translate"
+  | "ask"
+  | "practice"
+  | "writing"
+  | "cards"
+  | `bot:${string}`;
+
+export interface ModelChoice {
+  model: ModelRef;
+  effort?: Effort;
 }
 
 const SETTINGS_KEY = "app";
@@ -87,6 +111,7 @@ function withDefaults(saved: Partial<AppSettings> | undefined): AppSettings {
   }
   base.providers.cliproxyapi.apiKey = "";
   base.model = saved.model ?? null;
+  base.modelChoices = saved.modelChoices;
   base.favoriteModels = saved.favoriteModels ?? [];
   base.study = saved.study;
   return base;
@@ -227,6 +252,43 @@ export function resolveModel(settings: AppSettings, chosen: ModelRef): ModelRef 
     (model) => subscriptionRoute.exec(model.modelId)?.[2] === chosen.modelId,
   );
   return matches.length === 1 ? matches[0] : null;
+}
+
+/**
+ * The model and effort a feature uses: its own last choice, else `fallback`
+ * (a bot's saved model), else the prompt bar's. A remembered effort the model's
+ * provider doesn't offer gives way to the provider's own setting.
+ */
+export function modelFor(
+  settings: AppSettings,
+  use: ModelUse,
+  fallback?: ModelRef | null,
+): { model: ModelRef; effort: Effort } | null {
+  const saved = settings.modelChoices?.[use];
+  const model = activeModel(settings, saved?.model ?? fallback ?? settings.model);
+  if (!model) return null;
+  const effort =
+    saved?.effort && providers[model.provider].efforts.includes(saved.effort)
+      ? saved.effort
+      : effortFor(settings, model.provider);
+  return { model, effort };
+}
+
+/** Remembers the model a feature uses. Chat's choice is also the default for the rest. */
+export function chooseModel(use: ModelUse, model: ModelRef) {
+  return updateSettings((settings) => {
+    const current = settings.modelChoices?.[use];
+    settings.modelChoices = { ...settings.modelChoices, [use]: { ...current, model } };
+    if (use === "chat") settings.model = model;
+  });
+}
+
+/** Remembers how much a feature's model thinks. */
+export function chooseEffort(use: ModelUse, model: ModelRef, effort: Effort) {
+  return updateSettings((settings) => {
+    settings.modelChoices = { ...settings.modelChoices, [use]: { model, effort } };
+    if (use === "chat") settings.model = model;
+  });
 }
 
 export function modelDisplayLabel(settings: AppSettings | undefined, model: ModelRef): string {

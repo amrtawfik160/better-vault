@@ -2,7 +2,7 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 import { rejectCliProxyRequest } from "@/lib/ai/cliproxyapi";
 import { describeError } from "@/lib/ai/errors";
-import { credentialsSchema, modelRefSchema } from "@/lib/ai/request";
+import { credentialsSchema, effortSchema, modelRefSchema } from "@/lib/ai/request";
 import { createLanguageModel } from "@/lib/ai/providers";
 import {
   normalisePracticeFeedback,
@@ -16,7 +16,11 @@ import {
 } from "@/lib/study/writing-practice";
 import { normaliseTeachReply, teachReplySchema } from "@/lib/study/teach";
 
-const connection = z.object({ model: modelRefSchema, credentials: credentialsSchema });
+const connection = z.object({
+  model: modelRefSchema,
+  credentials: credentialsSchema,
+  effort: effortSchema,
+});
 
 /**
  * Practice: writes questions from the learner's material, gives feedback on
@@ -29,12 +33,12 @@ export async function POST(request: Request) {
   const practice = practiceRequestSchema.safeParse(body);
   if (!decoded.success || !practice.success)
     return Response.json({ error: "Invalid practice request." }, { status: 400 });
-  const { model, credentials } = decoded.data;
+  const { model, credentials, effort } = decoded.data;
   const denied = rejectCliProxyRequest(request, model.provider);
   if (denied) return denied;
   const input = practice.data;
   try {
-    const languageModel = await createLanguageModel(model, credentials);
+    const languageModel = await createLanguageModel(model, credentials, effort);
     const common = {
       model: languageModel,
       system: practiceSystemPrompt(input),
