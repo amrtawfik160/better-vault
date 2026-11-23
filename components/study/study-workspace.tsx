@@ -748,6 +748,7 @@ export default function StudyWorkspace({
               : reviewingVocabulary
                 ? t("study.collection.filters.words")
                 : (answerCollection ?? reportCollection ?? noteCollection ?? book?.title ??
+                  (notebookId ? notebookTitles.get(notebookId) : undefined) ??
                   (requestedReview
                     ? t(
                         reviewingHighlights

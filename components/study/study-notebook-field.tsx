@@ -5,8 +5,9 @@ import { Select } from "@/components/panelui/select";
 import { useNotebooks } from "@/lib/db/notebooks";
 import { vaultOf } from "@/lib/db/vaults";
 
-/** "" stands for a new notebook named after the document. */
+/** A notebook's id, or "" for a new notebook named after the document. */
 export type StudyNotebookChoice = string;
+const newNotebook = "new";
 
 /** The notebook a choice names, or `undefined` for a new one: what `addStudyBook` takes. */
 export const chosenNotebook = (choice: StudyNotebookChoice) => choice || undefined;
@@ -38,10 +39,11 @@ export function StudyNotebookField({
     [all, vaultId],
   );
   // A notebook removed while the dialog is open falls back to a new one.
-  const shown = value && notebooks.some((notebook) => notebook.id === value) ? value : "";
+  const shown = value && notebooks.some((notebook) => notebook.id === value) ? value : newNotebook;
   const chosen = notebooks.find((notebook) => notebook.id === shown);
   const items = [
-    { value: "", label: t("study.library.notebook.new") },
+    // A value of its own, so the Select shows it as a choice rather than an empty field.
+    { value: newNotebook, label: t("study.library.notebook.new") },
     ...notebooks.map(({ id, title }) => ({ value: id, label: title })),
   ];
   return (
@@ -58,7 +60,7 @@ export function StudyNotebookField({
         items={items}
         value={shown}
         disabled={disabled}
-        onValueChange={(next) => onChange(typeof next === "string" ? next : "")}
+        onValueChange={(next) => onChange(typeof next === "string" && next !== newNotebook ? next : "")}
       >
         <Select.Trigger id={id}>
           <Select.Value />
