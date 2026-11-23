@@ -61,7 +61,8 @@ import { originHref, studyCitationOrigin } from "@/lib/study/links";
 import { passagesFor } from "@/lib/study/passages";
 import { studyDocumentDraftId } from "@/lib/study/document-drafts";
 import { scanDraftId } from "@/lib/study/ocr-write";
-import type { StudyDocumentRecovery } from "@/lib/study/records";
+import type { StudyBook, StudyDocumentRecovery } from "@/lib/study/records";
+import { studyImageId } from "@/lib/study/visual-card";
 import { ingestFile } from "@/lib/sources/ingest";
 import { resolveStudyRange } from "@/lib/study/text-edits";
 import { captureReportPracticeContext, matchesStudyReport, plannedStudySteps, studyReports } from "@/lib/study/reports";
@@ -1165,6 +1166,123 @@ describe.each(backends)("%s store", (name, create) => {
       expect(await store().getNotebook(notebookId)).toBeDefined();
       expect(await store().getSource(source.id)).toBeDefined();
       expect(await store().listStudy()).toEqual([]);
+    });
+
+    describe("deleting a Study book", () => {
+      const highlight = (book: StudyBook, id: string) => ({
+        id, kind: "highlight", bookId: book.id, notebookId: book.notebookId, section: 0, quote: "Quorum",
+        offset: 0, color: "yellow", note: "", schedule: freshSchedule(0), updatedAt: 0,
+      }) as const;
+      const ownerOf = async (id: string) => {
+        const rows = await store().listStudy();
+        const scope = studyVaultIndex({
+          rows, notebooks: await store().listNotebooks(), notes: await store().listNotes(),
+          vaults: await listVaults(), defaultVaultId: DEFAULT_VAULT,
+        });
+        const row = rows.find((entry) => entry.id === id);
+        return row && { vault: scope.owner(row), notebookId: row.notebookId };
+      };
+
+      it("removes an imported book with its source and notebook and keeps what was learned from it", async () => {
+        const work = await createVault({ name: "English" });
+        const book = await addStudyBook({
+          title: "Quorums", format: "pdf", bytes: Uint8Array.of(37, 80, 68, 70), mime: "application/pdf",
+          sections: [{ title: "Page 1", text: "A quorum overlaps." }], vaultId: work,
+        });
+        const { notebookId, sourceId } = book;
+        await putStudyRecords(
+          highlight(book, "mark"),
+          { id: scanDraftId(book.id), kind: "ocr-draft", bookId: book.id, notebookId, fileId: book.fileId ?? "",
+            version: "v1", pages: [], updatedAt: 0 },
+        );
+        expect(await store().writeStudyDocumentDraft({
+          id: studyDocumentDraftId({ bookId: book.id, section: 0 }), kind: "document-draft", bookId: book.id,
+          notebookId, version: "v1", updatedAt: 0, snapshot: null,
+        })).toBe(true);
+        await store().putBlob({ id: studyImageId(book.id, 0, { kind: "pdf", top: 0 }), notebookId, sourceId,
+          mime: "image/png", data: Uint8Array.of(1), createdAt: 0 });
+        const origin = { kind: "book", bookId: book.id, section: 0 } as const;
+        const card = await saveStudyCard({ front: "What overlaps?", back: "A quorum", tags: [], notebookId, origin });
+        const word = await saveStudyWord({ term: "quorum", language: "English", translation: "", note: "",
+          context: "A quorum overlaps.", notebookId, origin });
+        const [wordCard] = await studyVocabularyCards([word.id], work);
+        const tutor = await startBookTutor(book, { scope: "book", goal: "book" });
+        expect(await rateStudyItem("mark", "good", 5)).toBe(true);
+        const review = (await store().listStudy()).find((row) => row.kind === "session" && row.itemId === "mark");
+
+        await deleteStudyBook(book);
+        expect(await store().getNotebook(notebookId)).toBeUndefined();
+        expect(await store().getSource(sourceId)).toBeUndefined();
+        expect(await store().count("chunks")).toBe(0);
+        expect(await store().count("blobs")).toBe(0);
+        for (const gone of [book.id, "mark", scanDraftId(book.id), studyDocumentDraftId({ bookId: book.id, section: 0 })])
+          expect(await store().getStudy(gone)).toBeUndefined();
+        for (const kept of [card.id, word.id, wordCard, tutor.id, review?.id ?? "review"])
+          expect(await ownerOf(kept)).toEqual({ vault: work, notebookId: undefined });
+        expect(await store().getStudy(card.id)).toMatchObject({ front: "What overlaps?", origin, schedule: card.schedule });
+      });
+
+      it("keeps the notebook and everything else in it when it holds more than the book", async () => {
+        const book = await addStudyBook({ title: "Raft", format: "text", sections: [{ title: "Raft", text: "Leaders log." }] });
+        const { notebookId, sourceId } = book;
+        const other = await addSource({ notebookId, title: "Paxos", kind: "text", text: "Acceptors promise." });
+        await saveChat({ id: id("kept-chat"), notebookId }, [userMessage("question")]);
+        const outputId = await createReadyOutput({ notebookId, toolId: "whiteboard", title: "Board", options: {},
+          sourceIds: [other.id], data: {} });
+        await putStudyRecords(highlight(book, "mark"));
+        const card = await saveStudyCard({ front: "Who logs?", back: "Leaders", tags: [], notebookId,
+          origin: { kind: "book", bookId: book.id } });
+
+        await deleteStudyBook(book);
+        expect(await store().getNotebook(notebookId)).toBeDefined();
+        expect(await store().getSource(sourceId)).toBeUndefined();
+        expect(await getChunks([sourceId])).toEqual([]);
+        expect(await store().getSource(other.id)).toBeDefined();
+        expect(await getChunks([other.id])).toHaveLength(1);
+        expect((await loadChat(id("kept-chat"))).map(({ id }) => id)).toEqual(["question"]);
+        expect(await store().getOutput(outputId)).toBeDefined();
+        expect(await store().getStudy("mark")).toBeUndefined();
+        expect(await ownerOf(card.id)).toEqual({ vault: DEFAULT_VAULT, notebookId });
+
+        const noted = await addStudyBook({ title: "Notes", format: "text", sections: [{ title: "Notes", text: "Terms." }] });
+        const note = await createNote({ vaultId: DEFAULT_VAULT, title: "Kept", notebookId: noted.notebookId });
+        const neighbour = await addStudyBook({ title: "Shelf", format: "text", sections: [{ title: "Shelf", text: "Words." }] });
+        await putStudyRecords({ ...neighbour, id: "neighbour", sourceId: "other-source", notebookId: noted.notebookId });
+        await deleteStudyBook(noted);
+        expect(await store().getNotebook(noted.notebookId)).toBeDefined();
+        expect(await store().getNote(note.id)).toBeDefined();
+        expect(await store().getStudy("neighbour")).toBeDefined();
+      });
+
+      it("removes a book read from a notebook source but leaves the source and notebook", async () => {
+        const notebookId = await createNotebook("Course");
+        const source = await addSource({ notebookId, title: "Lecture", kind: "text", text: "Terms overlap." });
+        const book = await studyBookForSource(source.id);
+        await putStudyRecords(highlight(book, "mark"));
+        const card = await saveStudyCard({ front: "What overlaps?", back: "Terms", tags: [], notebookId,
+          origin: { kind: "book", bookId: book.id } });
+
+        await deleteStudyBook(book);
+        expect(await store().getNotebook(notebookId)).toBeDefined();
+        expect(await store().getSource(source.id)).toBeDefined();
+        expect(await getChunks([source.id])).toHaveLength(1);
+        expect(await store().getStudy(book.id)).toBeUndefined();
+        expect(await store().getStudy("mark")).toBeUndefined();
+        expect(await ownerOf(card.id)).toEqual({ vault: DEFAULT_VAULT, notebookId });
+      });
+
+      it("keeps a book's saved text when its notebook source is deleted, and cleans up when the book goes", async () => {
+        const book = await addStudyBook({ title: "Copy", format: "text", sections: [{ title: "Copy", text: "Saved text." }] });
+        await putStudyRecords(highlight(book, "mark"));
+        await deleteSource(book.sourceId);
+        expect(await store().getStudy(book.id)).toEqual(book);
+        expect(await store().getStudy("mark")).toBeDefined();
+        expect(await store().getNotebook(book.notebookId)).toBeDefined();
+
+        await deleteStudyBook(book);
+        expect(await store().getNotebook(book.notebookId)).toBeUndefined();
+        expect(await store().listStudy()).toEqual([]);
+      });
     });
 
     it("reads an uploaded Markdown source with its original formatting and preserves notebook chunks", async () => {

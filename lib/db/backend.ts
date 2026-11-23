@@ -172,6 +172,13 @@ export interface Backend {
   ): Promise<boolean>;
   saveStudyOcrPages(write: StudyOcrWrite): Promise<StudyOcrWriteResult>;
   deleteStudy(id: string): Promise<void>;
+  /**
+   * Deletes a Study book with its highlights, drafts and pictures, keeping the
+   * cards, words and conversations made from it in their vault. An imported
+   * book also takes its source, and its notebook when nothing else is left
+   * there (`lib/study/book-deletion.ts`).
+   */
+  deleteStudyBook(id: string): Promise<void>;
 
   getSetting(key: string): Promise<unknown>;
   putSetting(key: string, value: unknown): Promise<void>;
@@ -286,6 +293,7 @@ export const writes = {
   replaceStudyText: ["study", "sources", "chunks", "notebooks"],
   saveStudyOcrPages: ["study", "sources", "chunks", "notebooks"],
   deleteStudy: ["study"],
+  deleteStudyBook: ["study", "notebooks", "sources", "chunks", "blobs"],
   putSetting: ["settings"],
   clearSettings: ["settings"],
   importAll: [
@@ -399,6 +407,7 @@ export const backendMethods = [
   "replaceStudyText",
   "saveStudyOcrPages",
   "deleteStudy",
+  "deleteStudyBook",
   "getSetting",
   "putSetting",
   "clearSettings",

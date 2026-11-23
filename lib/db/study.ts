@@ -673,10 +673,15 @@ export async function studyBookForSource(sourceId: string) {
   throw new Error("This source was removed.");
 }
 
+/**
+ * Deletes a Study book, its highlights and drafts. Cards, words and
+ * conversations made from it stay. An imported book takes its source with it,
+ * and its notebook when nothing else is in it.
+ */
 export async function deleteStudyBook(book: StudyBook) {
-  if (book.attachedToNotebook) await removeStudyRecord(book.id);
-  else await deleteNotebook(book.notebookId);
+  await store().deleteStudyBook(book.id);
   clearDocumentRecoveries(`document-draft:book:${book.id}:`);
+  clearFlashcardDraftsFrom(({ origin }) => origin.kind === "book" && origin.bookId === book.id);
 }
 
 export type StudyCard = StudyRecordOf<"card">;

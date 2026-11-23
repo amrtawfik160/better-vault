@@ -1,4 +1,5 @@
 import type { StudyRecord } from "@/lib/study/records";
+import { studyBookDeletion } from "@/lib/study/book-deletion";
 import { canWriteStudyDocumentDraft, studyDocumentDraftId } from "@/lib/study/document-drafts";
 import { DEFAULT_VAULT } from "@/lib/study/vault";
 import { patchedStudyReviewItem } from "@/lib/study/recall";
@@ -6,6 +7,7 @@ import { patchedStudyThread } from "@/lib/study/reports";
 import { patchedStudyBook, renamedStudyBook, revisedStudyBook } from "@/lib/study/text-edits";
 import { prepareStudyOcrDraft, prepareStudyOcrWrite, remainingStudyOcrDraft, scanDraftId } from "@/lib/study/ocr-write";
 import { detachedVocabularyCard, vocabularyCardId, vocabularyChanges } from "@/lib/study/vocabulary";
+import { studyImagePrefix } from "@/lib/study/visual-card";
 import { updatedStudioPractice } from "@/studio/shared/practice";
 import type { Backend } from "./backend";
 import { BetterVaultDatabase } from "./database";
@@ -433,6 +435,43 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
         await db.study.delete(id);
       }),
 
+    deleteStudyBook: (id) =>
+      db.transaction(
+        "rw",
+        [db.study, db.notebooks, db.vaults, db.notes, db.sources, db.chunks, db.conversations, db.outputs, db.blobs],
+        async () => {
+          const book = await db.study.get(id);
+          if (book?.kind !== "book") return;
+          const { notebookId, sourceId } = book;
+          const [rows, notebooks, vaults, notes, sources, conversations, outputs] = await Promise.all([
+            db.study.toArray(),
+            db.notebooks.toArray(),
+            db.vaults.toArray(),
+            db.notes.toArray(),
+            db.sources.where("notebookId").equals(notebookId).primaryKeys(),
+            db.conversations.where("notebookId").equals(notebookId).count(),
+            db.outputs.where("notebookId").equals(notebookId).count(),
+          ]);
+          const plan = studyBookDeletion({ rows, notebooks, vaults, notes }, id, {
+            otherSources: sources.some((key) => key !== sourceId),
+            conversations: conversations > 0,
+            outputs: outputs > 0,
+          });
+          if (!plan) return;
+          await db.study.bulkDelete(plan.remove);
+          await db.study.bulkPut(plan.keep);
+          await db.blobs.where("id").startsWith(studyImagePrefix(id)).delete();
+          if (plan.deleteSource) {
+            await db.chunks.where("sourceId").equals(sourceId).delete();
+            await db.blobs.where("sourceId").equals(sourceId).delete();
+            await db.sources.delete(sourceId);
+          }
+          if (plan.deleteNotebook) {
+            await db.blobs.where("notebookId").equals(notebookId).delete();
+            await db.notebooks.delete(notebookId);
+          }
+        },
+      ),
     exportAll: async () => {
       const [
         study,

@@ -29,9 +29,14 @@ export function studyImageAnchor(capture: StudyImageCapture): StudyVisualOrigin 
     : { kind: "epub", figure: capture.figure, ...(crop && { crop }) };
 }
 
+/** The start of the ids of every picture Study saved from a book. */
+export function studyImagePrefix(bookId: string) {
+  return `study-image:${encodeURIComponent(bookId)}:`;
+}
+
 export function studyImageId(bookId: string, section: number, anchor: StudyVisualOrigin) {
   const position = anchor.kind === "pdf" ? anchor.top : anchor.figure;
-  const id = `study-image:${encodeURIComponent(bookId)}:${section}:${anchor.kind}:${position}`;
+  const id = `${studyImagePrefix(bookId)}${section}:${anchor.kind}:${position}`;
   return anchor.crop ? `${id}:${studyImageCropKey(anchor.crop)}` : id;
 }
 

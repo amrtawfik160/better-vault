@@ -1,4 +1,5 @@
 import type { StudyBook, StudyRecord } from "@/lib/study/records";
+import { studyBookDeletion } from "@/lib/study/book-deletion";
 import { canWriteStudyDocumentDraft, studyDocumentDraftId } from "@/lib/study/document-drafts";
 import { DEFAULT_VAULT } from "@/lib/study/vault";
 import { patchedStudyReviewItem } from "@/lib/study/recall";
@@ -6,6 +7,7 @@ import { patchedStudyThread } from "@/lib/study/reports";
 import { patchedStudyBook, renamedStudyBook, revisedStudyBook } from "@/lib/study/text-edits";
 import { prepareStudyOcrDraft, prepareStudyOcrWrite, remainingStudyOcrDraft, scanDraftId } from "@/lib/study/ocr-write";
 import { detachedVocabularyCard, vocabularyCardId, vocabularyChanges } from "@/lib/study/vocabulary";
+import { studyImagePrefix } from "@/lib/study/visual-card";
 import { updatedStudioPractice } from "@/studio/shared/practice";
 import type { Backend, StoreContent, TableName } from "../backend";
 import { sourceHasText } from "../source-text";
@@ -710,6 +712,41 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
         deleteWhere("study", "id", id);
       }),
 
+    deleteStudyBook: (id) =>
+      transaction(db, () => {
+        const book = get<StudyRecord>("study", id);
+        if (book?.kind !== "book") return;
+        const { notebookId, sourceId } = book;
+        const has = (sql: string, ...params: SqlValue[]) => Boolean(db.prepare(sql).get(...params));
+        const plan = studyBookDeletion(
+          {
+            rows: docs<StudyRecord>(db.prepare("SELECT doc FROM study").all()),
+            notebooks: docs<Notebook>(db.prepare("SELECT doc FROM notebooks").all()),
+            vaults: docs<Vault>(db.prepare("SELECT doc FROM vaults").all()),
+            notes: docs<Note>(db.prepare("SELECT doc FROM notes").all()),
+          },
+          id,
+          {
+            otherSources: has("SELECT 1 FROM sources WHERE notebook_id = ? AND id <> ? LIMIT 1", notebookId, sourceId),
+            conversations: has("SELECT 1 FROM conversations WHERE notebook_id = ? LIMIT 1", notebookId),
+            outputs: has("SELECT 1 FROM outputs WHERE notebook_id = ? LIMIT 1", notebookId),
+          },
+        );
+        if (!plan) return;
+        for (const removed of plan.remove) deleteWhere("study", "id", removed);
+        for (const row of plan.keep) put("study", row);
+        const images = studyImagePrefix(id);
+        db.prepare("DELETE FROM blobs WHERE substr(id, 1, ?) = ?").run(images.length, images);
+        if (plan.deleteSource) {
+          deleteWhere("chunks", "source_id", sourceId);
+          db.prepare("DELETE FROM blobs WHERE source_id = ?").run(sourceId);
+          deleteWhere("sources", "id", sourceId);
+        }
+        if (plan.deleteNotebook) {
+          db.prepare("DELETE FROM blobs WHERE notebook_id = ?").run(notebookId);
+          deleteWhere("notebooks", "id", notebookId);
+        }
+      }),
     exportAll: (): StoreContent => ({
       study: docs(db.prepare("SELECT doc FROM study").all()),
       calendar: docs(db.prepare("SELECT doc FROM calendar").all()),
