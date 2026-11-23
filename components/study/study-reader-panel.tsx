@@ -24,9 +24,10 @@ import { speakStudyReply } from "@/lib/study/voice-session";
 import { textDirection } from "@/lib/text/direction";
 import { cn } from "@/lib/utils";
 import { highlightColors } from "./study-highlight-colors";
+import { StudyMakeFromBook } from "./study-make-from-book";
 import { StudyText } from "./study-text";
 
-export type ReaderPanelTab = "highlights" | "words" | "ai";
+export type ReaderPanelTab = "highlights" | "words" | "make" | "ai";
 type Highlight = StudyRecordOf<"highlight">;
 
 export type ReaderTutor = {
@@ -269,6 +270,7 @@ export function StudyReaderPanel({
               {t("study.reader.panel.words")}
               <Tabs.Badge>{words.length}</Tabs.Badge>
             </Tabs.Trigger>
+            <Tabs.Trigger value="make">{t("study.reader.panel.make")}</Tabs.Trigger>
             <Tabs.Trigger value="ai">{t("study.selection.ask")}</Tabs.Trigger>
           </Tabs.List>
           <span className="flex-1" />
@@ -347,6 +349,12 @@ export function StudyReaderPanel({
               </Button>
             </div>
           ) : null}
+        </Tabs.Content>
+
+        <Tabs.Content value="make" className="flex min-h-0 flex-col focus-visible:ring-offset-0">
+          <ScrollArea className="min-h-0 flex-1">
+            <StudyMakeFromBook book={book} compact className="p-4" />
+          </ScrollArea>
         </Tabs.Content>
 
         <Tabs.Content value="ai" keepMounted className="flex min-h-0 flex-col focus-visible:ring-offset-0">
