@@ -3,6 +3,7 @@ import {
   CloudUploadIcon,
   Globe02Icon,
   Loading03Icon,
+  PodcastIcon,
   TextIcon,
 } from "@hugeicons/core-free-icons";
 import { useId, useRef, useState, useSyncExternalStore, type DragEvent } from "react";
@@ -29,8 +30,15 @@ import { storageClient } from "@/lib/storage/clients";
 import { googlePicker } from "@/lib/storage/clients/google-drive";
 import { isStorageReady, useStorageSettings } from "@/lib/storage/settings";
 import { cn } from "@/lib/utils";
+import {
+  TranscriptFields,
+  emptyTranscriptDraft,
+  transcriptDraftDocument,
+  transcriptDraftLink,
+  transcriptDraftReady,
+} from "./transcript-fields";
 
-type Mode = "file" | "cloud" | "url" | "text";
+type Mode = "file" | "cloud" | "url" | "text" | "media";
 
 interface AddSourceDialogProps {
   notebookId: string;
@@ -38,7 +46,7 @@ interface AddSourceDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-/** Adds sources from files, a web page or pasted text. */
+/** Adds sources from files, a web page, pasted text or a video's or podcast's transcript. */
 export function AddSourceDialog({ notebookId, open, onOpenChange }: AddSourceDialogProps) {
   const { t } = useTranslation("sources");
   const { t: tCommon } = useTranslation();
@@ -74,6 +82,8 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+  const [transcript, setTranscript] = useState(emptyTranscriptDraft);
+  const [transcribing, setTranscribing] = useState(false);
   // "From storage" appears once a storage service is connected (Settings → Storage).
   const storage = useStorageSettings();
   const hasStorage = storage ? storageIds.some((id) => isStorageReady(storage, id)) : false;
@@ -119,6 +129,16 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
       void run([
         () => ingestText(notebookId, title.trim() || t("addDialog.textTitlePlaceholder"), text),
       ]);
+    } else if (mode === "media" && !transcribing && transcriptDraftReady(transcript)) {
+      void run([
+        () =>
+          ingestText(
+            notebookId,
+            transcript.title.trim(),
+            transcriptDraftDocument(transcript),
+            transcriptDraftLink(transcript),
+          ),
+      ]);
     }
   }
 
@@ -129,7 +149,14 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
   };
 
   const canSubmit =
-    !busy && (mode === "url" ? url.trim() !== "" : mode === "text" ? text.trim() !== "" : false);
+    !busy &&
+    (mode === "url"
+      ? url.trim() !== ""
+      : mode === "text"
+        ? text.trim() !== ""
+        : mode === "media"
+          ? !transcribing && transcriptDraftReady(transcript)
+          : false);
 
   return (
     <>
@@ -138,6 +165,7 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
           aria-label={t("addDialog.title")}
           value={mode}
           onValueChange={(next) => {
+            if (transcribing) return;
             setMode(next);
             setErrors([]);
           }}
@@ -166,6 +194,11 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
               value: "text",
               label: t("addDialog.tabs.text"),
               icon: <Icon icon={TextIcon} size={16} />,
+            },
+            {
+              value: "media",
+              label: t("addDialog.tabs.media"),
+              icon: <Icon icon={PodcastIcon} size={16} />,
             },
           ]}
         />
@@ -239,7 +272,15 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
               submit();
             }}
           >
-            {mode === "url" ? (
+            {mode === "media" ? (
+              <TranscriptFields
+                nested
+                draft={transcript}
+                onChange={setTranscript}
+                disabled={busy}
+                onBusyChange={setTranscribing}
+              />
+            ) : mode === "url" ? (
               <Field label={t("addDialog.urlLabel")} htmlFor={urlId} hint={t("addDialog.urlHint")}>
                 <Input
                   id={urlId}
