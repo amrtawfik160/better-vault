@@ -162,6 +162,11 @@ html[data-window-controls]
     min-width: 100%;
   }
 
+  /* The passage the reader's selection menu is about, kept marked while the menu has focus. */
+  ::highlight(study-selection) {
+    background-color: color-mix(in oklab, var(--primary) 18%, transparent);
+  }
+
   .markdown.study-reading-text h1 {
     font-size: 1.33em;
     line-height: 1.33;
