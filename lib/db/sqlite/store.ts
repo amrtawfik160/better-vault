@@ -1,5 +1,13 @@
 import type { StudyBook, StudyRecord } from "@/lib/study/records";
-import { studyBookDeletion } from "@/lib/study/book-deletion";
+import { studyBookDeletion, studyBookWithoutProgress } from "@/lib/study/book-deletion";
+import {
+  duplicateBookError,
+  movedStudyImageId,
+  sameStudyImage,
+  studyBookMerge,
+  studyImageIdPrefix,
+} from "@/lib/study/book-merge";
+import { notebookFollowsDocument } from "@/lib/study/library";
 import { canWriteStudyDocumentDraft, studyDocumentDraftId } from "@/lib/study/document-drafts";
 import { DEFAULT_VAULT } from "@/lib/study/vault";
 import { patchedStudyReviewItem } from "@/lib/study/recall";
@@ -10,7 +18,7 @@ import { detachedVocabularyCard, vocabularyCardId, vocabularyChanges } from "@/l
 import { studyImagePrefix } from "@/lib/study/visual-card";
 import { updatedStudioPractice } from "@/studio/shared/practice";
 import type { Backend, StoreContent, TableName } from "../backend";
-import { sourceHasText } from "../source-text";
+import { sourceHasText, sourceIsReadable } from "../source-text";
 import type {
   Chunk,
   Conversation,
@@ -82,10 +90,42 @@ const columns: Record<DocTable, Record<string, string>> = {
 };
 
 /**
- * Schema versions, kept in `PRAGMA user_version`. Add a step for each change
- * and never edit one that has shipped.
+ * Merges Study books that read the same source (`studyBookMerge`), and moves
+ * the pictures saved under a merged-away book's id. Runs inside a
+ * transaction: migration 9, and each backup import.
  */
-const migrations: string[] = [
+function mergeStudyBooks(db: SqliteDatabase) {
+  const rows = (db.prepare("SELECT doc FROM study").all() as { doc: string }[]).map(
+    (row) => JSON.parse(row.doc) as StudyRecord,
+  );
+  const plan = studyBookMerge(rows);
+  const remove = db.prepare("DELETE FROM study WHERE id = ?");
+  for (const id of plan.remove) remove.run(id);
+  const put = db.prepare("INSERT OR REPLACE INTO study (id, notebook_id, doc) VALUES (?, ?, ?)");
+  for (const row of plan.put) put.run(row.id, row.notebookId ?? null, JSON.stringify(row));
+  if (!plan.moved.size) return;
+  const images = db
+    .prepare("SELECT id FROM blobs WHERE substr(id, 1, ?) = ?")
+    .all(studyImageIdPrefix.length, studyImageIdPrefix) as { id: string }[];
+  const read = db.prepare("SELECT mime, data FROM blobs WHERE id = ?");
+  const rename = db.prepare("UPDATE blobs SET id = ? WHERE id = ?");
+  const removeBlob = db.prepare("DELETE FROM blobs WHERE id = ?");
+  for (const { id } of images) {
+    const next = movedStudyImageId(id, plan.moved);
+    if (!next) continue;
+    const existing = read.get(next) as { mime: string; data: Uint8Array } | undefined;
+    if (!existing) rename.run(next, id);
+    // The kept book's own picture of the same place wins; the other stays where it was, unless it is the same picture.
+    else if (sameStudyImage(existing, read.get(id) as { mime: string; data: Uint8Array })) removeBlob.run(id);
+  }
+}
+
+/**
+ * Schema versions, kept in `PRAGMA user_version`. Add a step for each change
+ * and never edit one that has shipped. A step is SQL, or a function for a
+ * change to the rows themselves.
+ */
+const migrations: (string | ((db: SqliteDatabase) => void))[] = [
   `
   CREATE TABLE notebooks (id TEXT PRIMARY KEY, updated_at REAL NOT NULL, doc TEXT NOT NULL);
   CREATE INDEX notebooks_updated ON notebooks (updated_at);
@@ -149,6 +189,10 @@ const migrations: string[] = [
   `,
   `CREATE TABLE study (id TEXT PRIMARY KEY, notebook_id TEXT, doc TEXT NOT NULL);
   CREATE INDEX study_notebook ON study (notebook_id);`,
+  // 9: one Study book per notebook source. Books reading the same source are
+  // merged into the oldest, and `attachedToNotebook` is dropped. Ids are
+  // otherwise kept. Dexie version 11 does the same.
+  mergeStudyBooks,
 ];
 
 /** The schema version a database has once migrated. */
@@ -161,7 +205,9 @@ export function migrate(db: SqliteDatabase) {
   };
   for (let at = version; at < migrations.length; at++) {
     transaction(db, () => {
-      db.exec(migrations[at]);
+      const step = migrations[at];
+      if (typeof step === "string") db.exec(step);
+      else step(db);
       db.exec(`PRAGMA user_version = ${at + 1}`);
     });
   }
@@ -285,6 +331,9 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
         )
         .all(notebookId, sourceId),
     );
+  /** Whether writing `row` would give its source a second Study book. Rows are written one by one, so earlier ones count. */
+  const duplicatesBook = (row: StudyRecord) =>
+    row.kind === "book" && studyBooksForSource(row.notebookId, row.sourceId).some(({ id }) => id !== row.id);
 
   return {
     listNotebooks: () =>
@@ -410,6 +459,37 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
       return ids.flatMap((id) => found.get(id) ?? []);
     },
     listAllSources: () => docs<Source>(db.prepare("SELECT doc FROM sources").all()),
+    listSourceSummaries: () => {
+      // Only the start of the text leaves SQLite: enough to tell whether there is any.
+      const rows = db
+        .prepare(
+          `SELECT id, notebook_id, created_at, json_extract(doc, '$.title') AS title, json_extract(doc, '$.kind') AS kind,
+            json_extract(doc, '$.originalFileId') AS original,
+            substr(trim(json_extract(doc, '$.text'), char(32, 9, 10, 11, 12, 13)), 1, 1024) AS head
+            FROM sources ORDER BY created_at, id`,
+        )
+        .all() as {
+        id: string;
+        notebook_id: string;
+        created_at: number;
+        title: string;
+        kind: Source["kind"];
+        original: string | null;
+        head: string | null;
+      }[];
+      return rows.map((row) => {
+        const probe = { text: row.head ?? "", kind: row.kind, originalFileId: row.original ?? undefined };
+        return {
+          id: row.id,
+          notebookId: row.notebook_id,
+          title: row.title,
+          kind: row.kind,
+          createdAt: row.created_at,
+          hasText: sourceHasText(probe),
+          readable: sourceIsReadable(probe),
+        };
+      });
+    },
     listSources: (notebookId) =>
       docs<Source>(
         db
@@ -425,14 +505,18 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
         const linkedBook = entry?.kind === "book" ? entry : undefined;
         if (kind === "book" && !linkedBook) return;
         const sourceId = linkedBook?.sourceId ?? id;
-        const source = get<Source>("sources", sourceId);
-        const notebookId = linkedBook?.notebookId ?? source?.notebookId;
+        const found = get<Source>("sources", sourceId);
+        const notebookId = linkedBook?.notebookId ?? found?.notebookId;
         if (!notebookId) return;
-        for (const book of studyBooksForSource(notebookId, sourceId))
-          put("study", renamedStudyBook(book, title, updatedAt));
-        if (source?.notebookId === notebookId) patch<Source>("sources", source.id, { title });
-        if (linkedBook && !linkedBook.attachedToNotebook)
-          patch<Notebook>("notebooks", notebookId, { title, updatedAt });
+        const source = found?.notebookId === notebookId ? found : undefined;
+        const books = studyBooksForSource(notebookId, sourceId);
+        const { n } = db.prepare("SELECT COUNT(*) AS n FROM sources WHERE notebook_id = ?").get(notebookId) as { n: number };
+        const others = Number(n) - (source ? 1 : 0);
+        const previous = source?.title ?? books[0]?.title;
+        const follows = notebookFollowsDocument(get<Notebook>("notebooks", notebookId), others, previous);
+        for (const book of books) put("study", renamedStudyBook(book, title, updatedAt));
+        if (source) patch<Source>("sources", source.id, { title });
+        if (follows) patch<Notebook>("notebooks", notebookId, { title, updatedAt });
       }),
     patchNotebookSources: (notebookId, change) =>
       transaction(db, () => {
@@ -566,13 +650,16 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
     getStudyBookForSource: (notebookId, sourceId) => studyBooksForSource(notebookId, sourceId)[0],
     putStudy: (rows) =>
       transaction(db, () => {
-        for (const row of rows) put("study", row);
+        for (const row of rows) {
+          if (duplicatesBook(row)) throw new Error(duplicateBookError);
+          put("study", row);
+        }
       }),
     insertStudy: (rows) =>
       transaction(db, () => {
         let count = 0;
         for (const row of rows) {
-          if (get<StudyRecord>("study", row.id)) continue;
+          if (get<StudyRecord>("study", row.id) || duplicatesBook(row)) continue;
           add("study", row);
           count++;
         }
@@ -583,6 +670,8 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
         const source = get<Source>("sources", book.sourceId);
         if (source?.notebookId !== book.notebookId || !get<Notebook>("notebooks", book.notebookId))
           return;
+        const [reading] = studyBooksForSource(book.notebookId, book.sourceId);
+        if (reading) return reading;
         const existing = get<StudyRecord>("study", book.id);
         if (existing) {
           return existing.kind === "book" &&
@@ -712,11 +801,10 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
         deleteWhere("study", "id", id);
       }),
 
-    deleteStudyBook: (id) =>
+    deleteStudyDocument: (document) =>
       transaction(db, () => {
-        const book = get<StudyRecord>("study", id);
-        if (book?.kind !== "book") return;
-        const { notebookId, sourceId } = book;
+        const { notebookId, sourceId } = document;
+        const ownSource = get<Source>("sources", sourceId)?.notebookId === notebookId;
         const has = (sql: string, ...params: SqlValue[]) => Boolean(db.prepare(sql).get(...params));
         const plan = studyBookDeletion(
           {
@@ -725,19 +813,21 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
             vaults: docs<Vault>(db.prepare("SELECT doc FROM vaults").all()),
             notes: docs<Note>(db.prepare("SELECT doc FROM notes").all()),
           },
-          id,
+          document,
           {
             otherSources: has("SELECT 1 FROM sources WHERE notebook_id = ? AND id <> ? LIMIT 1", notebookId, sourceId),
             conversations: has("SELECT 1 FROM conversations WHERE notebook_id = ? LIMIT 1", notebookId),
             outputs: has("SELECT 1 FROM outputs WHERE notebook_id = ? LIMIT 1", notebookId),
           },
         );
-        if (!plan) return;
+        if (!plan.book && !ownSource) return;
         for (const removed of plan.remove) deleteWhere("study", "id", removed);
         for (const row of plan.keep) put("study", row);
-        const images = studyImagePrefix(id);
-        db.prepare("DELETE FROM blobs WHERE substr(id, 1, ?) = ?").run(images.length, images);
-        if (plan.deleteSource) {
+        if (plan.book) {
+          const images = studyImagePrefix(plan.book.id);
+          db.prepare("DELETE FROM blobs WHERE substr(id, 1, ?) = ?").run(images.length, images);
+        }
+        if (ownSource) {
           deleteWhere("chunks", "source_id", sourceId);
           db.prepare("DELETE FROM blobs WHERE source_id = ?").run(sourceId);
           deleteWhere("sources", "id", sourceId);
@@ -746,6 +836,16 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
           db.prepare("DELETE FROM blobs WHERE notebook_id = ?").run(notebookId);
           deleteWhere("notebooks", "id", notebookId);
         }
+      }),
+    resetStudyBook: (id, updatedAt) =>
+      transaction(db, () => {
+        const book = get<StudyRecord>("study", id);
+        if (book?.kind !== "book") return false;
+        db.prepare(
+          "DELETE FROM study WHERE json_extract(doc, '$.kind') = 'highlight' AND json_extract(doc, '$.bookId') = ?",
+        ).run(id);
+        put("study", studyBookWithoutProgress(book, updatedAt));
+        return true;
       }),
     exportAll: (): StoreContent => ({
       study: docs(db.prepare("SELECT doc FROM study").all()),
@@ -783,6 +883,7 @@ export function createSqliteStore(db: SqliteDatabase): SyncBackend {
         for (const row of data.messages) put("messages", row);
         for (const row of data.outputs) put("outputs", row);
         for (const row of data.blobs) putBlob(row);
+        mergeStudyBooks(db);
       }),
     clearAll: () =>
       transaction(db, () => {

@@ -394,7 +394,14 @@ export const studyRecordSchema = z.discriminatedUnion("kind", [
         }),
       )
       .optional(),
+    /**
+     * No longer used: it told books imported into an existing notebook apart
+     * from the rest. Still read so old backups import; the store migration and
+     * backup import drop it (`book-merge.ts`).
+     */
     attachedToNotebook: z.literal(true).optional(),
+    /** Ids of duplicate books of the same source merged into this one, so links to them still open it. */
+    mergedIds: z.array(z.string()).optional(),
     lastReadAt: z.number().optional(),
     preferredReadingSurface: readingSurface.optional(),
     readingAppearance: readingAppearance.optional(),

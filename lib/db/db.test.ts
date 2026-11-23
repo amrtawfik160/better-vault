@@ -3,7 +3,8 @@ import {
   addQuizMissesToStudy,
   addStudyBook,
   addStudioFlashcards,
-  deleteStudyBook,
+  deleteStudyDocument,
+  removeStudyReadingProgress,
   studyBookForSource,
   freshSchedule,
   putStudyRecords,
@@ -63,6 +64,8 @@ import { studyDocumentDraftId } from "@/lib/study/document-drafts";
 import { scanDraftId } from "@/lib/study/ocr-write";
 import type { StudyBook, StudyDocumentRecovery } from "@/lib/study/records";
 import { studyImageId } from "@/lib/study/visual-card";
+import { duplicateBooksFixture, expectMergedFixture } from "@/lib/study/book-merge.fixture";
+import { toBase64 } from "@/lib/base64";
 import { ingestFile } from "@/lib/sources/ingest";
 import { resolveStudyRange } from "@/lib/study/text-edits";
 import { captureReportPracticeContext, matchesStudyReport, plannedStudySteps, studyReports } from "@/lib/study/reports";
@@ -999,10 +1002,12 @@ describe.each(backends)("%s store", (name, create) => {
       expect(await store().getStudy(draft.id)).toEqual(draft);
       expect(await store().getStudy(fresh.id)).toEqual(fresh);
 
-      await deleteStudyBook(book);
+      await removeStudyReadingProgress(book);
+      expect(await store().getStudy(draft.id)).toEqual(draft);
+      await deleteStudyDocument(book);
       expect(await store().getStudy(draft.id)).toBeUndefined();
       expect(await store().writeStudyDocumentDraft({ ...draft, updatedAt: 2 })).toBe(false);
-      expect(await store().getSource(source.id)).toBeDefined();
+      expect(await store().getSource(source.id)).toBeUndefined();
 
       await deleteVault(vaultId);
       expect(await store().getStudy(fresh.id)).toBeUndefined();
@@ -1161,11 +1166,53 @@ describe.each(backends)("%s store", (name, create) => {
       ]);
       expect(first.id).toBe(second.id);
       expect(await store().listStudy()).toHaveLength(1);
-      expect(first).toMatchObject({ notebookId, sourceId: source.id, attachedToNotebook: true });
-      await deleteStudyBook(first);
+      expect(first).toMatchObject({ id: `source-${source.id}`, notebookId, sourceId: source.id });
+      expect(first).not.toHaveProperty("attachedToNotebook");
+      await updateStudyBook(first.id, { bookmarks: [0] });
+      await removeStudyReadingProgress(first);
       expect(await store().getNotebook(notebookId)).toBeDefined();
       expect(await store().getSource(source.id)).toBeDefined();
-      expect(await store().listStudy()).toEqual([]);
+      expect(await store().getStudy(first.id)).toMatchObject({ bookmarks: [], section: 0, sections: first.sections });
+      expect(await store().listStudy()).toHaveLength(1);
+    });
+
+    it("keeps one Study book per source", async () => {
+      const notebookId = await createNotebook("Notebook");
+      const source = await addSource({ notebookId, title: "Source", kind: "text", text: "Read this" });
+      const book = await studyBookForSource(source.id);
+      const copy = { ...book, id: "copy" };
+      await expect(putStudyRecords(copy)).rejects.toThrow();
+      expect(await store().insertStudy([copy])).toBe(0);
+      expect(await store().attachStudyBook(copy)).toEqual(book);
+      expect((await store().listStudy()).map(({ id }) => id)).toEqual([book.id]);
+      // The book itself can still be written again.
+      await putStudyRecords({ ...book, bookmarks: [0] });
+      expect(await store().getStudy(book.id)).toMatchObject({ bookmarks: [0] });
+    });
+
+    it("lists every source without its text, telling which ones Study can read", async () => {
+      const notebookId = await createNotebook("Library");
+      const text = await addSource({ notebookId, title: "Notes", kind: "text", text: "  Words.  " });
+      const scan = await addSource({
+        notebookId, title: "Scan", kind: "pdf", text: "", original: { data: Uint8Array.of(37, 80, 68, 70), mime: "application/pdf" },
+      });
+      const summaries = await store().listSourceSummaries();
+      expect(summaries.toSorted((a, b) => a.title.localeCompare(b.title))).toEqual([
+        { id: text.id, notebookId, title: "Notes", kind: "text", createdAt: text.createdAt, hasText: true, readable: true },
+        { id: scan.id, notebookId, title: "Scan", kind: "pdf", createdAt: scan.createdAt, hasText: false, readable: true },
+      ]);
+      for (const summary of summaries) expect(summary).not.toHaveProperty("text");
+    });
+
+    it("renames a notebook with its document only when the notebook is named after its only source", async () => {
+      const book = await addStudyBook({ title: "Raft", format: "text", sections: [{ title: "Raft", text: "Leaders log." }] });
+      await renameSource(book.sourceId, "Raft consensus");
+      expect((await store().getNotebook(book.notebookId))?.title).toBe("Raft consensus");
+      expect(await store().getStudy(book.id)).toMatchObject({ title: "Raft consensus" });
+      await addSource({ notebookId: book.notebookId, title: "Paxos", kind: "text", text: "Acceptors." });
+      await renameStudyBook(book, "Raft paper");
+      expect((await store().getNotebook(book.notebookId))?.title).toBe("Raft consensus");
+      expect((await store().getSource(book.sourceId))?.title).toBe("Raft paper");
     });
 
     describe("deleting a Study book", () => {
@@ -1210,7 +1257,7 @@ describe.each(backends)("%s store", (name, create) => {
         expect(await rateStudyItem("mark", "good", 5)).toBe(true);
         const review = (await store().listStudy()).find((row) => row.kind === "session" && row.itemId === "mark");
 
-        await deleteStudyBook(book);
+        await deleteStudyDocument(book);
         expect(await store().getNotebook(notebookId)).toBeUndefined();
         expect(await store().getSource(sourceId)).toBeUndefined();
         expect(await store().count("chunks")).toBe(0);
@@ -1233,7 +1280,7 @@ describe.each(backends)("%s store", (name, create) => {
         const card = await saveStudyCard({ front: "Who logs?", back: "Leaders", tags: [], notebookId,
           origin: { kind: "book", bookId: book.id } });
 
-        await deleteStudyBook(book);
+        await deleteStudyDocument(book);
         expect(await store().getNotebook(notebookId)).toBeDefined();
         expect(await store().getSource(sourceId)).toBeUndefined();
         expect(await getChunks([sourceId])).toEqual([]);
@@ -1248,27 +1295,71 @@ describe.each(backends)("%s store", (name, create) => {
         const note = await createNote({ vaultId: DEFAULT_VAULT, title: "Kept", notebookId: noted.notebookId });
         const neighbour = await addStudyBook({ title: "Shelf", format: "text", sections: [{ title: "Shelf", text: "Words." }] });
         await putStudyRecords({ ...neighbour, id: "neighbour", sourceId: "other-source", notebookId: noted.notebookId });
-        await deleteStudyBook(noted);
+        await deleteStudyDocument(noted);
         expect(await store().getNotebook(noted.notebookId)).toBeDefined();
         expect(await store().getNote(note.id)).toBeDefined();
         expect(await store().getStudy("neighbour")).toBeDefined();
       });
 
-      it("removes a book read from a notebook source but leaves the source and notebook", async () => {
+      it("removes only the reading progress of a document and leaves its source and text", async () => {
         const notebookId = await createNotebook("Course");
         const source = await addSource({ notebookId, title: "Lecture", kind: "text", text: "Terms overlap." });
+        const book = await studyBookForSource(source.id);
+        await putStudyRecords(highlight(book, "mark"), { ...highlight(book, "loose"), notebookId: undefined });
+        const card = await saveStudyCard({ front: "What overlaps?", back: "Terms", tags: [], notebookId,
+          origin: { kind: "book", bookId: book.id, section: 0, offset: 0, length: 5 } });
+        await saveStudyReadingPlace(book.id, { section: 0, surface: "text", progress: 0.5 }, Date.now());
+        await updateStudyBook(book.id, {
+          bookmarks: [0],
+          bookmarkPlaces: [{ id: "place", section: 0, offset: 0, quote: "Terms" }],
+          readingAppearance: { textSize: 20 },
+        });
+
+        await removeStudyReadingProgress(book);
+        expect(await store().getNotebook(notebookId)).toBeDefined();
+        expect(await store().getSource(source.id)).toBeDefined();
+        expect(await getChunks([source.id])).toHaveLength(1);
+        const reset = await store().getStudy(book.id);
+        expect(reset).toMatchObject({ section: 0, bookmarks: [], sections: book.sections, readingAppearance: { textSize: 20 } });
+        expect(reset).not.toHaveProperty("readingPlace");
+        expect(reset).not.toHaveProperty("bookmarkPlaces");
+        expect(reset).not.toHaveProperty("lastReadAt");
+        expect(await store().getStudy("mark")).toBeUndefined();
+        expect(await store().getStudy("loose")).toBeUndefined();
+        expect(await store().getStudy(card.id)).toEqual(card);
+        expect(await ownerOf(card.id)).toEqual({ vault: DEFAULT_VAULT, notebookId });
+        expect(await store().resetStudyBook("gone", Date.now())).toBe(false);
+      });
+
+      it("deletes a document opened from a notebook source like any other, keeping other sources", async () => {
+        const notebookId = await createNotebook("Course");
+        const source = await addSource({ notebookId, title: "Lecture", kind: "text", text: "Terms overlap." });
+        const other = await addSource({ notebookId, title: "Reading", kind: "text", text: "More terms." });
         const book = await studyBookForSource(source.id);
         await putStudyRecords(highlight(book, "mark"));
         const card = await saveStudyCard({ front: "What overlaps?", back: "Terms", tags: [], notebookId,
           origin: { kind: "book", bookId: book.id } });
 
-        await deleteStudyBook(book);
+        await deleteStudyDocument(book);
         expect(await store().getNotebook(notebookId)).toBeDefined();
-        expect(await store().getSource(source.id)).toBeDefined();
-        expect(await getChunks([source.id])).toHaveLength(1);
+        expect(await store().getSource(source.id)).toBeUndefined();
+        expect(await getChunks([source.id])).toEqual([]);
+        expect(await store().getSource(other.id)).toBeDefined();
         expect(await store().getStudy(book.id)).toBeUndefined();
         expect(await store().getStudy("mark")).toBeUndefined();
         expect(await ownerOf(card.id)).toEqual({ vault: DEFAULT_VAULT, notebookId });
+
+        // A source not opened in Study yet is deleted the same way, and its notebook with it once empty.
+        const single = await createNotebook("Single");
+        const unread = await addSource({ notebookId: single, title: "Unread", kind: "text", text: "Not opened." });
+        const word = await saveStudyWord({ term: "opened", language: "English", translation: "", note: "",
+          context: "Not opened.", notebookId: single,
+          origin: { kind: "source", notebookId: single, sourceId: unread.id, chunkId: `${unread.id}:0` } });
+        await deleteStudyDocument({ notebookId: single, sourceId: unread.id });
+        expect(await store().getSource(unread.id)).toBeUndefined();
+        expect(await store().getNotebook(single)).toBeUndefined();
+        expect(await ownerOf(word.id)).toEqual({ vault: DEFAULT_VAULT, notebookId: undefined });
+        await deleteStudyDocument({ notebookId: single, sourceId: unread.id });
       });
 
       it("keeps a book's saved text when its notebook source is deleted, and cleans up when the book goes", async () => {
@@ -1279,7 +1370,7 @@ describe.each(backends)("%s store", (name, create) => {
         expect(await store().getStudy("mark")).toBeDefined();
         expect(await store().getNotebook(book.notebookId)).toBeDefined();
 
-        await deleteStudyBook(book);
+        await deleteStudyDocument(book);
         expect(await store().getNotebook(book.notebookId)).toBeUndefined();
         expect(await store().listStudy()).toEqual([]);
       });
@@ -1301,7 +1392,6 @@ describe.each(backends)("%s store", (name, create) => {
         notebookId,
         fileId: source.originalFileId,
         format: "text",
-        attachedToNotebook: true,
         sections: [{
           text: "Control flow\nif ready:\n    start()",
           markdown: markdown.replaceAll("\r\n", "\n"),
@@ -1310,6 +1400,34 @@ describe.each(backends)("%s store", (name, create) => {
       expect(await getChunks([source.id])).toEqual(chunks);
       expect(await store().listNotebooks()).toHaveLength(1);
       expect(await store().listSources(notebookId)).toHaveLength(1);
+
+      // Opened from the notebook, it is edited like a document made in Study:
+      // the notebook keeps it as Markdown, with new passages.
+      const edited = "# Control flow\n\nRun `start()` when ready.";
+      await saveStudyText(study.id, edited, {
+        section: 0,
+        original: study.sections[0].text,
+        originalMarkdown: study.sections[0].markdown,
+        markdown: true,
+      });
+      expect(await store().getStudy(study.id)).toMatchObject({
+        sections: [{ text: "Control flow\nRun start() when ready.", markdown: edited }],
+        textEdits: [{ section: 0 }],
+      });
+      expect(await store().getSource(source.id)).toMatchObject({ text: edited, charCount: edited.length, studyRevision: 1 });
+      expect((await getChunks([source.id])).map(({ id, text }) => [id, text])).toEqual([[`${source.id}:1:0`, edited]]);
+    });
+
+    it("edits the text of a plain source opened from its notebook, with its passages", async () => {
+      const notebookId = await createNotebook("Physics");
+      const source = await addSource({ notebookId, title: "Lecture", kind: "url", text: "Energy is conserved." });
+      const book = await studyBookForSource(source.id);
+      await saveStudyText(book.id, "Energy is always conserved.", { section: 0, original: "Energy is conserved." });
+      expect(await store().getSource(source.id)).toMatchObject({ text: "Energy is always conserved.", studyRevision: 1 });
+      expect((await getChunks([source.id])).map(({ text }) => text)).toEqual(["Energy is always conserved."]);
+      expect((await store().getStudy(book.id))?.kind === "book" && (await store().getStudy(book.id))).toMatchObject({
+        sections: [{ title: "Lecture", text: "Energy is always conserved." }],
+      });
     });
 
     it("renames the notebook source and Study document together without replacing saved passages", async () => {
@@ -1360,7 +1478,8 @@ describe.each(backends)("%s store", (name, create) => {
         notebookId,
         url: "https://example.com/mitosis",
       });
-      expect(book).toMatchObject({ notebookId, attachedToNotebook: true, title: "Mitosis" });
+      expect(book).toMatchObject({ notebookId, title: "Mitosis" });
+      expect(book).not.toHaveProperty("attachedToNotebook");
       expect(await store().listNotebooks()).toHaveLength(1);
       const sources = await store().listSources(notebookId);
       expect(sources.map(({ id }) => id).sort()).toEqual([lecture.id, book.sourceId].sort());
@@ -1382,9 +1501,10 @@ describe.each(backends)("%s store", (name, create) => {
       expect((await store().getNotebook(notebookId))?.title).toBe("Cell biology");
       expect((await store().getSource(book.sourceId))?.title).toBe("Cell division");
 
-      await deleteStudyBook({ ...book, title: "Cell division" });
+      await deleteStudyDocument(book);
       expect(await store().getNotebook(notebookId)).toBeDefined();
       expect(await store().getSource(lecture.id)).toBeDefined();
+      expect(await store().getSource(book.sourceId)).toBeUndefined();
       expect(await store().getStudy(book.id)).toBeUndefined();
 
       await deleteNotebook(notebookId);
@@ -1427,7 +1547,7 @@ describe.each(backends)("%s store", (name, create) => {
       expect(await readFlashcardDraftPassages([origin], otherVault)).toMatchObject([
         { text: quote, origin: { kind: "book", bookId: book.id } },
       ]);
-      await deleteStudyBook(book);
+      await deleteStudyDocument(book);
       expect(await readFlashcardDraftPassages([origin], otherVault)).toEqual([]);
     });
 
@@ -1794,7 +1914,7 @@ describe.each(backends)("%s store", (name, create) => {
       expect(await store().getStudy("chosen-mark")).toMatchObject({ schedule: freshSchedule(0) });
       await updateNotebook(first.notebookId, { vaultId: other });
       expect((await readStudyTutorSources(thread, work)).highlights).toEqual([]);
-      await deleteStudyBook(first);
+      await deleteStudyDocument(first);
       expect(await startHighlightTutor(["chosen-mark"], work, "Discuss highlights")).toBeNull();
     });
 
@@ -2445,6 +2565,37 @@ describe.each(backends)("%s store", (name, create) => {
   });
 
   describe("backup", () => {
+    it("merges a backup's duplicate Study books and drops attachedToNotebook, as the upgrade does", async () => {
+      const fixture = duplicateBooksFixture();
+      const backup = {
+        app: "better-vault",
+        format: 8,
+        exportedAt: 1,
+        ...fixture,
+        messages: [],
+        outputs: [],
+        blobs: fixture.blobs.map((blob) => ({ ...blob, data: toBase64(blob.data) })),
+      };
+      const blobIds = async () => (await store().exportAll()).blobs.map(({ id }) => id);
+      expect(await importBackup(JSON.parse(JSON.stringify(backup)))).toBe(2);
+      expectMergedFixture(await store().listStudy(), await blobIds());
+      expect(await store().count("notebooks")).toBe(2);
+      expect(await store().count("sources")).toBe(3);
+      expect(await store().count("blobs")).toBe(1);
+
+      // Importing it again over the merged data brings the duplicate back only to merge it again.
+      await importBackup(JSON.parse(JSON.stringify(backup)));
+      expectMergedFixture(await store().listStudy(), await blobIds());
+
+      // A merged-away id still opens its book, and the source shows one document.
+      expect(await store().getStudyBookForSource("n1", "s1")).toMatchObject({ id: "imported", mergedIds: ["source-s1"] });
+      expect(await studyBookForSource("s1")).toMatchObject({ id: "imported" });
+
+      // A newer backup made before the merge, holding only the source's other book, is merged in the same way.
+      await importBackup(JSON.parse(JSON.stringify({ ...backup, study: [fixture.study[1]], blobs: [] })));
+      expect((await store().listStudy()).filter((row) => row.kind === "book" && row.sourceId === "s1")).toHaveLength(1);
+    });
+
     it("round-trips notebooks and rebuilds passages, without settings", async () => {
       const notebookId = await createNotebook("Kept");
       await addSource({ notebookId, title: "a", kind: "text", text: "hello world" });
@@ -2651,6 +2802,80 @@ describe("version 3 upgrade", () => {
     expect((await upgraded.sources.get("s1"))?.text).toBe("Contents\nCourse outcome");
     upgraded.close();
     await Dexie.delete(name);
+  });
+});
+
+describe("version 11 upgrade", () => {
+  it("merges duplicate Study books in one upgrade and leaves the rest of the data alone", async () => {
+    const { default: Dexie } = await import("dexie");
+    const name = "better-vault-upgrade-11-test";
+    const old = new Dexie(name);
+    old.version(10).stores({
+      notebooks: "id, updatedAt",
+      sources: "id, notebookId, createdAt",
+      chunks: "id, notebookId, sourceId, [sourceId+index]",
+      messages: "id, notebookId, conversationId, [conversationId+createdAt]",
+      conversations: "id, notebookId, [notebookId+updatedAt]",
+      outputs: "id, notebookId, status, [notebookId+createdAt]",
+      settings: "key",
+      folders: "id, parentId",
+      blobs: "id, notebookId, outputId, sourceId",
+      vaults: "id",
+      calendar: "id",
+      notes: "id, vaultId, updatedAt",
+      skills: "id, vaultId, name",
+      bots: "id, order",
+      botMessages: "id, botId, [botId+createdAt]",
+      study: "id, notebookId",
+    });
+    await old.open();
+    const fixture = duplicateBooksFixture();
+    await old.table("notebooks").bulkAdd(fixture.notebooks);
+    await old.table("sources").bulkAdd(fixture.sources);
+    await old.table("study").bulkAdd(fixture.study);
+    await old.table("blobs").bulkAdd(fixture.blobs);
+    old.close();
+
+    const { BetterVaultDatabase } = await import("./database");
+    const upgraded = new BetterVaultDatabase(name);
+    expectMergedFixture(await upgraded.study.toArray(), await upgraded.blobs.toCollection().primaryKeys());
+    expect(await upgraded.notebooks.toArray()).toEqual(fixture.notebooks);
+    expect(await upgraded.sources.toArray()).toEqual(fixture.sources);
+    expect(upgraded.verno).toBe(11);
+    upgraded.close();
+    await Dexie.delete(name);
+  });
+});
+
+describe("SQLite migration 9", () => {
+  it("merges duplicate Study books, keeps the rest, and runs once", () => {
+    const db = new DatabaseSync(":memory:");
+    const fresh = createSqliteStore(db);
+    const fixture = duplicateBooksFixture();
+    // Rows as version 8 left them: written directly, then the version set back.
+    for (const notebook of fixture.notebooks) fresh.addNotebook(notebook);
+    for (const source of fixture.sources) fresh.addSource(source, [], 1);
+    const insert = db.prepare("INSERT INTO study (id, notebook_id, doc) VALUES (?, ?, ?)");
+    for (const row of fixture.study) insert.run(row.id, row.notebookId ?? null, JSON.stringify(row));
+    for (const blob of fixture.blobs) fresh.putBlob(blob);
+    db.exec("PRAGMA user_version = 8");
+
+    const sqlite = createSqliteStore(db);
+    expect((db.prepare("PRAGMA user_version").get() as { user_version: number }).user_version).toBe(schemaVersion);
+    expect(schemaVersion).toBe(9);
+    const blobs = () => sqlite.exportAll().blobs.map(({ id }) => id);
+    expectMergedFixture(sqlite.listStudy(), blobs());
+    expect(sqlite.listNotebooks()).toHaveLength(2);
+    expect(sqlite.listAllSources()).toEqual(fixture.sources);
+    // The kept book is found through its source, and the indexed notebook column follows the rows.
+    expect(sqlite.getStudyBookForSource("n1", "s1")?.id).toBe("imported");
+    expect(db.prepare("SELECT COUNT(*) AS n FROM study WHERE notebook_id = 'n1'").get()).toEqual({
+      n: sqlite.listStudy().filter((row) => row.notebookId === "n1").length,
+    });
+
+    const merged = sqlite.listStudy();
+    createSqliteStore(db);
+    expect(sqlite.listStudy()).toEqual(merged);
   });
 });
 

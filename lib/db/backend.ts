@@ -13,6 +13,7 @@ import type {
   StudyWordResult,
   StudyWordWrite,
 } from "@/lib/study/records";
+import type { StudyDocument } from "@/lib/study/book-deletion";
 import type { StudioPracticeChange, StudioPracticeUpdate } from "@/studio/shared/practice";
 import type {
   Chunk,
@@ -29,6 +30,7 @@ import type {
   Skill,
   Bot,
   BotMessage,
+  SourceSummary,
 } from "./types";
 
 type DocumentRename = {
@@ -110,7 +112,14 @@ export interface Backend {
   listSources(notebookId: string): Promise<Source[]>;
   /** Every source of every notebook, for the search index. */
   listAllSources(): Promise<Source[]>;
+  /** Every source of every notebook without its text, for lists (the Study Library, the notes' links). */
+  listSourceSummaries(): Promise<SourceSummary[]>;
   patchSource(id: string, patch: Partial<Source>): Promise<void>;
+  /**
+   * Renames a document: its source and the Study book reading it, whichever
+   * is named, and its notebook when the notebook is named after its only
+   * source (`notebookFollowsDocument`).
+   */
   renameDocument(change: DocumentRename): Promise<void>;
   patchNotebookSources(notebookId: string, patch: Partial<Source>): Promise<void>;
   /** Deletes a source with its passages. */
@@ -154,9 +163,13 @@ export interface Backend {
 
   listStudy(): Promise<StudyRecord[]>;
   getStudy(id: string): Promise<StudyRecord | undefined>;
+  /** The Study book reading a notebook source. A source has at most one. */
   getStudyBookForSource(notebookId: string, sourceId: string): Promise<StudyBook | undefined>;
+  /** Adds or replaces rows. Fails on a book for a source another book already reads. */
   putStudy(rows: StudyRecord[]): Promise<void>;
+  /** Adds the rows whose id is new, and no book for a source another book already reads. Returns how many. */
   insertStudy(rows: StudyRecord[]): Promise<number>;
+  /** Adds the book for its source, or returns the one that already reads it. */
   attachStudyBook(book: StudyBook): Promise<StudyBook | undefined>;
   patchStudyBook(write: StudyBookWrite): Promise<void>;
   patchStudyThread(write: StudyThreadWrite): Promise<boolean>;
@@ -173,12 +186,19 @@ export interface Backend {
   saveStudyOcrPages(write: StudyOcrWrite): Promise<StudyOcrWriteResult>;
   deleteStudy(id: string): Promise<void>;
   /**
-   * Deletes a Study book with its highlights, drafts and pictures, keeping the
-   * cards, words and conversations made from it in their vault. An imported
-   * book also takes its source, and its notebook when nothing else is left
-   * there (`lib/study/book-deletion.ts`).
+   * "Delete document": deletes a notebook source with its passages and files,
+   * and its Study book with its highlights, drafts and pictures, keeping the
+   * cards, words and conversations made from it in their vault. The notebook
+   * goes too when nothing else is left there (`lib/study/book-deletion.ts`).
+   * Works on a book whose source is already gone, and on a source without a book.
    */
-  deleteStudyBook(id: string): Promise<void>;
+  deleteStudyDocument(document: StudyDocument): Promise<void>;
+  /**
+   * "Remove reading progress": forgets a book's reading place and bookmarks
+   * and deletes its highlights. The book keeps its text, and the source stays.
+   * False when the book is gone.
+   */
+  resetStudyBook(id: string, updatedAt: number): Promise<boolean>;
 
   getSetting(key: string): Promise<unknown>;
   putSetting(key: string, value: unknown): Promise<void>;
@@ -186,7 +206,11 @@ export interface Backend {
 
   /** Every vault, note, skill, bot, folder, notebook, source, conversation, message, output and file. */
   exportAll(): Promise<StoreContent>;
-  /** Adds content, replacing rows with the same id and the passages of its sources. */
+  /**
+   * Adds content, replacing rows with the same id and the passages of its
+   * sources, then merges Study books that read the same source, as the
+   * schema upgrade does (`studyBookMerge`).
+   */
   importAll(content: StoreContent, chunks: Chunk[]): Promise<void>;
   /** Deletes every vault, note, skill, bot, folder and notebook and everything in them. Settings are kept. */
   clearAll(): Promise<void>;
@@ -293,7 +317,8 @@ export const writes = {
   replaceStudyText: ["study", "sources", "chunks", "notebooks"],
   saveStudyOcrPages: ["study", "sources", "chunks", "notebooks"],
   deleteStudy: ["study"],
-  deleteStudyBook: ["study", "notebooks", "sources", "chunks", "blobs"],
+  deleteStudyDocument: ["study", "notebooks", "sources", "chunks", "blobs"],
+  resetStudyBook: ["study"],
   putSetting: ["settings"],
   clearSettings: ["settings"],
   importAll: [
@@ -369,6 +394,7 @@ export const backendMethods = [
   "getSources",
   "listSources",
   "listAllSources",
+  "listSourceSummaries",
   "patchSource",
   "renameDocument",
   "patchNotebookSources",
@@ -407,7 +433,8 @@ export const backendMethods = [
   "replaceStudyText",
   "saveStudyOcrPages",
   "deleteStudy",
-  "deleteStudyBook",
+  "deleteStudyDocument",
+  "resetStudyBook",
   "getSetting",
   "putSetting",
   "clearSettings",

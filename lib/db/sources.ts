@@ -145,8 +145,8 @@ export function useSourceTitles(
 ): Pick<Source, "id" | "notebookId" | "title">[] | undefined {
   return useStoreQuery(
     async () =>
-      (enabled ? await store().listAllSources() : [])
-        .filter((source) => !textOnly || sourceHasText(source))
+      (enabled ? await store().listSourceSummaries() : [])
+        .filter((source) => !textOnly || source.hasText)
         .map(({ id, notebookId, title }) => ({ id, notebookId, title })),
     [enabled, textOnly],
     ["sources"],

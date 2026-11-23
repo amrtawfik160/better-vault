@@ -24,7 +24,7 @@ import { sourceKindIcons } from "@/components/sources/source-kind";
 import { AddTranscriptDialog } from "@/components/sources/add-transcript-dialog";
 import { useNotebook } from "@/lib/db/notebooks";
 import { useSources } from "@/lib/db/sources";
-import { addStudyBook, deleteStudyBook, renameStudyBook, studyBookForSource } from "@/lib/db/study";
+import { addStudyBook, deleteStudyDocument, renameStudyBook, studyBookForSource } from "@/lib/db/study";
 import { currentVaultId } from "@/lib/db/vaults";
 import { routes } from "@/lib/routes";
 import { studyHref } from "@/lib/study/links";
@@ -442,7 +442,7 @@ export function StudyLibrary({
         }
         confirmLabel={t("study.library.delete")}
         onConfirm={async () => {
-          if (deleting) await deleteStudyBook(deleting);
+          if (deleting) await deleteStudyDocument(deleting);
           setDeleting(null);
         }}
       />

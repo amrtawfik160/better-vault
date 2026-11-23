@@ -23,6 +23,7 @@ import { legacyQuizCardSource, quizCardContent } from "@/lib/study/quiz-cards";
 import { studyFollowUpId, studyReportKey, studyReports } from "@/lib/study/reports";
 import { studyTutorContextSchema } from "@/lib/study/records";
 import { canEditStudyText, sourceStudyBookId } from "@/lib/study/library";
+import type { StudyDocument } from "@/lib/study/book-deletion";
 import { studyOriginRecordId, studyVaultIndex } from "@/lib/study/vault";
 import { clearTutorDraftRecovery } from "@/lib/study/tutor-draft-recovery";
 import { studyImageCropKey, studyImageFile, studyImageId, type StudyImageSnapshot } from "@/lib/study/visual-card";
@@ -640,7 +641,6 @@ export async function addStudyBook(input: {
       sections: input.sections,
       section: 0,
       bookmarks: [],
-      ...(existing ? { attachedToNotebook: true as const } : {}),
       updatedAt: Date.now(),
     };
     await putStudyRecords(book);
@@ -668,7 +668,6 @@ export async function studyBookForSource(sourceId: string) {
     sections: [{ title: source.title, text: source.text }],
     section: 0,
     bookmarks: [],
-    attachedToNotebook: true,
     updatedAt: Date.now(),
   };
   if (original?.mime === "application/pdf") {
@@ -705,15 +704,37 @@ export async function studyBookForSource(sourceId: string) {
   throw new Error("This source was removed.");
 }
 
+function clearBookDrafts(bookId: string) {
+  clearDocumentRecoveries(`document-draft:book:${bookId}:`);
+  clearFlashcardDraftsFrom(({ origin }) => origin.kind === "book" && origin.bookId === bookId);
+}
+
 /**
- * Deletes a Study book, its highlights and drafts. Cards, words and
- * conversations made from it stay. An imported book takes its source with it,
- * and its notebook when nothing else is in it.
+ * "Delete document": deletes a notebook source and the Study book reading it,
+ * with the book's highlights and drafts, however the document came in.
+ * Flashcards, words, conversations and practice made from it stay. The
+ * notebook goes too when nothing else is left in it. Takes a book (also one
+ * whose source was already deleted) or a source not opened in Study yet.
  */
-export async function deleteStudyBook(book: StudyBook) {
-  await store().deleteStudyBook(book.id);
-  clearDocumentRecoveries(`document-draft:book:${book.id}:`);
-  clearFlashcardDraftsFrom(({ origin }) => origin.kind === "book" && origin.bookId === book.id);
+export async function deleteStudyDocument(document: StudyDocument) {
+  const backend = store();
+  const book = await backend.getStudyBookForSource(document.notebookId, document.sourceId);
+  await backend.deleteStudyDocument({ notebookId: document.notebookId, sourceId: document.sourceId });
+  if (book) clearBookDrafts(book.id);
+}
+
+/**
+ * "Remove reading progress": forgets where the book was read up to, its
+ * bookmarks and its highlights. The source stays in its notebook, and the
+ * book keeps its text, so flashcards and the rest still open their passages.
+ */
+export async function removeStudyReadingProgress(book: StudyBook) {
+  if (!(await store().resetStudyBook(book.id, Date.now()))) throw new Error("This document was removed.");
+}
+
+/** Every source of every notebook, without its text, for the Study Library. `undefined` while loading. */
+export function useStudySources() {
+  return useStoreQuery(() => store().listSourceSummaries(), [], ["sources"]);
 }
 
 export type StudyCard = StudyRecordOf<"card">;
@@ -1185,7 +1206,7 @@ export async function saveStudyText(
   const backend = store();
   const book = await backend.getStudy(bookId);
   if (book?.kind !== "book" || !canEditStudyText(book))
-    throw new Error("Choose a text document created in Study.");
+    throw new Error("Only text and Markdown documents can be edited.");
   const section = draft?.section ?? 0;
   const previous = book.sections[section];
   if (!previous || (draft && (draft.original !== previous.text || draft.originalMarkdown !== previous.markdown)))
@@ -1208,12 +1229,21 @@ export async function saveStudyText(
   const keepLegacyHeading =
     book.sections.length === 1 &&
     source.text === normaliseText(`${book.sections[0].title}\n\n${previousText}`);
+  // A Markdown file added in a notebook keeps its Markdown as the source's
+  // text; a document made in Study keeps the text as read.
+  const keepMarkdown =
+    book.sections.length === 1 &&
+    previous.markdown !== undefined &&
+    content.markdown !== undefined &&
+    source.text === normaliseText(previous.markdown);
   const sourceText = normaliseText(
-    book.sections.length === 1 && !keepLegacyHeading
-      ? body
-      : book.sections
-          .map((chapter, index) => `${chapter.title}\n\n${index === section ? body : chapter.text}`)
-          .join("\n\n"),
+    keepMarkdown
+      ? (content.markdown ?? body)
+      : book.sections.length === 1 && !keepLegacyHeading
+        ? body
+        : book.sections
+            .map((chapter, index) => `${chapter.title}\n\n${index === section ? body : chapter.text}`)
+            .join("\n\n"),
   );
   if (!sourceText) throw new Error("The document needs readable text.");
   const revision = studyTextRevision(book);

@@ -1,5 +1,6 @@
 import type { StudyRecord } from "@/lib/study/records";
-import Dexie, { type EntityTable } from "dexie";
+import { movedStudyImageId, sameStudyImage, studyBookMerge, studyImageIdPrefix } from "@/lib/study/book-merge";
+import Dexie, { type EntityTable, type InsertType } from "dexie";
 import { conversationTitle } from "@/lib/chat/title";
 import { cleanText } from "@/lib/grounding/clean";
 import type {
@@ -149,5 +150,35 @@ export class BetterVaultDatabase extends Dexie {
       botMessages: "id, botId, [botId+createdAt]",
     });
     this.version(10).stores({ study: "id, notebookId" });
+    // Version 11: one Study book per notebook source. Books reading the same
+    // source are merged into the oldest, and `attachedToNotebook` is dropped.
+    // Ids are otherwise kept. SQLite migration 9 does the same.
+    this.version(11).upgrade((tx) =>
+      mergeStudyBooks(
+        tx.table<StudyRecord, string, InsertType<StudyRecord, "id">>("study"),
+        tx.table<StoredBlob, string, InsertType<StoredBlob, "id">>("blobs"),
+      ),
+    );
+  }
+}
+
+/**
+ * Merges Study books that read the same source (`studyBookMerge`), and moves
+ * the pictures saved under a merged-away book's id. Run inside a transaction
+ * on both tables: the version 11 upgrade, and each backup import.
+ */
+export async function mergeStudyBooks(study: EntityTable<StudyRecord, "id">, blobs: EntityTable<StoredBlob, "id">) {
+  const plan = studyBookMerge(await study.toArray());
+  if (plan.remove.length) await study.bulkDelete(plan.remove);
+  if (plan.put.length) await study.bulkPut(plan.put);
+  if (!plan.moved.size) return;
+  for (const image of await blobs.where("id").startsWith(studyImageIdPrefix).toArray()) {
+    const id = movedStudyImageId(image.id, plan.moved);
+    if (!id) continue;
+    const existing = await blobs.get(id);
+    if (!existing) await blobs.add({ ...image, id });
+    // The kept book's own picture of the same place wins; the other stays where it was, unless it is the same picture.
+    else if (!sameStudyImage(existing, image)) continue;
+    await blobs.delete(image.id);
   }
 }

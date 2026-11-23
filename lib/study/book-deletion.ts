@@ -2,23 +2,25 @@ import type { Note, Notebook, Vault } from "@/lib/db/types";
 import type { StudyBook, StudyOrigin, StudyRecord } from "./records";
 import { DEFAULT_VAULT, studyOriginRecordId, studyVaultIndex } from "./vault";
 
-/** What a book's notebook holds outside the study table. */
+/** What a document's notebook holds outside the study table. */
 export type StudyBookNotebookContent = {
-  /** Sources other than the book's own. */
+  /** Sources other than the document's own. */
   otherSources: boolean;
   conversations: boolean;
   outputs: boolean;
 };
 
+/** A document: a notebook source, and the Study book that reads it when it has one. */
+export type StudyDocument = { notebookId: string; sourceId: string };
+
 export type StudyBookDeletion = {
-  book: StudyBook;
+  /** The Study book reading the source, when there is one. */
+  book?: StudyBook;
   /** The book and the rows that only exist on it: highlights, scan and document drafts. */
   remove: string[];
-  /** Rows made from the book that stay, saved with the vault they were in. */
+  /** Rows made from the document that stay, saved with the vault they were in. */
   keep: StudyRecord[];
-  /** The book's own source goes with it (an imported book whose source no other book reads). */
-  deleteSource: boolean;
-  /** Nothing else is left in the notebook once the book is gone. */
+  /** Nothing else is left in the notebook once the document is gone. */
   deleteNotebook: boolean;
 };
 
@@ -52,71 +54,77 @@ function linkedIds(row: StudyRecord): (string | undefined)[] {
   return ids;
 }
 
+/** The Study book that reads a notebook source: there is at most one. */
+export function studyBookOf(rows: readonly StudyRecord[], { notebookId, sourceId }: StudyDocument) {
+  return rows.find(
+    (row): row is StudyBook => row.kind === "book" && row.notebookId === notebookId && row.sourceId === sourceId,
+  );
+}
+
 /**
- * Works out what deleting a Study book removes, so both stores do the same in
- * one transaction.
+ * Works out what "Delete document" removes, so both stores do the same in one
+ * transaction. The same rules apply however the document came in.
  *
- * The book takes with it what only exists on it: its highlights, reading place
- * and bookmarks (fields of the book), and its scan and document drafts.
- * Flashcards, words, Tutor conversations, practice sessions and review history
- * made from it stay: they carry their own text, and their schedules are the
- * learner's progress. They keep the vault they were in.
+ * The source goes from its notebook, with its passages and files (the store
+ * does that). Its Study book goes with what only exists on it: its
+ * highlights, reading place and bookmarks (fields of the book), and its scan
+ * and document drafts. Flashcards, words, Tutor conversations, practice
+ * sessions and review history made from it stay: they carry their own text,
+ * and their schedules are the learner's progress. They keep the vault they
+ * were in.
  *
- * An imported book (not `attachedToNotebook`) also takes its own source, and
- * its notebook when nothing else is left there: no other source, chat, output,
- * note or study record. A book read from a notebook source leaves both.
+ * The notebook goes too when nothing else is left there: no other source,
+ * chat, output, note or study record.
  */
 export function studyBookDeletion(
   data: Data,
-  bookId: string,
+  document: StudyDocument,
   content: StudyBookNotebookContent,
-): StudyBookDeletion | undefined {
-  const book = data.rows.find((row): row is StudyBook => row.kind === "book" && row.id === bookId);
-  if (!book) return;
-  const { notebookId, sourceId } = book;
-  const bound = new Set([book.id]);
-  for (const row of data.rows) {
-    if ((row.kind === "highlight" || row.kind === "document-draft" || row.kind === "ocr-draft") && row.bookId === book.id)
-      bound.add(row.id);
+): StudyBookDeletion {
+  const { notebookId, sourceId } = document;
+  const book = studyBookOf(data.rows, document);
+  const bookId = book?.id;
+  const bound = new Set<string>();
+  if (bookId) {
+    bound.add(bookId);
+    for (const row of data.rows) {
+      if ((row.kind === "highlight" || row.kind === "document-draft" || row.kind === "ocr-draft") && row.bookId === bookId)
+        bound.add(row.id);
+    }
   }
 
-  const ofBook = (origin: StudyOrigin | undefined) =>
+  const ofDocument = (origin: StudyOrigin | undefined) =>
     origin?.kind === "book"
-      ? origin.bookId === book.id
+      ? origin.bookId === bookId
       : origin?.kind === "source" && origin.notebookId === notebookId && origin.sourceId === sourceId;
-  const madeFromBook = (row: StudyRecord) =>
-    origins(row).some(ofBook) ||
-    ("bookId" in row && row.bookId === book.id) ||
-    (row.kind === "card" && (row.citations ?? []).some((cite) => "bookId" in cite && cite.bookId === book.id)) ||
-    (row.kind === "thread" && Boolean(row.bookIds?.includes(book.id) || row.sourceIds?.includes(sourceId)));
+  const madeFromDocument = (row: StudyRecord) =>
+    origins(row).some(ofDocument) ||
+    (bookId !== undefined && "bookId" in row && row.bookId === bookId) ||
+    (row.kind === "card" && (row.citations ?? []).some((cite) => "bookId" in cite && cite.bookId === bookId)) ||
+    (row.kind === "thread" && Boolean((bookId && row.bookIds?.includes(bookId)) || row.sourceIds?.includes(sourceId)));
 
-  // Rows made from the book, directly or through another such row (a word's
-  // card, a highlight's review history).
+  // Rows made from the document, directly or through another such row (a
+  // word's card, a highlight's review history).
   const derived = new Set<string>();
   const candidates = data.rows.filter((row) => row.kind !== "book" && !bound.has(row.id));
   for (let changed = true; changed; ) {
     changed = false;
     for (const row of candidates) {
       if (derived.has(row.id)) continue;
-      if (madeFromBook(row) || linkedIds(row).some((id) => id && (bound.has(id) || derived.has(id)))) {
+      if (madeFromDocument(row) || linkedIds(row).some((id) => id && (bound.has(id) || derived.has(id)))) {
         derived.add(row.id);
         changed = true;
       }
     }
   }
 
-  const attached = Boolean(book.attachedToNotebook);
-  const sharedSource = data.rows.some(
-    (row) => row.kind === "book" && row.id !== book.id && row.notebookId === notebookId && row.sourceId === sourceId,
-  );
-  const deleteSource = !attached && !sharedSource;
   const othersInNotebook =
     content.otherSources ||
     content.conversations ||
     content.outputs ||
     data.notes.some((note) => note.notebookId === notebookId) ||
     data.rows.some((row) => row.notebookId === notebookId && !bound.has(row.id) && !derived.has(row.id));
-  const deleteNotebook = deleteSource && !othersInNotebook;
+  const deleteNotebook = !othersInNotebook;
 
   const { owner } = studyVaultIndex({ ...data, defaultVaultId: DEFAULT_VAULT });
   const pointsAtNotebook = (row: StudyRecord) =>
@@ -130,5 +138,16 @@ export function studyBookDeletion(
     return next.vaultId === row.vaultId && next.notebookId === row.notebookId ? [] : [next];
   });
 
-  return { book, remove: [...bound], keep, deleteSource, deleteNotebook };
+  return { book, remove: [...bound], keep, deleteNotebook };
+}
+
+/**
+ * "Remove reading progress": the book keeps its text, its text edits and how
+ * it is shown, so what was made from it still finds its passages, and forgets
+ * where the reader was and its bookmarks. The store deletes its highlights in
+ * the same transaction.
+ */
+export function studyBookWithoutProgress(book: StudyBook, updatedAt: number): StudyBook {
+  const { readingPlace: _place, lastReadAt: _read, bookmarkPlaces: _places, ...rest } = book;
+  return { ...rest, section: 0, bookmarks: [], updatedAt: Math.max(book.updatedAt, updatedAt) };
 }

@@ -1,5 +1,7 @@
 import type { StudyRecord } from "@/lib/study/records";
-import { studyBookDeletion } from "@/lib/study/book-deletion";
+import { studyBookDeletion, studyBookWithoutProgress } from "@/lib/study/book-deletion";
+import { duplicateBookError } from "@/lib/study/book-merge";
+import { notebookFollowsDocument } from "@/lib/study/library";
 import { canWriteStudyDocumentDraft, studyDocumentDraftId } from "@/lib/study/document-drafts";
 import { DEFAULT_VAULT } from "@/lib/study/vault";
 import { patchedStudyReviewItem } from "@/lib/study/recall";
@@ -10,9 +12,9 @@ import { detachedVocabularyCard, vocabularyCardId, vocabularyChanges } from "@/l
 import { studyImagePrefix } from "@/lib/study/visual-card";
 import { updatedStudioPractice } from "@/studio/shared/practice";
 import type { Backend } from "./backend";
-import { BetterVaultDatabase } from "./database";
-import { sourceHasText } from "./source-text";
-import type { Source, StudioOutput } from "./types";
+import { BetterVaultDatabase, mergeStudyBooks } from "./database";
+import { sourceHasText, sourceSummary } from "./source-text";
+import type { Source, SourceSummary, StudioOutput } from "./types";
 
 /** The web app's backend: the IndexedDB database in `./database`. */
 export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
@@ -40,6 +42,21 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
       .where("notebookId")
       .equals(notebookId)
       .filter((row) => row.kind === "book" && row.sourceId === sourceId);
+  /** The book rows among `rows` that would give a source a second Study book. */
+  const duplicateBooks = async (rows: readonly StudyRecord[]) => {
+    const duplicates = new Set<string>();
+    const claimed = new Map<string, string>();
+    for (const row of rows) {
+      if (row.kind !== "book") continue;
+      const key = JSON.stringify([row.notebookId, row.sourceId]);
+      const owner =
+        claimed.get(key) ??
+        (await studyBooksForSource(row.notebookId, row.sourceId).filter(({ id }) => id !== row.id).first())?.id;
+      if (owner && owner !== row.id) duplicates.add(row.id);
+      else claimed.set(key, row.id);
+    }
+    return duplicates;
+  };
 
   return {
     db,
@@ -155,6 +172,13 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
     getSources: async (ids) =>
       (await db.sources.bulkGet(ids)).filter((source): source is Source => source !== undefined),
     listAllSources: () => db.sources.toArray(),
+    listSourceSummaries: async () => {
+      const summaries: SourceSummary[] = [];
+      await db.sources.each((source) => {
+        summaries.push(sourceSummary(source));
+      });
+      return summaries;
+    },
     listSources: (notebookId) =>
       db.sources.where("notebookId").equals(notebookId).sortBy("createdAt"),
     patchSource: async (id, patch) => {
@@ -166,16 +190,19 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
         const linkedBook = entry?.kind === "book" ? entry : undefined;
         if (kind === "book" && !linkedBook) return;
         const sourceId = linkedBook?.sourceId ?? id;
-        const source = await db.sources.get(sourceId);
-        const notebookId = linkedBook?.notebookId ?? source?.notebookId;
+        const found = await db.sources.get(sourceId);
+        const notebookId = linkedBook?.notebookId ?? found?.notebookId;
         if (!notebookId) return;
-        const books = await studyBooksForSource(notebookId, sourceId).toArray();
-        for (const book of books) {
-          if (book.kind === "book" && book.sourceId === sourceId)
-            await db.study.put(renamedStudyBook(book, title, updatedAt));
-        }
-        if (source?.notebookId === notebookId) await db.sources.update(source.id, { title });
-        if (linkedBook && !linkedBook.attachedToNotebook)
+        const source = found?.notebookId === notebookId ? found : undefined;
+        const books = (await studyBooksForSource(notebookId, sourceId).toArray()).filter(
+          (book) => book.kind === "book",
+        );
+        const notebook = await db.notebooks.get(notebookId);
+        const others = (await db.sources.where("notebookId").equals(notebookId).count()) - (source ? 1 : 0);
+        const previous = source?.title ?? books[0]?.title;
+        for (const book of books) await db.study.put(renamedStudyBook(book, title, updatedAt));
+        if (source) await db.sources.update(source.id, { title });
+        if (notebookFollowsDocument(notebook, others, previous))
           await db.notebooks.update(notebookId, { title, updatedAt });
       }),
     patchNotebookSources: async (notebookId, patch) => {
@@ -288,14 +315,18 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
       const row = await studyBooksForSource(notebookId, sourceId).first();
       return row?.kind === "book" ? row : undefined;
     },
-    putStudy: async (rows) => {
-      await db.study.bulkPut(rows);
-    },
+    putStudy: (rows) =>
+      db.transaction("rw", db.study, async () => {
+        if ((await duplicateBooks(rows)).size) throw new Error(duplicateBookError);
+        await db.study.bulkPut(rows);
+      }),
     insertStudy: (rows) =>
       db.transaction("rw", db.study, async () => {
         const unique = [...new Map(rows.map((row) => [row.id, row])).values()];
         const existing = await db.study.bulkGet(unique.map(({ id }) => id));
-        const pending = unique.filter((_, index) => !existing[index]);
+        const fresh = unique.filter((_, index) => !existing[index]);
+        const duplicates = await duplicateBooks(fresh);
+        const pending = fresh.filter(({ id }) => !duplicates.has(id));
         await db.study.bulkAdd(pending);
         return pending.length;
       }),
@@ -304,6 +335,8 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
         const source = await db.sources.get(book.sourceId);
         if (source?.notebookId !== book.notebookId || !(await db.notebooks.get(book.notebookId)))
           return;
+        const reading = await studyBooksForSource(book.notebookId, book.sourceId).first();
+        if (reading?.kind === "book") return reading;
         const existing = await db.study.get(book.id);
         if (existing) {
           return existing.kind === "book" &&
@@ -435,14 +468,13 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
         await db.study.delete(id);
       }),
 
-    deleteStudyBook: (id) =>
+    deleteStudyDocument: (document) =>
       db.transaction(
         "rw",
         [db.study, db.notebooks, db.vaults, db.notes, db.sources, db.chunks, db.conversations, db.outputs, db.blobs],
         async () => {
-          const book = await db.study.get(id);
-          if (book?.kind !== "book") return;
-          const { notebookId, sourceId } = book;
+          const { notebookId, sourceId } = document;
+          const ownSource = (await db.sources.get(sourceId))?.notebookId === notebookId;
           const [rows, notebooks, vaults, notes, sources, conversations, outputs] = await Promise.all([
             db.study.toArray(),
             db.notebooks.toArray(),
@@ -452,16 +484,16 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
             db.conversations.where("notebookId").equals(notebookId).count(),
             db.outputs.where("notebookId").equals(notebookId).count(),
           ]);
-          const plan = studyBookDeletion({ rows, notebooks, vaults, notes }, id, {
+          const plan = studyBookDeletion({ rows, notebooks, vaults, notes }, document, {
             otherSources: sources.some((key) => key !== sourceId),
             conversations: conversations > 0,
             outputs: outputs > 0,
           });
-          if (!plan) return;
+          if (!plan.book && !ownSource) return;
           await db.study.bulkDelete(plan.remove);
           await db.study.bulkPut(plan.keep);
-          await db.blobs.where("id").startsWith(studyImagePrefix(id)).delete();
-          if (plan.deleteSource) {
+          if (plan.book) await db.blobs.where("id").startsWith(studyImagePrefix(plan.book.id)).delete();
+          if (ownSource) {
             await db.chunks.where("sourceId").equals(sourceId).delete();
             await db.blobs.where("sourceId").equals(sourceId).delete();
             await db.sources.delete(sourceId);
@@ -472,6 +504,14 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
           }
         },
       ),
+    resetStudyBook: (id, updatedAt) =>
+      db.transaction("rw", db.study, async () => {
+        const book = await db.study.get(id);
+        if (book?.kind !== "book") return false;
+        await db.study.filter((row) => row.kind === "highlight" && row.bookId === id).delete();
+        await db.study.put(studyBookWithoutProgress(book, updatedAt));
+        return true;
+      }),
     exportAll: async () => {
       const [
         study,
@@ -542,6 +582,7 @@ export function createDexieBackend(db = new BetterVaultDatabase()): Backend & {
         await db.messages.bulkPut(data.messages);
         await db.outputs.bulkPut(data.outputs);
         await db.blobs.bulkPut(data.blobs);
+        await mergeStudyBooks(db.study, db.blobs);
       }),
     clearAll: () =>
       db.transaction("rw", content, async () => {

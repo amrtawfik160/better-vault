@@ -1,8 +1,25 @@
 import { chunkText } from "@/lib/grounding/chunk";
-import type { Chunk, Source } from "./types";
+import type { Chunk, Source, SourceSummary } from "./types";
 
 export function sourceHasText({ text }: Pick<Source, "text">) {
   return Boolean(text.trim());
+}
+
+/** Whether Study can open the source: it has text, or the PDF or EPUB it was read from. */
+export function sourceIsReadable(source: Pick<Source, "text" | "kind" | "originalFileId">) {
+  return sourceHasText(source) || ((source.kind === "pdf" || source.kind === "epub") && Boolean(source.originalFileId));
+}
+
+export function sourceSummary(source: Source): SourceSummary {
+  return {
+    id: source.id,
+    notebookId: source.notebookId,
+    title: source.title,
+    kind: source.kind,
+    createdAt: source.createdAt,
+    hasText: sourceHasText(source),
+    readable: sourceIsReadable(source),
+  };
 }
 
 export function selectedTextSource(source: Pick<Source, "text" | "selected">) {

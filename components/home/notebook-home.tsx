@@ -117,8 +117,8 @@ export function NotebookHome() {
   const counts = useNotebookCounts();
   const studyBooks = useStudyBooks();
   const libraryIds = useMemo(
-    () => libraryNotebookIds(studyBooks ?? [], counts ?? new Map()),
-    [studyBooks, counts],
+    () => libraryNotebookIds(studyBooks ?? [], counts ?? new Map(), allNotebooks ?? []),
+    [studyBooks, counts, allNotebooks],
   );
   const vaults = useVaults();
   const selectedVault = useCurrentVault(vaults);

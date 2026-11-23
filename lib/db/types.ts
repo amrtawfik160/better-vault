@@ -224,6 +224,19 @@ export interface Source {
   createdAt: number;
 }
 
+/** A source without its text, for lists: the notes' links and the Study Library. */
+export interface SourceSummary {
+  id: string;
+  notebookId: string;
+  title: string;
+  kind: SourceKind;
+  createdAt: number;
+  /** It has text (`sourceHasText`). */
+  hasText: boolean;
+  /** It can be read in Study: it has text, or a PDF or EPUB original (`sourceIsReadable`). */
+  readable: boolean;
+}
+
 export interface SourceImage {
   blobId: string;
   /** Where in the text it belongs: a character offset. */
