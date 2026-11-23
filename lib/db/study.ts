@@ -577,6 +577,8 @@ export async function addStudyBook(input: {
   bytes?: Uint8Array;
   mime?: string;
   vaultId?: string;
+  /** Where it came from, e.g. the video a transcript is of. Kept on the notebook source. */
+  url?: string;
 }): Promise<StudyBook> {
   const title = input.title.trim() || "Untitled";
   const notebookId = await createNotebook(title, { vaultId: input.vaultId ?? currentVaultId() });
@@ -593,6 +595,7 @@ export async function addStudyBook(input: {
       title,
       text,
       kind: input.format,
+      url: input.url,
       original: input.bytes && input.mime ? { data: input.bytes, mime: input.mime } : undefined,
     });
     const book: StudyBook = {

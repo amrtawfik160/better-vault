@@ -45,7 +45,8 @@
       "file": "Upload",
       "url": "Web page",
       "text": "Paste text",
-      "cloud": "From storage"
+      "cloud": "From storage",
+      "media": "Transcript"
     },
     "drop": "Drop files here",
     "choose": "Choose files",
@@ -69,5 +70,51 @@
     "read": "Could not read {{name}}: {{error}}",
     "url": "Enter a full address starting with http:// or https://."
   },
-  "picture": "Picture from {{title}}"
+  "picture": "Picture from {{title}}",
+  "transcript": {
+    "open": "Add a video or podcast",
+    "title": "Add a video or podcast",
+    "description": "Save its transcript as a document you can read, highlight and practise with.",
+    "methodsLabel": "How to add it",
+    "methods": {
+      "paste": "Paste transcript",
+      "subtitles": "Subtitles",
+      "recording": "Audio or video"
+    },
+    "titleLabel": "Title",
+    "titlePlaceholder": "Lecture 3: the heart",
+    "linkLabel": "Link to the video or episode (optional)",
+    "linkPlaceholder": "https://www.youtube.com/watch?v=…",
+    "linkHint": "Saved at the top of the transcript so you can go back to it. Nothing is downloaded from it.",
+    "linkInvalid": "Enter a full address starting with http:// or https://.",
+    "textLabel": "Transcript",
+    "pastePlaceholder": "Paste the transcript here",
+    "pasteTip": "On YouTube, open the video's description, choose Show transcript, then select the text and copy it. Its times become [mm:ss] marks.",
+    "subtitlesDrop": "Drop an SRT or VTT file here",
+    "subtitlesHint": "Subtitles are read on this device. Lines repeated by automatic captions are kept once.",
+    "chooseFile": "Choose file",
+    "chooseAnother": "Choose another file",
+    "recordingDrop": "Drop an audio or video file here",
+    "providerLabel": "Transcribe with",
+    "limit": "{{provider}} transcribes files up to {{size}} MB ({{formats}}).",
+    "longer": "For a longer recording, split it into parts, upload its subtitles or paste its transcript.",
+    "sentTo": "The recording is sent to {{provider}} with your API key. This app doesn't keep it.",
+    "noProvider": "To transcribe recordings, add an OpenAI or ElevenLabs API key in Settings → AI providers. You can still paste a transcript or upload subtitles.",
+    "uploading": "Uploading {{name}}…",
+    "transcribing": "Transcribing {{name}}…",
+    "takesAWhile": "This can take a few minutes for a long recording.",
+    "stop": "Stop",
+    "stopped": "Transcription stopped.",
+    "save": "Save transcript",
+    "errors": {
+      "type": "{{provider}} can't transcribe {{name}}. Use {{formats}}.",
+      "tooLarge": "{{name}} is larger than {{size}} MB. Split it into parts, or use its subtitles or transcript.",
+      "failed": "Could not transcribe {{name}}: {{error}}",
+      "empty": "No speech was found in {{name}}.",
+      "stopped": "The transcription of {{name}} stopped before it finished. Try again.",
+      "subtitles": "No subtitles were found in {{name}}.",
+      "subtitlesType": "{{name}} is not an SRT or VTT file.",
+      "subtitlesTooLarge": "{{name}} is larger than 10 MB."
+    }
+  }
 }

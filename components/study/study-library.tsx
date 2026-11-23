@@ -5,6 +5,7 @@ import {
   FileImportIcon,
   MoreHorizontalIcon,
   PencilEdit01Icon,
+  PodcastIcon,
 } from "@hugeicons/core-free-icons";
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -19,6 +20,7 @@ import { Dialog } from "@/components/panelui/dialog";
 import { Input } from "@/components/panelui/input";
 import { Menu } from "@/components/panelui/menu";
 import { sourceKindIcons } from "@/components/sources/source-kind";
+import { AddTranscriptDialog } from "@/components/sources/add-transcript-dialog";
 import { useNotebook } from "@/lib/db/notebooks";
 import { useSources } from "@/lib/db/sources";
 import { addStudyBook, deleteStudyBook, renameStudyBook, studyBookForSource } from "@/lib/db/study";
@@ -66,6 +68,7 @@ export function StudyLibrary({
   const [deleting, setDeleting] = useState<StudyBook | null>(null);
   const [editing, setEditing] = useState<StudyBook | null>(null);
   const [drafting, setDrafting] = useState<string>();
+  const [addingMedia, setAddingMedia] = useState<string>();
   const [dragging, setDragging] = useState(false);
   const recovery = useStudyDocumentRecovery({ id: studyDocumentDraftId({ vaultId }), vaultId });
   const sources = useSources(notebookId ?? "");
@@ -179,6 +182,10 @@ export function StudyLibrary({
                   ? "study.documentEditor.resumeNew"
                   : "study.library.newText",
               )}
+            </Button>
+            <Button shape="pill" variant="outline" onClick={() => setAddingMedia(vaultId)}>
+              <Icon icon={PodcastIcon} />
+              {tSources("transcript.open")}
             </Button>
             <Button shape="pill" onClick={() => input.current?.click()} disabled={loading}>
               <Icon icon={FileImportIcon} />
@@ -361,6 +368,23 @@ export function StudyLibrary({
           onClose={() => setDrafting(undefined)}
           onSave={(book) => {
             setDrafting((current) => (current === vaultId ? undefined : current));
+            if (currentVaultId() === vaultId) openBook(book);
+          }}
+        />
+      ) : null}
+      {addingMedia === vaultId ? (
+        <AddTranscriptDialog
+          key={vaultId}
+          onClose={() => setAddingMedia(undefined)}
+          onSave={async ({ title, text, link }) => {
+            const book = await addStudyBook({
+              title,
+              format: "text",
+              sections: [{ title, ...studyDocumentContent(text, false) }],
+              vaultId,
+              url: link,
+            });
+            setAddingMedia((current) => (current === vaultId ? undefined : current));
             if (currentVaultId() === vaultId) openBook(book);
           }}
         />
