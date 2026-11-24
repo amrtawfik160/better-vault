@@ -1,70 +1,29 @@
 import { speechLanguage } from "@/lib/study/translation-language";
-import type { KokoroReply, KokoroRequest } from "./kokoro-protocol";
+import type { KokoroReply } from "./kokoro-protocol";
+import {
+  canRunVoiceModel,
+  checkReadingVoice,
+  downloadReadingVoice,
+  onVoiceReply,
+  rememberWaitingText,
+  sendToVoice,
+  voiceDeclined,
+} from "./reading-voice";
 import { spokenText } from "./spoken-text";
 import { systemVoice } from "./system-voice";
 
 /**
  * Reads text aloud. English is read by Kokoro, a neural voice that runs on
- * the device (`kokoro-worker.ts`); other languages, and English when Kokoro
- * can't run, by the system's best voice for the language.
+ * the device (`reading-voice.ts`), once it is downloaded; other languages,
+ * and English until then, by the system's best voice for the language.
  */
-
-/** The voice's first download: how far it got, then whether the voice is ready. */
-export type VoiceDownload = { loaded: number; total: number } | "ready" | "failed";
-
-const downloadListeners = new Set<(download: VoiceDownload) => void>();
-
-export function subscribeVoiceDownload(listener: (download: VoiceDownload) => void) {
-  downloadListeners.add(listener);
-  return () => void downloadListeners.delete(listener);
-}
-
-function announce(download: VoiceDownload) {
-  for (const listener of downloadListeners) listener(download);
-}
 
 type Reading = { id: number; handle: (reply: KokoroReply) => void; stop: () => void };
 
-let worker: Worker | undefined;
 let audio: AudioContext | undefined;
 let reading: Reading | undefined;
 let lastId = 0;
-
-function canRunKokoro() {
-  return (
-    typeof window !== "undefined" &&
-    typeof Worker === "function" &&
-    typeof WebAssembly === "object" &&
-    typeof AudioContext === "function"
-  );
-}
-
-function kokoro() {
-  if (!worker) {
-    worker = new Worker(new URL("./kokoro-worker.ts", import.meta.url), { type: "module" });
-    worker.addEventListener("message", (event: MessageEvent<KokoroReply>) => {
-      const reply = event.data;
-      if (reply.type === "progress") return announce({ loaded: reply.loaded, total: reply.total });
-      if (reply.type === "loaded") return announce("ready");
-      if (reply.type === "failed") {
-        console.warn("The on-device voice could not load:", reply.message);
-        return announce("failed");
-      }
-      if (reading?.id === reply.id) reading.handle(reply);
-    });
-    worker.addEventListener("error", () => {
-      announce("failed");
-      reading?.handle({ type: "error", id: reading.id, message: "The voice stopped." });
-      worker?.terminate();
-      worker = undefined;
-    });
-  }
-  return worker;
-}
-
-function send(request: KokoroRequest) {
-  kokoro().postMessage(request);
-}
+let listening = false;
 
 /** Stops whatever is being read aloud. */
 export function stopSpeaking() {
@@ -73,19 +32,26 @@ export function stopSpeaking() {
   if (typeof window !== "undefined") window.speechSynthesis?.cancel();
 }
 
-/** Starts the voice's download ahead of the first Listen, as a voice conversation begins. */
+/** Loads the voice ahead of the first reply, as a voice conversation begins. */
 export function prepareSpeech() {
-  if (canRunKokoro()) send({ type: "prepare" });
+  void checkReadingVoice().then((voice) => {
+    if (voice.status === "installed") sendToVoice({ type: "load" });
+    else if (voice.status === "missing" && !voiceDeclined()) void downloadReadingVoice();
+  });
 }
 
-/**
- * Reads English with Kokoro: "spoken", or "failed" before a sound was made,
- * as while the model downloads the first time.
- */
+/** Reads English with Kokoro: "spoken", or "failed" before a sound was made. */
 function speakWithKokoro(text: string, signal?: AbortSignal): Promise<"spoken" | "failed"> {
   const id = ++lastId;
   const context = (audio ??= new AudioContext());
   void context.resume();
+  if (!listening) {
+    listening = true;
+    onVoiceReply((reply) => {
+      if (reply.type === "failed") reading?.handle(reply);
+      else if ("id" in reply && reading?.id === reply.id) reading.handle(reply);
+    });
+  }
 
   return new Promise((resolve) => {
     const sources = new Set<AudioBufferSourceNode>();
@@ -110,7 +76,7 @@ function speakWithKokoro(text: string, signal?: AbortSignal): Promise<"spoken" |
         }
       }
       sources.clear();
-      send({ type: "stop" });
+      sendToVoice({ type: "stop" });
       finish("spoken");
     }
 
@@ -136,9 +102,7 @@ function speakWithKokoro(text: string, signal?: AbortSignal): Promise<"spoken" |
         } else if (reply.type === "done") {
           generated = true;
           if (sources.size === 0) finish("spoken");
-        } else if (reply.type === "downloading") {
-          finish("failed");
-        } else if (reply.type === "error") {
+        } else if (reply.type === "error" || reply.type === "failed") {
           console.warn("The on-device voice failed:", reply.message);
           finish(played ? "spoken" : "failed");
         }
@@ -146,7 +110,7 @@ function speakWithKokoro(text: string, signal?: AbortSignal): Promise<"spoken" |
     };
     if (signal?.aborted) return stop();
     signal?.addEventListener("abort", stop, { once: true });
-    send({ type: "speak", id, text, speed: 1 });
+    sendToVoice({ type: "speak", id, text, speed: 1 });
   });
 }
 
@@ -205,9 +169,15 @@ export async function speak(
   const script = speechLanguage(words);
   const lang = (language || script).toLowerCase().replaceAll("_", "-");
   const english = script === "en" && lang.split("-")[0] === "en";
-  if (english && canRunKokoro()) {
-    const result = await speakWithKokoro(words, signal);
-    if (result === "spoken") return true;
+  if (english && canRunVoiceModel()) {
+    const voice = await checkReadingVoice();
+    if (voice.status === "installed") {
+      if ((await speakWithKokoro(words, signal)) === "spoken") return true;
+    } else if (voice.status === "missing" || voice.status === "downloading") {
+      // The system voice reads now; the natural one can read it again once ready.
+      rememberWaitingText(words, lang);
+      if (voice.status === "missing" && !voiceDeclined()) void downloadReadingVoice();
+    }
   }
   return speakWithSystem(words, lang, signal);
 }
@@ -215,7 +185,7 @@ export async function speak(
 /** Whether this browser or app can read aloud at all. */
 export function canSpeak() {
   return (
-    canRunKokoro() ||
+    canRunVoiceModel() ||
     (typeof window !== "undefined" && typeof window.SpeechSynthesisUtterance === "function")
   );
 }

@@ -2,65 +2,31 @@
 import { env, KokoroTTS, TextSplitterStream } from "kokoro-js";
 // The ONNX runtime's WebAssembly, served with the app instead of from a CDN.
 import ortWasm from "../../node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.jsep.wasm?url";
+import { cpuSetup, voiceDownloaded, voiceSetup, type VoiceSetup } from "./kokoro-files";
 import type { KokoroReply, KokoroRequest } from "./kokoro-protocol";
 import { kokoroModel, kokoroVoice } from "./kokoro-protocol";
 
 /**
  * Runs Kokoro, the on-device voice, off the page's thread. The model is
- * downloaded from Hugging Face the first time and kept in the browser's cache.
- *
- * With WebGPU it runs at full precision on the graphics chip, about three
- * times faster than speech (a 326 MB download). Without it, the 8-bit model
- * (92 MB) runs on the processor, slower than speech but fine for a word or
- * a sentence. 8-bit on WebGPU is as slow as the processor, so it isn't used.
+ * downloaded from Hugging Face the first time and kept in the browser's
+ * cache (`kokoro-files.ts`). The page decides when to download it
+ * (`reading-voice.ts`); this worker loads it and reads.
  */
 
 env.wasmPaths = { wasm: ortWasm };
-
-/** How the model runs, and its file's size, for progress when the download doesn't say. */
-type Setup = { device: "webgpu" | "wasm"; dtype: "fp32" | "q8"; file: string; size: number };
-const gpuSetup: Setup = { device: "webgpu", dtype: "fp32", file: "model.onnx", size: 325_532_232 };
-const cpuSetup: Setup = {
-  device: "wasm",
-  dtype: "q8",
-  file: "model_quantized.onnx",
-  size: 92_361_116,
-};
 
 const post = (reply: KokoroReply, transfer: Transferable[] = []) =>
   (self as unknown as DedicatedWorkerGlobalScope).postMessage(reply, transfer);
 
 let model: Promise<KokoroTTS> | undefined;
-let loaded = false;
 /** The request being read; a newer one or a stop ends it between sentences. */
 let current = 0;
 
-async function setup(): Promise<Setup> {
-  try {
-    const gpu = (navigator as { gpu?: { requestAdapter(): Promise<unknown> } }).gpu;
-    if (gpu && (await gpu.requestAdapter())) return gpuSetup;
-  } catch {
-    // No WebGPU here.
-  }
-  return cpuSetup;
-}
-
-/** Whether a model file is already in the cache Transformers.js keeps. */
-async function cached({ file }: Setup) {
-  try {
-    const cache = await caches.open("transformers-cache");
-    const url = `https://huggingface.co/${kokoroModel}/resolve/main/onnx/${file}`;
-    return (await cache.match(url)) !== undefined;
-  } catch {
-    return false;
-  }
-}
-
-async function loadWith(chosen: Setup) {
+async function loadWith(chosen: VoiceSetup) {
   // Progress is reported only for a real download, not for reading the cache.
-  const download = !(await cached(chosen));
+  const download = !(await voiceDownloaded(chosen));
   let percent = -1;
-  return KokoroTTS.from_pretrained(kokoroModel, {
+  const tts = await KokoroTTS.from_pretrained(kokoroModel, {
     dtype: chosen.dtype,
     device: chosen.device,
     progress_callback: (event) => {
@@ -70,13 +36,14 @@ async function loadWith(chosen: Setup) {
       const now = Math.floor((event.loaded / total) * 100);
       if (now === percent) return;
       percent = now;
-      post({ type: "progress", loaded: event.loaded, total });
+      post({ type: "progress", loaded: event.loaded, total, device: chosen.device });
     },
   });
+  return { tts, device: chosen.device };
 }
 
 async function loadModel() {
-  const chosen = await setup();
+  const chosen = await voiceSetup();
   if (chosen.device === "wasm") return loadWith(chosen);
   try {
     return await loadWith(chosen);
@@ -88,9 +55,8 @@ async function loadModel() {
 
 function load() {
   model ??= loadModel().then(
-    (tts) => {
-      loaded = true;
-      post({ type: "loaded" });
+    ({ tts, device }) => {
+      post({ type: "loaded", device });
       return tts;
     },
     (error: unknown) => {
@@ -105,12 +71,6 @@ function load() {
 async function speak(id: number, text: string, speed: number) {
   current = id;
   try {
-    // While the model downloads, the system's voice reads instead.
-    if (!loaded && !model && !(await cached(await setup()))) {
-      void load().catch(() => {});
-      post({ type: "downloading", id });
-      return;
-    }
     const tts = await load();
     if (current !== id) return;
     // Given a string, kokoro-js 1.2 never closes its sentence stream and waits
@@ -134,5 +94,5 @@ self.addEventListener("message", (event: MessageEvent<KokoroRequest>) => {
   const request = event.data;
   if (request.type === "speak") void speak(request.id, request.text, request.speed);
   else if (request.type === "stop") current = 0;
-  else if (request.type === "prepare") void load().catch(() => {});
+  else if (request.type === "load") void load().catch(() => {});
 });

@@ -8,17 +8,16 @@ export const kokoroVoice = "af_heart";
 export type KokoroRequest =
   | { type: "speak"; id: number; text: string; speed: number }
   | { type: "stop" }
-  | { type: "prepare" };
+  /** Loads the model, downloading it if it isn't yet. */
+  | { type: "load" };
 
 export type KokoroReply =
-  /** The model is downloading, the first time. */
-  | { type: "progress"; loaded: number; total: number }
-  /** The model is loaded. */
-  | { type: "loaded" }
+  /** The model is downloading. */
+  | { type: "progress"; loaded: number; total: number; device: "webgpu" | "wasm" }
+  /** The model is loaded, and runs on this device. */
+  | { type: "loaded"; device: "webgpu" | "wasm" }
   /** The model could not be loaded. */
   | { type: "failed"; message: string }
-  /** The model isn't downloaded yet; it is downloading now, and another voice reads this. */
-  | { type: "downloading"; id: number }
   /** One sentence of speech, as mono samples. */
   | { type: "audio"; id: number; samples: Float32Array; sampleRate: number }
   | { type: "done"; id: number }

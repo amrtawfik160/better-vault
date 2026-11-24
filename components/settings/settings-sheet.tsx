@@ -43,6 +43,7 @@ import { CalendarSubscribeDialog } from "./calendar-subscribe-dialog";
 import { ChatGPTDialog } from "./chatgpt-dialog";
 import { DataPanel } from "./data-panel";
 import { LanguagePanel } from "./language-panel";
+import { ReadingVoicePanel, ReadingVoiceRow } from "./reading-voice-panel";
 import { CliProxyPanel } from "./cliproxyapi-sign-in";
 import {
   subscriptionConnectionsAllowed,
@@ -72,6 +73,7 @@ export const settingsPages = [
   "mcp",
   "calendar",
   "language",
+  "voice",
   "data",
   "about",
 ] as const;
@@ -242,6 +244,7 @@ export function SettingsSheet({ open: openProp, onOpenChange, trigger, page }: S
                 label={t("rows.language")}
                 hint={getLanguage(i18n.language).nativeName}
               />
+              <ReadingVoiceRow />
               <SettingsRow to="data" icon={Database01Icon} label={t("rows.data")} />
               <SettingsRow
                 to="about"
@@ -297,6 +300,9 @@ export function SettingsSheet({ open: openProp, onOpenChange, trigger, page }: S
           </Sheet.Next>
           <Sheet.Next name="language" closeLabel={tCommon("actions.close")}>
             <LanguagePanel />
+          </Sheet.Next>
+          <Sheet.Next name="voice" closeLabel={tCommon("actions.close")}>
+            <ReadingVoicePanel />
           </Sheet.Next>
           <Sheet.Next name="data" closeLabel={tCommon("actions.close")}>
             <DataPanel

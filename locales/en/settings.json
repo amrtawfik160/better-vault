@@ -27,7 +27,14 @@
     "mcpOn": "Agents can connect",
     "mcpOff": "Let AI agents use your notes and skills",
     "subscriptions": "AI subscriptions",
-    "subscriptionsNone": "Sign in with ChatGPT, Claude and more"
+    "subscriptionsNone": "Sign in with ChatGPT, Claude and more",
+    "voice": "Reading voice",
+    "voiceHint": "How text is read aloud",
+    "voiceReady": "Natural voice on this device",
+    "voiceMissing": "Natural voice not downloaded",
+    "voiceDownloading": "Downloading the natural voice ({{percent}}%)",
+    "voiceFailed": "The natural voice couldn’t download",
+    "voiceUnsupported": "System voices only on this device"
   },
   "providers": {
     "title": "AI providers",
@@ -129,6 +136,29 @@
     "title": "Language",
     "description": "The language of the interface. Answers follow the language you write in, and each Studio tool lets you pick its output language.",
     "helpTranslate": "Help translate deepLe"
+  },
+  "voice": {
+    "title": "Reading voice",
+    "description": "English is read aloud by Kokoro, a natural voice that runs on this device.",
+    "name": "Natural voice",
+    "checking": "Checking…",
+    "missing": "Not downloaded · {{size}}",
+    "installed": "On this device · {{size}}",
+    "failed": "The download failed. Check your connection and try again.",
+    "unsupported": "This browser can’t run the natural voice, so your system voices read aloud.",
+    "download": "Download ({{size}})",
+    "retry": "Try again",
+    "cancel": "Cancel download",
+    "sample": "Listen to a sample",
+    "stopSample": "Stop",
+    "sampleText": "Hello! I’ll read your books, words and answers aloud, right here on your device.",
+    "remove": "Remove",
+    "removed": "The natural voice was removed, freeing {{size}}.",
+    "gpu": "This device has WebGPU, so the voice runs on the graphics chip, faster than speech.",
+    "cpu": "This device has no WebGPU, so the voice runs on the processor: quick for words and sentences, slower for long answers.",
+    "meanwhile": "Until it’s downloaded, your system voice reads English.",
+    "privacy": "It downloads once from Hugging Face, then works offline. Your text never leaves your device.",
+    "otherLanguages": "Other languages are read by your system’s voices. On a Mac, you can add better ones in System Settings → Accessibility → Spoken Content."
   },
   "data": {
     "title": "Data",

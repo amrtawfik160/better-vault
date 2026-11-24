@@ -2,7 +2,7 @@ import { useEffect, type ReactNode } from "react";
 import { CommandPalette } from "@/components/command/command-palette";
 import { OnboardingGate } from "@/components/onboarding/onboarding";
 import { Sheet } from "@/components/panelui/sheet";
-import { VoiceDownloadToast } from "@/components/speech/voice-download-toast";
+import { ReadingVoiceToasts } from "@/components/speech/reading-voice-toasts";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UpdatesHost } from "@/components/updates/updates-host";
@@ -30,7 +30,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
           <Sheet.Stage className="h-dvh">{children}</Sheet.Stage>
           <CommandPalette />
           <Toaster />
-          <VoiceDownloadToast />
+          <ReadingVoiceToasts />
           <UpdatesHost />
           <OnboardingGate />
         </TooltipProvider>

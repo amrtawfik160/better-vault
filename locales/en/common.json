@@ -151,8 +151,20 @@
     }
   },
   "speech": {
-    "downloading": "Downloading the natural reading voice ({{percent}}%). Until it’s ready, your system voice reads.",
-    "downloadingFirst": "Downloading the natural reading voice. This happens once; until it’s ready, your system voice reads.",
-    "ready": "The natural reading voice is ready. Press Listen again to hear it."
+    "downloadingTitle": "Downloading the natural voice",
+    "amount": "{{loaded}} of {{total}}",
+    "starting": "Starting…",
+    "lessThanAMinute": "less than a minute left",
+    "minutesLeft_one": "about {{count}} minute left",
+    "minutesLeft_other": "about {{count}} minutes left",
+    "meanwhile": "Your system voice reads until it’s ready.",
+    "hide": "Hide",
+    "cancel": "Cancel",
+    "ready": "The natural voice is ready",
+    "readyHint": "English now sounds natural, even offline.",
+    "listenNow": "Listen",
+    "failed": "The natural voice couldn’t download",
+    "failedHint": "Your system voice reads for now. Check your connection and try again.",
+    "retry": "Try again"
   }
 }
