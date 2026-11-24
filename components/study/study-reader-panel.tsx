@@ -284,7 +284,7 @@ export function StudyReaderPanel({
       <Tabs
         value={tab}
         onValueChange={(value) => {
-          if (value === "highlights" || value === "words" || value === "ai") chooseTab(value);
+          if (value === "highlights" || value === "words" || value === "make" || value === "ai") chooseTab(value);
         }}
         className="min-h-0 flex-1 gap-0"
       >
