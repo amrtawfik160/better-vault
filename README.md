@@ -175,6 +175,7 @@ Please search existing issues first, and **never paste API keys** into an issue.
 - [Anatomy](https://skills.wheresryan.sh/anatomy) by Ryan, whose MIT drawing kit draws the anatomy figures.
 - [Hugeicons](https://hugeicons.com) for icons.
 - [Excalidraw](https://excalidraw.com), whose whiteboard inspired ours, for Excalifont (SIL Open Font License 1.1); [Rough.js](https://roughjs.com) and [perfect-freehand](https://github.com/steveruizok/perfect-freehand) draw the sketchy shapes and pen strokes.
+- [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) (Apache-2.0), run in the app with [kokoro-js](https://github.com/hexgrad/kokoro) and [Transformers.js](https://huggingface.co/docs/transformers.js), reads English aloud; its pronunciation comes from [eSpeak NG](https://github.com/espeak-ng/espeak-ng) (GPL-3.0), through [phonemizer](https://github.com/xenova/phonemizer.js).
 - Inspired by Google's NotebookLM.
 
 ## 📄 License
