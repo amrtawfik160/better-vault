@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { spokenText } from "./spoken-text";
-import { voiceScore } from "./system-voice";
+import { bestVoice, voiceScore } from "./system-voice";
 
 describe("spoken text", () => {
   it("drops Markdown marks, link addresses and citations", () => {
@@ -25,5 +25,16 @@ describe("system voices", () => {
     expect(voiceScore(voice("Eddy (English (US))"))).toBe(0);
     expect(voiceScore(voice("Samantha"))).toBeGreaterThan(0);
     expect(voiceScore(voice("Ava (Premium)"))).toBeGreaterThan(voiceScore(voice("Samantha")));
+  });
+
+  it("finds a voice by its language, wherever it is spoken, and only on the device", () => {
+    const voices = [
+      { ...voice("Samantha"), lang: "en-US" },
+      { ...voice("Majed"), lang: "ar-001" },
+      { ...voice("Google العربية"), lang: "ar-SA", localService: false },
+    ];
+    expect(bestVoice(voices, "ar")?.name).toBe("Majed");
+    expect(bestVoice(voices, "ar-EG")?.name).toBe("Majed");
+    expect(bestVoice(voices, "he")).toBeUndefined();
   });
 });

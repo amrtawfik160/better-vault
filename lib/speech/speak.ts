@@ -40,8 +40,30 @@ export function prepareSpeech() {
   });
 }
 
+/**
+ * Loads the voice ahead of a likely Listen (a selection, a pointer on the
+ * button), so reading starts sooner. Never starts a download.
+ */
+export function warmUpSpeech() {
+  if (!canRunVoiceModel()) return;
+  void checkReadingVoice().then((voice) => {
+    if (voice.status === "installed") sendToVoice({ type: "load" });
+  });
+}
+
+type Options = {
+  /** The expected language (a BCP 47 tag); without it, the text's script decides. */
+  language?: string;
+  signal?: AbortSignal;
+  /** Called once, when the first sound plays. */
+  onStart?: () => void;
+};
+
 /** Reads English with Kokoro: "spoken", or "failed" before a sound was made. */
-function speakWithKokoro(text: string, signal?: AbortSignal): Promise<"spoken" | "failed"> {
+function speakWithKokoro(
+  text: string,
+  { signal, onStart }: Options,
+): Promise<"spoken" | "failed"> {
   const id = ++lastId;
   const context = (audio ??= new AudioContext());
   void context.resume();
@@ -85,6 +107,7 @@ function speakWithKokoro(text: string, signal?: AbortSignal): Promise<"spoken" |
       stop,
       handle(reply) {
         if (reply.type === "audio") {
+          if (!played) onStart?.();
           played = true;
           const buffer = context.createBuffer(1, reply.samples.length, reply.sampleRate);
           buffer.copyToChannel(reply.samples as Float32Array<ArrayBuffer>, 0);
@@ -115,21 +138,27 @@ function speakWithKokoro(text: string, signal?: AbortSignal): Promise<"spoken" |
 }
 
 /** Reads text with the system's best voice for its language. */
-async function speakWithSystem(text: string, language: string, signal?: AbortSignal) {
+async function speakWithSystem(text: string, language: string, { signal, onStart }: Options) {
   const synthesis = typeof window === "undefined" ? undefined : window.speechSynthesis;
   if (!synthesis || typeof window.SpeechSynthesisUtterance !== "function") return false;
-  const voice = await systemVoice(synthesis, language || navigator.language);
+  const lang = language || navigator.language;
+  const voice = await systemVoice(synthesis, lang);
   if (!voice) return false;
   if (signal?.aborted) return true;
 
   const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = voice.lang;
-  utterance.voice = voice;
+  if (voice === "unlisted") {
+    utterance.lang = lang;
+  } else {
+    utterance.lang = voice.lang;
+    utterance.voice = voice;
+  }
   synthesis.cancel();
   return new Promise<boolean>((resolve) => {
     const finish = (spoken: boolean) => {
       signal?.removeEventListener("abort", cancel);
       window.clearTimeout(timeout);
+      utterance.onstart = null;
       utterance.onend = null;
       utterance.onerror = null;
       resolve(spoken);
@@ -143,6 +172,7 @@ async function speakWithSystem(text: string, language: string, signal?: AbortSig
       synthesis.cancel();
     }, 180_000);
     signal?.addEventListener("abort", cancel, { once: true });
+    utterance.onstart = () => onStart?.();
     utterance.onend = () => finish(true);
     // Stopped or replaced by newer speech: that is not a missing voice.
     utterance.onerror = (event) => finish(event.error === "interrupted" || event.error === "canceled");
@@ -156,13 +186,10 @@ async function speakWithSystem(text: string, language: string, signal?: AbortSig
 
 /**
  * Reads text aloud and resolves when it ends or is stopped: false when no
- * voice could read it. `language` is the expected language (a BCP 47 tag);
- * without it, the text's script decides.
+ * voice could read it.
  */
-export async function speak(
-  text: string,
-  { language, signal }: { language?: string; signal?: AbortSignal } = {},
-): Promise<boolean> {
+export async function speak(text: string, options: Options = {}): Promise<boolean> {
+  const { language, signal } = options;
   const words = spokenText(text);
   if (!words) return false;
   stopSpeaking();
@@ -172,14 +199,16 @@ export async function speak(
   if (english && canRunVoiceModel()) {
     const voice = await checkReadingVoice();
     if (voice.status === "installed") {
-      if ((await speakWithKokoro(words, signal)) === "spoken") return true;
+      if (signal?.aborted) return true;
+      if ((await speakWithKokoro(words, options)) === "spoken") return true;
     } else if (voice.status === "missing" || voice.status === "downloading") {
       // The system voice reads now; the natural one can read it again once ready.
       rememberWaitingText(words, lang);
       if (voice.status === "missing" && !voiceDeclined()) void downloadReadingVoice();
     }
   }
-  return speakWithSystem(words, lang, signal);
+  if (signal?.aborted) return true;
+  return speakWithSystem(words, lang, options);
 }
 
 /** Whether this browser or app can read aloud at all. */

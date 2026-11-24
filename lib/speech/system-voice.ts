@@ -64,12 +64,18 @@ export function voiceScore(voice: Pick<SpeechSynthesisVoice, "name" | "localServ
   return score;
 }
 
-/** The voices list fills in after the page loads; waits for it a moment. */
+let waited = false;
+
+/**
+ * The voices list fills in after the page loads; waits for it a moment, once.
+ * Electron never fills it, so later calls don't wait again.
+ */
 function voices(synthesis: SpeechSynthesis): Promise<SpeechSynthesisVoice[]> {
   const now = synthesis.getVoices();
-  if (now.length > 0) return Promise.resolve(now);
+  if (now.length > 0 || waited) return Promise.resolve(now);
   return new Promise((resolve) => {
     const done = () => {
+      waited = true;
       synthesis.removeEventListener("voiceschanged", done);
       window.clearTimeout(timer);
       resolve(synthesis.getVoices());
@@ -79,14 +85,14 @@ function voices(synthesis: SpeechSynthesis): Promise<SpeechSynthesisVoice[]> {
   });
 }
 
-/**
- * The best voice on this device for a language: same region first, then the
- * same language. Only voices that run on the device, so the text stays here.
- */
-export async function systemVoice(synthesis: SpeechSynthesis, language: string) {
+type Voice = Pick<SpeechSynthesisVoice, "name" | "lang" | "localService" | "default">;
+
+/** The best of `voices` for a language: same region first, then the same language. */
+export function bestVoice<V extends Voice>(voices: V[], language: string) {
   const locale = language.toLowerCase().replaceAll("_", "-");
   const base = locale.split("-")[0];
-  const candidates = (await voices(synthesis))
+  const candidates = voices
+    // Only voices that run on the device, so the text stays here.
     .filter(({ localService }) => localService)
     .map((voice) => {
       const lang = voice.lang.toLowerCase().replaceAll("_", "-");
@@ -96,4 +102,18 @@ export async function systemVoice(synthesis: SpeechSynthesis, language: string) 
     .filter(({ match, score }) => match > 0 && score >= 0)
     .sort((a, b) => b.score - a.score || b.match - a.match);
   return candidates[0]?.voice;
+}
+
+/**
+ * The best voice on this device for a language, or `undefined` when it has
+ * none. "unlisted" when the system doesn't list its voices at all, as in
+ * Electron on macOS: it still reads, choosing the voice from the language.
+ */
+export async function systemVoice(
+  synthesis: SpeechSynthesis,
+  language: string,
+): Promise<SpeechSynthesisVoice | "unlisted" | undefined> {
+  const all = await voices(synthesis);
+  if (all.length === 0) return "unlisted";
+  return bestVoice(all, language);
 }
