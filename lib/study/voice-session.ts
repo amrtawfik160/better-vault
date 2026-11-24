@@ -1,3 +1,4 @@
+import { speak } from "@/lib/speech/speak";
 import { NoStudySpeech, openStudyMicrophone, recordStudyTurn, transcribeStudyVoice } from "./voice";
 
 export type StudyVoicePhase =
@@ -5,50 +6,13 @@ export type StudyVoicePhase =
 
 const monitorOptions = { latencyHint: "interactive", sinkId: { type: "none" } } as const;
 
+/** Reads a reply aloud in the conversation's language (`lib/speech/speak.ts`). */
 export function speakStudyReply(
   text: string,
   language: string,
   signal?: AbortSignal,
 ): Promise<boolean> {
-  const synthesis = window.speechSynthesis;
-  if (signal?.aborted) return Promise.resolve(true);
-  if (!synthesis) return Promise.resolve(false);
-  const locale = (language || navigator.language).toLowerCase().replaceAll("_", "-");
-  const voices = synthesis.getVoices().filter(({ localService }) => localService);
-  const best =
-    voices.find(({ lang }) => lang.toLowerCase() === locale) ??
-    voices.find(({ lang }) => lang.toLowerCase().split("-")[0] === locale.split("-")[0]);
-  if (!best) return Promise.resolve(false);
-
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = best.lang;
-  utterance.voice = best;
-  synthesis.cancel();
-  return new Promise((resolve) => {
-    const finish = (spoken: boolean) => {
-      signal?.removeEventListener("abort", cancel);
-      window.clearTimeout(timeout);
-      utterance.onend = null;
-      utterance.onerror = null;
-      resolve(spoken);
-    };
-    const cancel = () => {
-      finish(true);
-      synthesis.cancel();
-    };
-    const timeout = window.setTimeout(() => {
-      finish(false);
-      synthesis.cancel();
-    }, 180_000);
-    signal?.addEventListener("abort", cancel, { once: true });
-    utterance.onend = () => finish(true);
-    utterance.onerror = () => finish(false);
-    try {
-      synthesis.speak(utterance);
-    } catch {
-      finish(false);
-    }
-  });
+  return speak(text, { language, signal });
 }
 
 export function startStudyVoiceSession({

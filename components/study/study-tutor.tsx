@@ -72,6 +72,7 @@ import {
 import { StudyText } from "./study-text";
 import { DirectionalText } from "@/components/common/directional-text";
 import { textDirection } from "@/lib/text/direction";
+import { prepareSpeech, stopSpeaking } from "@/lib/speech/speak";
 import { recordStudyVoice, transcribeStudyVoice } from "@/lib/study/voice";
 import {
   speakStudyReply,
@@ -351,7 +352,7 @@ export function StudyTutor({
       controller.current?.abort();
       voice.current?.abort.abort();
       live.current?.abort.abort();
-      window.speechSynthesis?.cancel();
+      stopSpeaking();
     };
   }, []);
 
@@ -544,7 +545,7 @@ export function StudyTutor({
     voice.current = capture;
     const signal = capture.abort.signal;
     setVoiceState("opening");
-    window.speechSynthesis?.cancel();
+    stopSpeaking();
     try {
       await checkVoice(signal);
       const recording = await recordStudyVoice(signal);
@@ -589,7 +590,8 @@ export function StudyTutor({
     const activitySessionId = studyId();
     let replyFailed = false;
     setLivePhase("opening");
-    window.speechSynthesis?.cancel();
+    stopSpeaking();
+    prepareSpeech();
     const session = startStudyVoiceSession({
       language: language.trim(),
       signal,
@@ -1442,7 +1444,7 @@ export function StudyTutor({
                 checked={readAloud}
                 onChange={(event) => {
                   setReadAloud(event.target.checked);
-                  if (!event.target.checked) window.speechSynthesis?.cancel();
+                  if (!event.target.checked) stopSpeaking();
                 }}
               />
               Read replies aloud

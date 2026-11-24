@@ -149,5 +149,10 @@
         "username": "Your username, for your account."
       }
     }
+  },
+  "speech": {
+    "downloading": "Getting the reading voice ready ({{percent}}%)",
+    "downloadingFirst": "Getting the reading voice ready. This happens once.",
+    "ready": "The reading voice is ready."
   }
 }

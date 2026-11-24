@@ -6,8 +6,9 @@ import { createHash } from "node:crypto";
  * with, by the web server (server/node.ts) and the desktop app
  * (desktop/src/protocol.ts). The page may run only its own scripts, plus
  * Google's sign-in and Picker, and may send data only to itself and the
- * storage services' APIs. AI providers are reached through the app's own
- * API, so they need no entry here. The dev server goes without, since Vite
+ * storage services' APIs; it also downloads the on-device voice's model from
+ * Hugging Face. AI providers are reached through the app's own API, so they
+ * need no entry here. The dev server goes without, since Vite
  * injects scripts of its own.
  */
 
@@ -35,7 +36,8 @@ export function contentSecurityPolicy(scriptHashes: readonly string[]): string {
   };
   const directives: Record<string, string[]> = {
     "default-src": ["'self'"],
-    "script-src": ["'self'", ...scriptHashes, ...google.script],
+    // WebAssembly runs the on-device voice (lib/speech).
+    "script-src": ["'self'", "'wasm-unsafe-eval'", ...scriptHashes, ...google.script],
     // React and Panel set inline styles; Tailwind's are in files.
     "style-src": ["'self'", "'unsafe-inline'", "https://accounts.google.com"],
     "img-src": ["'self'", "data:", "blob:", "https:"],
@@ -51,6 +53,10 @@ export function contentSecurityPolicy(scriptHashes: readonly string[]): string {
       // OneDrive's upload sessions answer with addresses on these hosts.
       "https://*.sharepoint.com",
       "https://*.files.1drv.com",
+      // The on-device voice's model, downloaded once from Hugging Face (lib/speech).
+      "https://huggingface.co",
+      "https://*.huggingface.co",
+      "https://*.hf.co",
       // better-vault's own backend: account, subscription and Better Vault Cloud.
       new URL(BACKEND_URL).origin,
     ],
