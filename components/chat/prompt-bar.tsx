@@ -7,7 +7,7 @@ import {
   Cancel01Icon,
   MagicWand01Icon,
 } from "@hugeicons/core-free-icons";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Segmented } from "@/components/common/segmented";
@@ -24,6 +24,7 @@ import { selectedTextSource } from "@/lib/db/source-text";
 import { useSkills } from "@/lib/db/skills";
 import { useNavigate } from "react-router";
 import { useChatSession } from "./chat-provider";
+import { PromptQuote } from "./quote";
 import { UsageRing } from "./usage-ring";
 
 /** The prompt at the bottom of the notebook: question, mode, model and send. */
@@ -43,6 +44,12 @@ export function PromptBar() {
   const settings = useSettings();
   const sources = useSources(notebook.id);
   const [draft, setDraft] = useState("");
+  const field = useRef<HTMLDivElement>(null);
+
+  // A passage chosen to ask about is asked about next.
+  useEffect(() => {
+    if (chat.quote) field.current?.querySelector("textarea")?.focus();
+  }, [chat.quote]);
   // Set while a send is refused, so the prompt does not clear what was written.
   const keepDraft = useRef(false);
 
@@ -56,7 +63,7 @@ export function PromptBar() {
 
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-background via-background/80 to-transparent px-3 pt-8 pb-3 sm:px-4 sm:pb-4">
-      <div className="pointer-events-auto mx-auto w-full max-w-3xl">
+      <div ref={field} className="pointer-events-auto mx-auto w-full max-w-3xl">
         <Prompt
           value={draft}
           onValueChange={(next) => {
@@ -88,8 +95,9 @@ export function PromptBar() {
             <Prompt.BannerAction onClick={openModelSetup}>{t("setup.action")}</Prompt.BannerAction>
           </Prompt.Banner>
           <Prompt.Field>
+            {chat.quote ? <PromptQuote quote={chat.quote} clear={() => chat.setQuote(undefined)} /> : null}
             <Prompt.Textarea
-              placeholder={t(`placeholder.${mode}`)}
+              placeholder={chat.quote ? t("placeholderQuote") : t(`placeholder.${mode}`)}
               aria-label={t(`placeholder.${mode}`)}
             />
             <Prompt.Footer>

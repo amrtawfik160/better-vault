@@ -18,6 +18,8 @@ import { modelFor, useSettings } from "@/lib/db/settings";
 import { useSources } from "@/lib/db/sources";
 import { vaultOf } from "@/lib/db/vaults";
 import { studyHref } from "@/lib/study/links";
+import { QuoteChip } from "@/components/chat/quote";
+import { SelectableText } from "@/components/selection/selectable-text";
 import { useWorkspace } from "./workspace-context";
 
 const SUGGESTIONS = ["summary", "questions", "terms", "plan"] as const;
@@ -72,12 +74,28 @@ export function ChatView() {
 
   return (
     <ScrollArea className="h-full" viewportRef={scroller}>
-      <div className="mx-auto flex max-w-3xl flex-col gap-8 px-4 pt-4 pb-56 sm:px-6">
+      <SelectableText
+        className="mx-auto flex max-w-3xl flex-col gap-8 px-4 pt-4 pb-56 sm:px-6"
+        place={{
+          title: notebook.title,
+          notebookId: notebook.id,
+          vaultId,
+          tags: [notebook.title],
+          origin: (block) => {
+            const messageId = block.dataset.notebookAnswer;
+            return messageId
+              ? { kind: "notebook-answer", notebookId: notebook.id, conversationId: chat.conversationId, messageId }
+              : undefined;
+          },
+          onAsk: (text) => chat.setQuote({ text }),
+        }}
+      >
         {missingAnswer ? <AnswerUnavailable /> : null}
         {chat.messages.map((message, at) =>
           message.role === "user" ? (
             <Message key={message.id} from="user">
               <Message.Content>
+                {message.metadata?.quote ? <QuoteChip quote={message.metadata.quote} /> : null}
                 <Message.Bubble>
                   <Message.BubbleContent className="whitespace-pre-wrap">
                     {message.parts
@@ -139,7 +157,7 @@ export function ChatView() {
             </button>
           </div>
         ) : null}
-      </div>
+      </SelectableText>
       {draft ? (
         <StudyFlashcardDraftDialog
           source={draft}

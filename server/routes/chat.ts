@@ -17,6 +17,7 @@ import { chatSystemPrompt } from "@/lib/ai/prompts";
 import { createLanguageModel, createWebSearchTools } from "@/lib/ai/providers";
 import { createVisualTools } from "../visual-tools";
 import { credentialsSchema, effortSchema, modelRefSchema } from "@/lib/ai/request";
+import { quotedForModel } from "@/lib/chat/quote";
 import type { ChatMessage, ChatMessageMetadata, TokenUsage } from "@/lib/chat/types";
 import { toPassageRefs, stripCitations, type Passage } from "@/lib/grounding/passages";
 import { passageSchema } from "@/lib/grounding/passage-schema";
@@ -72,6 +73,16 @@ function withoutOtherTools(messages: ChatMessage[], tools: ToolSet | undefined):
   }));
 }
 
+/** A passage the user selected goes before the question it was asked with. */
+function withQuotes(messages: ChatMessage[]): ChatMessage[] {
+  return messages.map((message) => {
+    const quote = message.role === "user" ? message.metadata?.quote : undefined;
+    return quote
+      ? { ...message, parts: [{ type: "text" as const, text: quotedForModel(quote) }, ...message.parts] }
+      : message;
+  });
+}
+
 function textLength(message: ChatMessage): number {
   return message.parts.reduce(
     (sum, part) => sum + (part.type === "text" ? part.text.length : 0),
@@ -122,7 +133,7 @@ export async function POST(request: Request) {
   const result = streamText({
     model: languageModel,
     system,
-    messages: await convertToModelMessages(withoutOtherTools(withoutOldCitations(messages), tools), {
+    messages: await convertToModelMessages(withQuotes(withoutOtherTools(withoutOldCitations(messages), tools)), {
       ignoreIncompleteToolCalls: true,
     }),
     tools,

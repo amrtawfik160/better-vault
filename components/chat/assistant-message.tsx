@@ -186,6 +186,7 @@ export function AssistantMessage({
       ref={focusRef}
       tabIndex={focusRef ? -1 : undefined}
       data-notebook-answer={message.id}
+      data-selection-block=""
       className={
         focusRef
           ? "rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"

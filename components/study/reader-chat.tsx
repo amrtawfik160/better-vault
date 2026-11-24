@@ -1,6 +1,5 @@
 import {
   BubbleChatAddIcon,
-  Cancel01Icon,
   Chatting01Icon,
   Clock01Icon,
   Idea01Icon,
@@ -21,6 +20,9 @@ import { Link, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { AIModelPicker } from "@/components/ai/ai-model-picker";
 import { AssistantMessage } from "@/components/chat/assistant-message";
+import { PromptQuote, QuoteChip } from "@/components/chat/quote";
+import { SelectableText } from "@/components/selection/selectable-text";
+import type { ChatQuote } from "@/lib/chat/quote";
 import type { BookLinks } from "@/components/chat/book-activity";
 import { UsageRing } from "@/components/chat/usage-ring";
 import { Icon } from "@/components/icon";
@@ -44,7 +46,6 @@ import {
 import type { StudyBook, StudyThread } from "@/lib/study/records";
 import { getStudioSettings } from "@/lib/studio/settings";
 import { cn } from "@/lib/utils";
-import { DirectionalText } from "@/components/common/directional-text";
 import { StudyFlashcardDraftDialog, type FlashcardSource } from "./study-flashcard-generator";
 
 /** How many earlier messages go with each question. */
@@ -128,7 +129,7 @@ function readerChat(id: string, messages: ChatMessage[], reading: { current: Rea
 }
 
 /** A question's metadata: when it was asked, and the passage it was asked about. */
-function questionMetadata(quote: ReaderQuote | undefined) {
+function questionMetadata(quote: ChatQuote | undefined) {
   return { createdAt: Date.now(), quote };
 }
 
@@ -264,8 +265,8 @@ function ReaderConversation({
   book,
   vaultId,
   index,
-  quote,
-  clearQuote,
+  quote: fromReader,
+  clearQuote: clearReaderQuote,
   start,
   openSection,
   teachBack,
@@ -308,7 +309,15 @@ function ReaderConversation({
   const title = conversations?.find(({ id }) => id === instance.id)?.title;
   const lastAnswer = chat.messages.findLast((message) => message.role === "assistant");
 
-  // A passage sent from the reader is asked about next.
+  // A passage selected in an answer here; one the reader sends later comes first.
+  const [fromAnswer, setFromAnswer] = useState<ChatQuote>();
+  const quote: ChatQuote | undefined = fromReader ?? fromAnswer;
+  const clearQuote = () => {
+    setFromAnswer(undefined);
+    clearReaderQuote();
+  };
+
+  // A passage sent from the reader, or chosen in an answer, is asked about next.
   useEffect(() => {
     if (quote) textarea.current?.querySelector("textarea")?.focus();
   }, [quote]);
@@ -446,13 +455,36 @@ function ReaderConversation({
             </div>
           </div>
         ) : (
-          <div className="flex flex-col gap-6 px-3 pt-4 pb-60">
+          <SelectableText
+            className="flex flex-col gap-6 px-3 pt-4 pb-60"
+            place={{
+              title: book.title,
+              notebookId: book.notebookId,
+              bookId: book.id,
+              vaultId,
+              tags: [book.title],
+              origin: (block) => {
+                const messageId = block.dataset.notebookAnswer;
+                return messageId
+                  ? { kind: "notebook-answer", notebookId: book.notebookId, conversationId: instance.id, messageId }
+                  : undefined;
+              },
+              onAsk: (text) => {
+                clearReaderQuote();
+                setFromAnswer({ text });
+              },
+            }}
+          >
             {chat.messages.map((message, at) =>
               message.role === "user" ? (
                 <Message key={message.id} from="user">
                   <Message.Content>
                     {message.metadata?.quote ? (
-                      <QuoteChip quote={message.metadata.quote} noun={noun} open={openSection} />
+                      <QuoteChip
+                        quote={message.metadata.quote}
+                        place={message.metadata.quote.section === undefined ? undefined : `${noun} ${message.metadata.quote.section}`}
+                        open={openSection}
+                      />
                     ) : null}
                     <Message.Bubble>
                       <Message.BubbleContent className="whitespace-pre-wrap" dir="auto">
@@ -511,7 +543,7 @@ function ReaderConversation({
                 </button>
               </div>
             ) : null}
-          </div>
+          </SelectableText>
         )}
       </ScrollArea>
 
@@ -530,23 +562,7 @@ function ReaderConversation({
           >
             <Prompt.Banner open={settings !== undefined && !model}>{t("setup.banner")}</Prompt.Banner>
             <Prompt.Field>
-              {quote ? (
-                <div className="flex items-start gap-2 px-3 pt-3">
-                  <Icon icon={QuoteDownIcon} size={14} className="mt-0.5 shrink-0 text-muted-foreground" />
-                  <DirectionalText
-                    text={quote.text}
-                    className="line-clamp-3 min-w-0 flex-1 text-xs text-muted-foreground"
-                  />
-                  <button
-                    type="button"
-                    aria-label={t("reader.removeQuote")}
-                    onClick={clearQuote}
-                    className="shrink-0 cursor-pointer rounded-full p-0.5 text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    <Icon icon={Cancel01Icon} size={12} />
-                  </button>
-                </div>
-              ) : null}
+              {quote ? <PromptQuote quote={quote} clear={clearQuote} /> : null}
               <Prompt.Textarea
                 placeholder={t(quote ? "reader.placeholderQuote" : "reader.placeholder", { noun })}
                 aria-label={t("reader.placeholder", { noun })}
@@ -595,29 +611,3 @@ function ReaderConversation({
   );
 }
 
-/** The passage a question was asked about, opening where it is in the book. */
-function QuoteChip({
-  quote,
-  noun,
-  open,
-}: {
-  quote: { text: string; section: number };
-  noun: string;
-  open: (section: number) => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => open(quote.section)}
-      className="flex max-w-full cursor-pointer items-start gap-2 self-end rounded-xl border px-3 py-2 text-start text-xs text-muted-foreground outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <Icon icon={QuoteDownIcon} size={14} className="mt-0.5 shrink-0" />
-      <span className="flex min-w-0 flex-col gap-0.5">
-        <DirectionalText as="span" text={quote.text} className="line-clamp-3" />
-        <span className="tabular-nums">
-          {noun} {quote.section}
-        </span>
-      </span>
-    </button>
-  );
-}

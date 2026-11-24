@@ -5,6 +5,7 @@ import {
   Cancel01Icon,
   Cards01Icon,
   CheckmarkCircle02Icon,
+  Copy01Icon,
   Delete02Icon,
   MoreHorizontalIcon,
   NoteEditIcon,
@@ -34,7 +35,6 @@ import { askStudyModel } from "@/lib/study/client";
 import { AIModelPicker } from "@/components/ai/ai-model-picker";
 import {
   studyHighlightColor,
-  type StudyBook,
   type StudyHighlightColor,
   type StudyOrigin,
   type StudyRecordOf,
@@ -51,8 +51,8 @@ import { StudyTranslationLanguages, useTranslationLanguageName } from "./study-t
 
 export type StudySelection = { text: string; offset: number; revision: number };
 export type SelectionMenuHandle = {
-  /** Runs a shortcut: open a view, or save the word. */
-  run: (action: "translate" | "word" | "note") => void;
+  /** Runs a shortcut: open a view, save the word, or ask. */
+  run: (action: "translate" | "word" | "note" | "ask") => void;
   /** Moves focus to the first control. */
   focus: () => void;
   contains: (node: Node | null) => boolean;
@@ -176,7 +176,12 @@ function Body({ children }: { children: ReactNode }) {
   return <div className="mt-1.5 space-y-3 border-t px-2 pt-3 pb-1.5">{children}</div>;
 }
 
-/** The menu floating at a selected passage: highlight, translate, save a word, make a card, write a note, ask. */
+/**
+ * The menu floating at a selected passage: highlight, translate, listen, save
+ * a word, make a card, write a note, ask. In the reader it offers everything;
+ * elsewhere (`components/selection/selectable-text.tsx`) only what the place
+ * supports, since the optional actions appear only when given.
+ */
 export function StudySelectionMenu({
   handle,
   selection,
@@ -184,7 +189,9 @@ export function StudySelectionMenu({
   viewport,
   anchor,
   preferBelow,
-  book,
+  notebookId,
+  bookId,
+  tags,
   sectionTitle,
   sectionText,
   origin,
@@ -193,7 +200,7 @@ export function StudySelectionMenu({
   chooseTranslateTo,
   highlight,
   color,
-  openingTutor,
+  openingTutor = false,
   onHighlight,
   onRemoveHighlight,
   onSaveNote,
@@ -209,31 +216,40 @@ export function StudySelectionMenu({
 }: {
   handle: Ref<SelectionMenuHandle>;
   selection: StudySelection;
+  /** The element the menu is placed in. */
   frame: HTMLElement;
+  /** The scrolling element, or null to follow any scroll on the page. */
   viewport: HTMLElement | null;
   anchor: () => DOMRect | null;
   preferBelow: boolean;
-  book: StudyBook;
+  notebookId?: string;
+  bookId?: string;
+  /** Tags for a card made here. */
+  tags: string[];
+  /** The passage's title, for the model. */
   sectionTitle: string;
+  /** The text around the selection, `selection.offset` into it: a saved word's context. */
   sectionText: string;
-  origin: StudyOrigin;
-  vaultId: string;
+  origin?: StudyOrigin;
+  vaultId?: string;
   translateTo?: string;
   chooseTranslateTo: (code: string) => void;
   highlight?: StudyRecordOf<"highlight">;
-  color: StudyHighlightColor;
-  openingTutor: boolean;
-  onHighlight: (color: StudyHighlightColor) => void;
-  onRemoveHighlight: () => void;
-  onSaveNote: (note: string) => Promise<void>;
-  onAsk: () => void;
-  onTeachBack: () => void;
-  onDraftCards: (text: string) => void;
-  onBookmark: () => void;
-  onSaveToNotes: (body?: string) => void;
-  onContinueExplain: (answer: string) => void;
-  onShowWords: () => void;
-  onViewCards: () => void;
+  color?: StudyHighlightColor;
+  openingTutor?: boolean;
+  /** Highlighting, with its colours, where passages can be highlighted. */
+  onHighlight?: (color: StudyHighlightColor) => void;
+  onRemoveHighlight?: () => void;
+  onSaveNote?: (note: string) => Promise<void>;
+  /** Asks a chat about the passage; without it, Ask AI explains it in the menu. */
+  onAsk?: () => void;
+  onTeachBack?: () => void;
+  onDraftCards?: (text: string) => void;
+  onBookmark?: () => void;
+  onSaveToNotes?: (body?: string) => void;
+  onContinueExplain?: (answer: string) => void;
+  onShowWords?: () => void;
+  onViewCards?: () => void;
   onClose: () => void;
 }) {
   const { t } = useTranslation(["home", "common"]);
@@ -254,7 +270,9 @@ export function StudySelectionMenu({
   const [cardSaving, setCardSaving] = useState(false);
   const [note, setNote] = useState(highlight?.note ?? "");
   const [noteSaving, setNoteSaving] = useState(false);
+  const [copied, setCopied] = useState(false);
   const short = selection.text.length <= wordLimit;
+  const ask = onAsk ?? (() => void explain());
 
   const place = useEffectEvent(() => {
     if (menu.current) placeMenu(menu.current, frame, anchor(), preferBelow);
@@ -267,14 +285,16 @@ export function StudySelectionMenu({
       cancelAnimationFrame(next);
       next = requestAnimationFrame(() => place());
     };
-    viewport?.addEventListener("scroll", schedule, { passive: true });
+    // Without a viewport, any scroll may move the passage.
+    const scroller = viewport ?? document;
+    scroller.addEventListener("scroll", schedule, { passive: true, capture: !viewport });
     window.addEventListener("resize", schedule);
     const observer = new ResizeObserver(schedule);
     if (menu.current) observer.observe(menu.current);
     observer.observe(frame);
     return () => {
       cancelAnimationFrame(next);
-      viewport?.removeEventListener("scroll", schedule);
+      scroller.removeEventListener("scroll", schedule, { capture: !viewport });
       window.removeEventListener("resize", schedule);
       observer.disconnect();
     };
@@ -293,7 +313,8 @@ export function StudySelectionMenu({
     run(action) {
       if (action === "translate") void translate();
       else if (action === "word") void saveWord();
-      else setView("note");
+      else if (action === "note" && onSaveNote) setView("note");
+      else if (action === "ask") ask();
     },
     focus() {
       menu.current?.querySelector<HTMLElement>("button:not(:disabled)")?.focus();
@@ -367,14 +388,14 @@ export function StudySelectionMenu({
         context,
         language: translationLanguageLabel(language),
         note: "",
-        notebookId: book.notebookId,
-        bookId: book.id,
+        notebookId,
+        bookId,
         vaultId,
       });
       setSavedWord(true);
       toast.success(t("study.selection.wordSaved"), {
         description: translated ? undefined : t("study.selection.savedWithoutTranslation"),
-        action: { label: t("study.selection.view"), onClick: onShowWords },
+        action: onShowWords ? { label: t("study.selection.view"), onClick: onShowWords } : undefined,
       });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
@@ -406,12 +427,12 @@ export function StudySelectionMenu({
       await saveStudyCard({
         front: front.trim(),
         back: back.trim(),
-        tags: [book.title],
-        notebookId: book.notebookId,
+        tags,
+        notebookId,
         origin,
       });
       toast.success(t("study.selection.cardSaved"), {
-        action: { label: t("study.selection.view"), onClick: onViewCards },
+        action: onViewCards ? { label: t("study.selection.view"), onClick: onViewCards } : undefined,
       });
       onClose();
     } catch (error) {
@@ -421,8 +442,18 @@ export function StudySelectionMenu({
     }
   }
 
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(selection.text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
+    } catch {
+      toast.error(t("study.selection.copyFailed"));
+    }
+  }
+
   async function saveNote() {
-    if (noteSaving) return;
+    if (noteSaving || !onSaveNote) return;
     setNoteSaving(true);
     try {
       await onSaveNote(note.trim());
@@ -445,7 +476,7 @@ export function StudySelectionMenu({
       data-study-selection-menu=""
       style={{ visibility: "hidden" }}
       className={cn(
-        "absolute top-0 left-0 z-30 w-max max-w-[min(46rem,calc(100%-1rem))] rounded-2xl border bg-popover p-1.5 text-popover-foreground shadow-lg",
+        "pointer-events-auto absolute top-0 left-0 z-30 w-max max-w-[min(46rem,calc(100%-1rem))] rounded-2xl border bg-popover p-1.5 text-popover-foreground shadow-lg",
         "animate-in fade-in-0 zoom-in-95 duration-150 motion-reduce:animate-none",
         view !== "actions" && "w-[min(30rem,calc(100%-1rem))]",
       )}
@@ -456,33 +487,37 @@ export function StudySelectionMenu({
     >
       {view === "actions" ? (
         <div role="group" aria-label={t("study.selection.actions")} className="flex flex-wrap items-center gap-0.5">
-          {studyHighlightColor.options.map((name) => {
-            const active = highlight?.color === name;
-            const label = t(active ? "study.selection.highlighted" : "study.selection.highlightIn", {
-              color: t(`study.highlights.colors.${name}`),
-            });
-            return (
-              <ReaderTip key={name} label={label} keys={name === color && !highlight ? ["H"] : undefined}>
-                <button
-                  type="button"
-                  aria-label={label}
-                  aria-pressed={active}
-                  className="grid size-9 cursor-pointer place-items-center rounded-full outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={() => onHighlight(name)}
-                >
-                  <span
-                    aria-hidden
-                    className={cn(
-                      "size-4.5 rounded-full ring-1 ring-foreground/15",
-                      highlightColors[name],
-                      active && "ring-2 ring-foreground ring-offset-2 ring-offset-popover",
-                    )}
-                  />
-                </button>
-              </ReaderTip>
-            );
-          })}
-          <span aria-hidden className="mx-1 h-6 w-px bg-border" />
+          {onHighlight ? (
+            <>
+              {studyHighlightColor.options.map((name) => {
+                const active = highlight?.color === name;
+                const label = t(active ? "study.selection.highlighted" : "study.selection.highlightIn", {
+                  color: t(`study.highlights.colors.${name}`),
+                });
+                return (
+                  <ReaderTip key={name} label={label} keys={name === color && !highlight ? ["H"] : undefined}>
+                    <button
+                      type="button"
+                      aria-label={label}
+                      aria-pressed={active}
+                      className="grid size-9 cursor-pointer place-items-center rounded-full outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={() => onHighlight(name)}
+                    >
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "size-4.5 rounded-full ring-1 ring-foreground/15",
+                          highlightColors[name],
+                          active && "ring-2 ring-foreground ring-offset-2 ring-offset-popover",
+                        )}
+                      />
+                    </button>
+                  </ReaderTip>
+                );
+              })}
+              <span aria-hidden className="mx-1 h-6 w-px bg-border" />
+            </>
+          ) : null}
           <ActionButton icon={TranslateIcon} label={t("study.selection.translate")} keys={["T"]} onClick={() => void translate()} />
           <ActionButton
             icon={savedWord ? CheckmarkCircle02Icon : BookmarkAdd01Icon}
@@ -499,37 +534,59 @@ export function StudySelectionMenu({
               setView("card");
             }}
           />
-          <ActionButton icon={NoteEditIcon} label={t("study.selection.note")} keys={["N"]} onClick={() => setView("note")} />
+          {onSaveNote ? (
+            <ActionButton icon={NoteEditIcon} label={t("study.selection.note")} keys={["N"]} onClick={() => setView("note")} />
+          ) : null}
           <ActionButton
             icon={AiChat02Icon}
-            label={t("study.selection.ask")}
+            label={t(onAsk ? "study.selection.ask" : "study.selection.explain")}
             keys={["A"]}
             strong
             disabled={openingTutor}
-            onClick={onAsk}
+            onClick={ask}
           />
-          {highlight ? (
+          <span aria-hidden className="mx-1 h-6 w-px bg-border" />
+          <SelectionListen text={selection.text} label={t("study.selection.listen")} />
+          <ReaderTip label={t(copied ? "study.selection.copied" : "study.selection.copy")}>
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              aria-label={t(copied ? "study.selection.copied" : "study.selection.copy")}
+              onClick={() => void copy()}
+            >
+              <Icon icon={copied ? CheckmarkCircle02Icon : Copy01Icon} size={16} />
+            </Button>
+          </ReaderTip>
+          {highlight && onRemoveHighlight ? (
             <ReaderTip label={t("study.selection.removeHighlight")}>
               <Button size="icon-sm" variant="ghost" aria-label={t("study.selection.removeHighlight")} onClick={onRemoveHighlight}>
                 <Icon icon={Delete02Icon} size={16} />
               </Button>
             </ReaderTip>
           ) : null}
-          <Menu>
-            <Menu.Trigger
-              render={<Button size="icon-sm" variant="ghost" aria-label={t("study.selection.more")} title={t("study.selection.more")} />}
-            >
-              <Icon icon={MoreHorizontalIcon} size={16} />
-            </Menu.Trigger>
-            <Menu.Content align="end">
-              <Menu.Item onClick={() => void explain()}>{t("study.selection.explain")}</Menu.Item>
-              <Menu.Item disabled={openingTutor} onClick={onTeachBack}>{t("study.capture.practice")}</Menu.Item>
-              <Menu.Item onClick={() => onDraftCards(selection.text)}>{t("study.capture.cardsFromSelection")}</Menu.Item>
-              <Menu.Separator />
-              <Menu.Item onClick={onBookmark}>{t("study.selection.bookmark")}</Menu.Item>
-              <Menu.Item onClick={() => onSaveToNotes()}>{t("study.selection.saveToNotes")}</Menu.Item>
-            </Menu.Content>
-          </Menu>
+          {onAsk || onTeachBack || onDraftCards || onBookmark || onSaveToNotes ? (
+            <Menu>
+              <Menu.Trigger
+                render={<Button size="icon-sm" variant="ghost" aria-label={t("study.selection.more")} title={t("study.selection.more")} />}
+              >
+                <Icon icon={MoreHorizontalIcon} size={16} />
+              </Menu.Trigger>
+              <Menu.Content align="end">
+                {onAsk ? <Menu.Item onClick={() => void explain()}>{t("study.selection.explain")}</Menu.Item> : null}
+                {onTeachBack ? (
+                  <Menu.Item disabled={openingTutor} onClick={onTeachBack}>{t("study.capture.practice")}</Menu.Item>
+                ) : null}
+                {onDraftCards ? (
+                  <Menu.Item onClick={() => onDraftCards(selection.text)}>{t("study.capture.cardsFromSelection")}</Menu.Item>
+                ) : null}
+                {(onAsk || onTeachBack || onDraftCards) && (onBookmark || onSaveToNotes) ? <Menu.Separator /> : null}
+                {onBookmark ? <Menu.Item onClick={onBookmark}>{t("study.selection.bookmark")}</Menu.Item> : null}
+                {onSaveToNotes ? (
+                  <Menu.Item onClick={() => onSaveToNotes()}>{t("study.selection.saveToNotes")}</Menu.Item>
+                ) : null}
+              </Menu.Content>
+            </Menu>
+          ) : null}
         </div>
       ) : null}
 
@@ -598,7 +655,7 @@ export function StudySelectionMenu({
                         {t("study.selection.addToVocabulary")}
                       </Button>
                     )}
-                    <Button size="sm" variant="outline" disabled={openingTutor} onClick={onAsk}>
+                    <Button size="sm" variant="outline" disabled={openingTutor} onClick={ask}>
                       {t("study.selection.askToExplain")}
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => setChoosingLanguage(true)}>
@@ -652,9 +709,11 @@ export function StudySelectionMenu({
                   <Button type="submit" size="sm" disabled={cardSaving || !front.trim() || !back.trim()}>
                     {t("study.selection.saveCard")}
                   </Button>
-                  <Button type="button" size="sm" variant="outline" onClick={() => onDraftCards(selection.text)}>
-                    {t("study.selection.draftWithAi")}
-                  </Button>
+                  {onDraftCards ? (
+                    <Button type="button" size="sm" variant="outline" onClick={() => onDraftCards(selection.text)}>
+                      {t("study.selection.draftWithAi")}
+                    </Button>
+                  ) : null}
                   <Button type="button" size="sm" variant="ghost" onClick={backToActions}>
                     {t("common:actions.cancel")}
                   </Button>
@@ -731,17 +790,21 @@ export function StudySelectionMenu({
                     <StudyText prose text={explanation.text} />
                   </ScrollArea>
                   <div className="flex flex-wrap gap-1.5">
-                    {explanation.text ? (
+                    {explanation.text && onContinueExplain ? (
                       <Button size="sm" variant="outline" disabled={openingTutor} onClick={() => onContinueExplain(explanation.text)}>
                         {t("study.reader.continueWithTutor")}
                       </Button>
                     ) : null}
-                    <Button size="sm" variant="ghost" onClick={() => onSaveToNotes(explanation.text)}>
-                      {t("study.capture.saveAnswer")}
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => onDraftCards(explanation.text)}>
-                      {t("study.capture.cardsFromAnswer")}
-                    </Button>
+                    {onSaveToNotes ? (
+                      <Button size="sm" variant="ghost" onClick={() => onSaveToNotes(explanation.text)}>
+                        {t("study.capture.saveAnswer")}
+                      </Button>
+                    ) : null}
+                    {onDraftCards ? (
+                      <Button size="sm" variant="ghost" onClick={() => onDraftCards(explanation.text)}>
+                        {t("study.capture.cardsFromAnswer")}
+                      </Button>
+                    ) : null}
                     <SelectionListen text={explanation.text} label={t("study.selection.listen")} className="ms-auto" />
                   </div>
                 </>

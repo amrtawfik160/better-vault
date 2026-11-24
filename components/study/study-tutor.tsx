@@ -90,6 +90,7 @@ import {
   type StudyReportChange,
   type StudyOrigin,
 } from "@/lib/study/records";
+import { SelectableText } from "@/components/selection/selectable-text";
 
 export function simulationGoal(goal: StudyThread["goal"]) {
   if (goal === "technical-interview" || goal === "meeting-simulation") return goal;
@@ -1154,7 +1155,21 @@ export function StudyTutor({
         </div>
       ) : null}
       {currentTurns.length ? (
-        <div className="space-y-3" aria-label="Conversation">
+        <SelectableText
+          className="space-y-3"
+          aria-label="Conversation"
+          place={{
+            title: thread.title,
+            notebookId: thread.notebookId,
+            bookId: book?.id,
+            vaultId,
+            tags: book && book.title !== thread.title ? [book.title, thread.title] : [thread.title],
+            origin: (block) => {
+              const message = Number(block.dataset.tutorMessage);
+              return { kind: "tutor", threadId: thread.id, message: Number.isInteger(message) ? message : undefined };
+            },
+          }}
+        >
           {currentTurns.map((turn) => {
             const { entry, index } = turn;
             const quick = quickTurn?.entry === entry;
@@ -1162,6 +1177,8 @@ export function StudyTutor({
             <div
               key={index === undefined ? `temporary-${entry.at}-${entry.role}` : index}
               id={index === undefined ? undefined : `study-message-${index}`}
+              data-selection-block=""
+              data-tutor-message={index}
               tabIndex={index === focusMessage && index !== undefined ? -1 : undefined}
               className={`max-w-3xl scroll-mt-32 space-y-2 rounded-2xl border p-4 ${entry.role === "user" ? "ms-auto w-fit bg-muted" : "bg-card"}`}
             >
@@ -1249,7 +1266,7 @@ export function StudyTutor({
             </div>
             );
           })}
-        </div>
+        </SelectableText>
       ) : simulation ? (
         <Button
           disabled={workPending || !model || !contextReady}

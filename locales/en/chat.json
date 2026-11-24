@@ -1,4 +1,5 @@
 {
+  "placeholderQuote": "Ask about the selected text…",
   "placeholder": {
     "sources": "Ask about your sources…",
     "web": "Ask anything. The model can search the web…"

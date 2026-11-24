@@ -162,8 +162,9 @@ html[data-window-controls]
     min-width: 100%;
   }
 
-  /* The passage the reader's selection menu is about, kept marked while the menu has focus. */
-  ::highlight(study-selection) {
+  /* The passage a selection menu is about, kept marked while the menu has focus. */
+  ::highlight(study-selection),
+  ::highlight(text-selection) {
     background-color: color-mix(in oklab, var(--primary) 18%, transparent);
   }
 

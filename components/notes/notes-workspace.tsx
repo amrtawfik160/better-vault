@@ -43,6 +43,7 @@ import { NoteStudyCards } from "./note-study-cards";
 import { NoteSwitcher } from "./note-switcher";
 import { ShortcutsDialog, keyLabel } from "./shortcuts-dialog";
 import { useNotesWorld } from "./use-notes-world";
+import { SelectableText } from "@/components/selection/selectable-text";
 
 const GRAPH_TAB = "graph";
 const TABS_KEY = "better-vault:notes-tabs";
@@ -756,16 +757,26 @@ export default function NotesWorkspace() {
               ) : (
                 <ScrollArea className="min-h-0 flex-1">
                   <div ref={readingBody} className="mx-auto max-w-[46rem] px-6 pt-4 pb-24">
-                    <NoteReader
-                      body={note.body}
-                      world={world}
-                      vaultId={note.vaultId}
-                      onOpenLink={openLink}
-                      onTag={(tag) => {
-                        setQuery(`#${tag}`);
-                        if (layout === "narrow") choosePane("library");
+                    <SelectableText
+                      place={{
+                        title: note.title,
+                        notebookId: note.notebookId ?? undefined,
+                        vaultId: note.vaultId,
+                        tags: [note.title],
+                        origin: () => ({ kind: "note", noteId: note.id }),
                       }}
-                    />
+                    >
+                      <NoteReader
+                        body={note.body}
+                        world={world}
+                        vaultId={note.vaultId}
+                        onOpenLink={openLink}
+                        onTag={(tag) => {
+                          setQuery(`#${tag}`);
+                          if (layout === "narrow") choosePane("library");
+                        }}
+                      />
+                    </SelectableText>
                   </div>
                 </ScrollArea>
               )}

@@ -22,6 +22,7 @@ import { selectPassages } from "@/lib/grounding/passages";
 import { listSkills } from "@/lib/db/skills";
 import { getStudioSettings } from "@/lib/studio/settings";
 import { studyReturnState } from "@/lib/study/return-links";
+import type { ChatQuote } from "@/lib/chat/quote";
 
 /** How many earlier messages are sent with each question. */
 const HISTORY = 24;
@@ -37,7 +38,11 @@ interface ChatSession {
   /** Skills (ids) attached to this chat; their instructions go with each question. */
   skills: string[];
   setSkills: (ids: string[]) => void;
+  /** Sends a question, with the passage quoted for it, if any. */
   send: (text: string) => Promise<void>;
+  /** A passage selected to ask about with the next question. */
+  quote: ChatQuote | undefined;
+  setQuote: (quote: ChatQuote | undefined) => void;
   retry: () => Promise<void>;
   stop: () => void;
   /** Starts an empty conversation. */
@@ -218,6 +223,7 @@ function ChatRunner({
   children: ReactNode;
 }) {
   const chat = useChat<ChatMessage>({ chat: instance });
+  const [quote, setQuote] = useState<ChatQuote>();
 
   /** The model, the key and the passages for a question, read fresh each time. */
   const requestFor = useCallback(
@@ -263,9 +269,13 @@ function ChatRunner({
       skills,
       setSkills,
       send: async (text) => {
-        const body = await requestFor(text);
-        await sendMessage({ text, metadata: { createdAt: Date.now() } }, { body });
+        // The passages are found for the quote and the question together.
+        const body = await requestFor(quote ? `${quote.text}\n\n${text}` : text);
+        setQuote(undefined);
+        await sendMessage({ text, metadata: { createdAt: Date.now(), quote } }, { body });
       },
+      quote,
+      setQuote,
       retry: async () => {
         const question = textOf([...messages].reverse().find((message) => message.role === "user"));
         await regenerate({ body: await requestFor(question) });
@@ -285,6 +295,7 @@ function ChatRunner({
       setMode,
       requestFor,
       sendMessage,
+      quote,
       regenerate,
       stop,
       startNew,

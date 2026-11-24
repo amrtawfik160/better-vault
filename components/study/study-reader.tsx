@@ -1519,7 +1519,9 @@ export function StudyReader({
               viewport={viewport}
               anchor={selectionAnchor}
               preferBelow={selectionByTouch}
-              book={book}
+              notebookId={book.notebookId}
+              bookId={book.id}
+              tags={[book.title]}
               sectionTitle={section.title}
               sectionText={section.text}
               origin={sourceOf(selection)}

@@ -27,6 +27,7 @@ import {
   readerToolSchemas,
 } from "@/lib/study/reader-chat";
 import { createVisualTools } from "../visual-tools";
+import { quotedForModel } from "@/lib/chat/quote";
 
 const bodySchema = z.object({
   messages: z
@@ -75,7 +76,7 @@ function forModel(messages: ChatMessage[], tools: ToolSet | undefined): ChatMess
         ? [
             {
               type: "text" as const,
-              text: `The passage I selected (section ${quote.section}):\n"""\n${quote.text}\n"""`,
+              text: quotedForModel(quote),
             },
             ...parts,
           ]
