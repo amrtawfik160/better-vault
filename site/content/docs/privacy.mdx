@@ -15,7 +15,7 @@ Only what a request needs. When you chat or create in the Studio, better-vault s
 
 When you add a PDF or a web page, the file or address goes to the parse route, which returns plain text and keeps nothing. When the model list loads, your key is used to ask the provider which models you can use.
 
-Reading aloud stays on your device. English is read by Kokoro, an open voice model that runs inside the app. The first time you press **Listen**, the app downloads the model from Hugging Face (about 330 MB with WebGPU, 92 MB without) and keeps it for next time; only the model is downloaded, and your text is never sent. Other languages use your system's own voices.
+Reading aloud stays on your device. English is read by Kokoro, an open voice model that runs inside the app. The first time you press **Listen**, the app downloads the model from Hugging Face (about 330 MB with WebGPU, 92 MB without) and keeps it for next time; only the model is downloaded, and your text is never sent. Until it is ready, your system voice reads. **Settings → Reading voice** shows the download, and lets you start, cancel or remove it. Other languages use your system's own voices.
 
 With Ollama or LM Studio, all of these requests stay on your own machine. In the desktop app, the API routes also run on your computer.
 
