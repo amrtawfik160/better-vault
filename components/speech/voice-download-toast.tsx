@@ -13,7 +13,7 @@ export function VoiceDownloadToast() {
     let shown = false;
     return subscribeVoiceDownload((download) => {
       if (typeof download === "string") {
-        if (shown && download === "ready") toast.success(t("speech.ready"), { id, duration: 2000 });
+        if (shown && download === "ready") toast.success(t("speech.ready"), { id, duration: 5000 });
         else if (shown) toast.dismiss(id);
         shown = false;
         return;

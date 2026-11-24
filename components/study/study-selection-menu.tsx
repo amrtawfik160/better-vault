@@ -402,8 +402,8 @@ export function StudySelectionMenu({
     }
   }
 
-  function speak() {
-    void speakStudyReply(selection.text, speechLanguage(selection.text)).then((spoken) => {
+  function speak(text = selection.text, language = speechLanguage(text)) {
+    void speakStudyReply(text, language).then((spoken) => {
       if (!spoken) toast.info(t("study.selection.noVoice"));
     });
   }
@@ -530,7 +530,7 @@ export function StudySelectionMenu({
                       <DirectionalText text={selection.text} className="min-w-0 line-clamp-2 text-sm text-muted-foreground wrap-break-word" />
                     )}
                     <ReaderTip label={t("study.selection.listen")}>
-                      <Button size="icon-sm" variant="ghost" aria-label={t("study.selection.listen")} onClick={speak}>
+                      <Button size="icon-sm" variant="ghost" aria-label={t("study.selection.listen")} onClick={() => speak()}>
                         <Icon icon={VolumeHighIcon} size={16} />
                       </Button>
                     </ReaderTip>
@@ -539,12 +539,24 @@ export function StudySelectionMenu({
                     {busy ? (
                       <p role="status" className="text-sm text-muted-foreground">{t("study.selection.translating")}</p>
                     ) : translated ? (
-                      <DirectionalText
-                        multiline
-                        text={translated.text}
-                        lang={translated.language}
-                        className="text-lg leading-relaxed wrap-break-word"
-                      />
+                      <div className="flex items-start justify-between gap-2">
+                        <DirectionalText
+                          multiline
+                          text={translated.text}
+                          lang={translated.language}
+                          className="min-w-0 text-lg leading-relaxed wrap-break-word"
+                        />
+                        <ReaderTip label={t("study.selection.listenTranslation")}>
+                          <Button
+                            size="icon-sm"
+                            variant="ghost"
+                            aria-label={t("study.selection.listenTranslation")}
+                            onClick={() => speak(translated.text, translated.language || speechLanguage(translated.text))}
+                          >
+                            <Icon icon={VolumeHighIcon} size={16} />
+                          </Button>
+                        </ReaderTip>
+                      </div>
                     ) : translation && "error" in translation ? (
                       <div className="space-y-2">
                         <p role="alert" className="text-sm text-destructive">{translation.error}</p>
@@ -713,6 +725,17 @@ export function StudySelectionMenu({
                     <Button size="sm" variant="ghost" onClick={() => onDraftCards(explanation.text)}>
                       {t("study.capture.cardsFromAnswer")}
                     </Button>
+                    <ReaderTip label={t("study.selection.listen")}>
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        className="ms-auto"
+                        aria-label={t("study.selection.listen")}
+                        onClick={() => speak(explanation.text)}
+                      >
+                        <Icon icon={VolumeHighIcon} size={16} />
+                      </Button>
+                    </ReaderTip>
                   </div>
                 </>
               ) : null}

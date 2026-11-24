@@ -180,7 +180,8 @@ async function speakWithSystem(text: string, language: string, signal?: AbortSig
     }, 180_000);
     signal?.addEventListener("abort", cancel, { once: true });
     utterance.onend = () => finish(true);
-    utterance.onerror = () => finish(false);
+    // Stopped or replaced by newer speech: that is not a missing voice.
+    utterance.onerror = (event) => finish(event.error === "interrupted" || event.error === "canceled");
     try {
       synthesis.speak(utterance);
     } catch {

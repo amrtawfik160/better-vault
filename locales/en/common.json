@@ -151,8 +151,8 @@
     }
   },
   "speech": {
-    "downloading": "Getting the reading voice ready ({{percent}}%)",
-    "downloadingFirst": "Getting the reading voice ready. This happens once.",
-    "ready": "The reading voice is ready."
+    "downloading": "Downloading the natural reading voice ({{percent}}%). Until it’s ready, your system voice reads.",
+    "downloadingFirst": "Downloading the natural reading voice. This happens once; until it’s ready, your system voice reads.",
+    "ready": "The natural reading voice is ready. Press Listen again to hear it."
   }
 }

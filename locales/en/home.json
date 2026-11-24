@@ -561,6 +561,7 @@
       "translating": "Translating…",
       "chooseLanguage": "Choose the language to translate into. You only do this once; you can change it under Aa.",
       "listen": "Listen",
+      "listenTranslation": "Listen to the translation",
       "noVoice": "No voice on this device can read this text aloud.",
       "retry": "Try again",
       "saveWord": "Save word",

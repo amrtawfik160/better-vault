@@ -1,7 +1,14 @@
-import { Cards01Icon, Globe02Icon, RepeatIcon } from "@hugeicons/core-free-icons";
+import {
+  Cards01Icon,
+  Globe02Icon,
+  RepeatIcon,
+  StopIcon,
+  VolumeHighIcon,
+} from "@hugeicons/core-free-icons";
 import { getToolName, isToolUIPart } from "ai";
-import { useMemo, type Ref } from "react";
+import { useEffect, useMemo, useRef, useState, type Ref } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { Icon } from "@/components/icon";
 import { Message } from "@/components/panelui/message";
 import { sourceKindIcons } from "@/components/sources/source-kind";
@@ -9,6 +16,7 @@ import { answerFlashcardMaterial } from "@/lib/chat/study";
 import type { ChatMessage, PassageRef } from "@/lib/chat/types";
 import { cleanText } from "@/lib/grounding/clean";
 import { citedNumbers, stripCitations } from "@/lib/grounding/passages";
+import { canSpeak, speak, stopSpeaking } from "@/lib/speech/speak";
 
 const hostOf = (url: string) => {
   try {
@@ -34,6 +42,41 @@ interface AssistantMessageProps {
   focusRef?: Ref<HTMLDivElement>;
   /** Ask AI beside the reader: the book's sections the answer read, opening in the reader. */
   book?: BookLinks;
+}
+
+/** Reads the answer aloud, and stops it while it reads. */
+function ListenAction({ text }: { text: string }) {
+  const { t } = useTranslation("chat");
+  const [reading, setReading] = useState(false);
+  const readingNow = useRef(false);
+  // Leaving the answer stops its reading, but not one started elsewhere since.
+  useEffect(
+    () => () => {
+      if (readingNow.current) stopSpeaking();
+    },
+    [],
+  );
+  if (!canSpeak()) return null;
+  return (
+    <Message.Action
+      label={reading ? t("actions.stopListening") : t("actions.listen")}
+      onClick={() => {
+        if (reading) return stopSpeaking();
+        setReading(true);
+        readingNow.current = true;
+        void speak(stripCitations(text))
+          .then((spoken) => {
+            if (!spoken) toast.info(t("actions.noVoice"));
+          })
+          .finally(() => {
+            readingNow.current = false;
+            setReading(false);
+          });
+      }}
+    >
+      <Icon icon={reading ? StopIcon : VolumeHighIcon} />
+    </Message.Action>
+  );
 }
 
 /** An answer: the sources it read or searched, the text with citations, and actions. */
@@ -210,6 +253,7 @@ export function AssistantMessage({
                 copy={() => stripCitations(text)}
               />
             ) : null}
+            {text ? <ListenAction text={text} /> : null}
             {material && canMakeCards ? (
               <Message.Action label={t("actions.flashcards")} onClick={() => onMakeCards(material)}>
                 <Icon icon={Cards01Icon} />
