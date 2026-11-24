@@ -2,6 +2,8 @@ import { z } from "zod";
 import { describeError } from "@/lib/ai/errors";
 import { htmlToText, pdfToText } from "@/lib/sources/extract";
 import { fetchPublic } from "@/lib/sources/network";
+import { transcriptDocument, transcriptText } from "@/lib/sources/transcript";
+import { fetchYouTubeVideo, youtubeVideoId, youtubeWatchUrl } from "@/lib/sources/youtube";
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
 
@@ -10,8 +12,33 @@ const urlBody = z.object({ url: z.url() });
 const titleFromFile = (name: string) => name.replace(/\.[^.]+$/, "") || name;
 
 /**
+ * A YouTube video: its captions as a timed transcript. Without captions the
+ * answer is `{ code: "noCaptions" }` with the video's title and length, so the
+ * page can offer to transcribe it with Gemini.
+ */
+async function youtube(id: string) {
+  const video = await fetchYouTubeVideo(id);
+  const url = youtubeWatchUrl(id);
+  const about = { id, title: video.title, author: video.author, seconds: video.seconds, url };
+  if (!video.captions) {
+    return Response.json(
+      { error: "This video has no captions.", code: "noCaptions", video: about },
+      { status: 422 },
+    );
+  }
+  return Response.json({
+    title: video.title,
+    text: transcriptDocument(transcriptText(video.captions.cues), url),
+    kind: "text",
+    url,
+    video: { ...about, language: video.captions.language, auto: video.captions.auto },
+  });
+}
+
+/**
  * Turns a PDF upload (multipart, field "file") or a web address (JSON
- * `{ url }`) into plain text. Nothing is stored on the server.
+ * `{ url }`) into plain text; a YouTube address gives the video's captions.
+ * Nothing is stored on the server.
  */
 export async function POST(request: Request) {
   try {
@@ -33,6 +60,8 @@ export async function POST(request: Request) {
 
     const parsed = urlBody.safeParse(await request.json().catch(() => null));
     if (!parsed.success) return Response.json({ error: "Enter a valid address." }, { status: 400 });
+    const videoId = youtubeVideoId(parsed.data.url);
+    if (videoId) return await youtube(videoId);
     const page = await fetchPublic(parsed.data.url);
     const fallbackTitle = page.url.hostname + page.url.pathname.replace(/\/$/, "");
 

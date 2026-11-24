@@ -169,6 +169,35 @@ export function cleanPastedTranscript(raw: string): string {
   return preamble.length ? `${preamble.join("\n")}\n\n${body}` : body;
 }
 
+const leadingMarker = /^\s*\[((?:\d{1,2}:)?\d{1,2}:\d{2})\]\s*(.*)$/;
+
+/**
+ * Tidies a transcript a model wrote with `[mm:ss]` at the start of its
+ * paragraphs: times written the same way, one paragraph each, blank lines
+ * between. Lines without a time join the paragraph above. Text without any
+ * times comes back trimmed.
+ */
+export function normalizeTimedTranscript(raw: string): string {
+  const paragraphs: TimedParagraph[] = [];
+  const preamble: string[] = [];
+  for (const line of raw.replace(/\r\n?/g, "\n").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || /^```/.test(trimmed)) continue;
+    const match = leadingMarker.exec(trimmed);
+    const at = match ? parseTimestamp(match[1]) : undefined;
+    if (match && at !== undefined) {
+      paragraphs.push({ start: at, text: match[2].trim() });
+      continue;
+    }
+    const last = paragraphs.at(-1);
+    if (last) last.text = last.text ? `${last.text} ${trimmed}` : trimmed;
+    else preamble.push(trimmed);
+  }
+  if (!paragraphs.length) return raw.trim();
+  const body = paragraphsText(paragraphs.filter(({ text }) => text));
+  return preamble.length ? `${preamble.join(" ")}\n\n${body}` : body;
+}
+
 /** The text of a transcript document, with the link to the video or episode first. */
 export function transcriptDocument(text: string, link?: string): string {
   const url = link?.trim();

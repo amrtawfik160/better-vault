@@ -10,6 +10,7 @@ import { POST as models } from "./routes/models";
 import { POST as opencode } from "./routes/opencode";
 import { POST as sourcesParse } from "./routes/sources-parse";
 import { POST as sourcesTranscribe } from "./routes/sources-transcribe";
+import { POST as sourcesYouTube } from "./routes/sources-youtube";
 import { POST as study } from "./routes/study";
 import { POST as studyPractice } from "./routes/study-practice";
 import { recognize as studyOcr, status as studyOcrStatus } from "./routes/study-ocr";
@@ -47,6 +48,7 @@ export function createApi({
   api.post("/opencode/detect", () => opencode());
   api.post("/sources/parse", (c) => sourcesParse(c.req.raw));
   api.post("/sources/transcribe", (c) => sourcesTranscribe(c.req.raw));
+  api.post("/sources/youtube", (c) => sourcesYouTube(c.req.raw));
   api.post("/study", (c) => study(c.req.raw));
   api.post("/study/practice", (c) => studyPractice(c.req.raw));
   api.post("/study/reader-chat", (c) => readerChat(c.req.raw));

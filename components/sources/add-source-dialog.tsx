@@ -23,7 +23,9 @@ import {
   ingestFile,
   ingestText,
   ingestUrl,
+  type VideoInfo,
 } from "@/lib/sources/ingest";
+import { youtubeVideoId } from "@/lib/sources/youtube";
 import { CloudBrowser } from "@/components/storage/cloud-browser";
 import { storageIds } from "@/lib/storage/catalog";
 import { storageClient } from "@/lib/storage/clients";
@@ -37,6 +39,7 @@ import {
   transcriptDraftLink,
   transcriptDraftReady,
 } from "./transcript-fields";
+import { YouTubeGeminiCard } from "./youtube-gemini-card";
 
 type Mode = "file" | "cloud" | "url" | "text" | "media";
 
@@ -84,6 +87,10 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
   const [errors, setErrors] = useState<string[]>([]);
   const [transcript, setTranscript] = useState(emptyTranscriptDraft);
   const [transcribing, setTranscribing] = useState(false);
+  // A YouTube video without captions: Gemini can write its transcript instead.
+  const [uncaptioned, setUncaptioned] = useState<VideoInfo>();
+  const [geminiBusy, setGeminiBusy] = useState(false);
+  const isVideo = youtubeVideoId(url) !== null;
   // "From storage" appears once a storage service is connected (Settings → Storage).
   const storage = useStorageSettings();
   const hasStorage = storage ? storageIds.some((id) => isStorageReady(storage, id)) : false;
@@ -112,6 +119,24 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
     else onDone();
   }
 
+  /** A link: a page's text, or a video's captions; a video without them offers Gemini. */
+  async function addLink(address: string) {
+    setBusy(true);
+    setErrors([]);
+    setUncaptioned(undefined);
+    try {
+      await ingestUrl(notebookId, address);
+      toast.success(t("added", { count: 1 }));
+      onDone();
+    } catch (error) {
+      if (error instanceof IngestError && error.reason === "noCaptions" && error.video)
+        setUncaptioned(error.video);
+      else setErrors([describe(error)]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function addFiles(files: FileList | File[]) {
     const list = [...files];
     if (list.length > 0) void run(list.map((file) => () => ingestFile(notebookId, file)));
@@ -124,7 +149,7 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
         setErrors([t("errors.url")]);
         return;
       }
-      void run([() => ingestUrl(notebookId, address)]);
+      void addLink(address);
     } else if (mode === "text" && text.trim()) {
       void run([
         () => ingestText(notebookId, title.trim() || t("addDialog.textTitlePlaceholder"), text),
@@ -151,7 +176,7 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
   const canSubmit =
     !busy &&
     (mode === "url"
-      ? url.trim() !== ""
+      ? url.trim() !== "" && !uncaptioned
       : mode === "text"
         ? text.trim() !== ""
         : mode === "media"
@@ -165,7 +190,7 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
           aria-label={t("addDialog.title")}
           value={mode}
           onValueChange={(next) => {
-            if (transcribing) return;
+            if (transcribing || geminiBusy) return;
             setMode(next);
             setErrors([]);
           }}
@@ -281,17 +306,38 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
                 onBusyChange={setTranscribing}
               />
             ) : mode === "url" ? (
-              <Field label={t("addDialog.urlLabel")} htmlFor={urlId} hint={t("addDialog.urlHint")}>
-                <Input
-                  id={urlId}
-                  type="url"
-                  inputMode="url"
-                  autoFocus
-                  placeholder={t("addDialog.urlPlaceholder")}
-                  value={url}
-                  onChange={(event) => setUrl(event.target.value)}
-                />
-              </Field>
+              <>
+                <Field
+                  label={t("addDialog.urlLabel")}
+                  htmlFor={urlId}
+                  hint={isVideo ? t("addDialog.urlVideo") : t("addDialog.urlHint")}
+                >
+                  <Input
+                    id={urlId}
+                    type="url"
+                    inputMode="url"
+                    autoFocus
+                    disabled={geminiBusy}
+                    placeholder={t("addDialog.urlPlaceholder")}
+                    value={url}
+                    onChange={(event) => {
+                      setUrl(event.target.value);
+                      setUncaptioned(undefined);
+                    }}
+                  />
+                </Field>
+                {uncaptioned ? (
+                  <YouTubeGeminiCard
+                    notebookId={notebookId}
+                    video={uncaptioned}
+                    onBusyChange={setGeminiBusy}
+                    onAdded={() => {
+                      toast.success(t("added", { count: 1 }));
+                      onDone();
+                    }}
+                  />
+                ) : null}
+              </>
             ) : (
               <>
                 <Field label={t("addDialog.textTitle")} htmlFor={titleId}>

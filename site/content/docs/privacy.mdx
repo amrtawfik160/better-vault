@@ -13,7 +13,7 @@ When you [connect an AI subscription](/docs/providers#connect-an-ai-subscription
 
 Only what a request needs. When you chat or create in the Studio, better-vault sends the relevant passages from your selected sources, your question and your key to its API route. The route forwards them to the provider you picked and streams the answer back, without storing or logging them.
 
-When you add a PDF or a web page, the file or address goes to the parse route, which returns plain text and keeps nothing. When the model list loads, your key is used to ask the provider which models you can use.
+When you add a PDF or a web page, the file or address goes to the parse route, which returns plain text and keeps nothing. For a YouTube video, that route asks YouTube for the video's captions; nothing about you is sent. If you have Gemini transcribe a video without captions, its address and your Google key go to Google for that one request. When the model list loads, your key is used to ask the provider which models you can use.
 
 Reading aloud stays on your device. English is read by Kokoro, an open voice model that runs inside the app. The first time you press **Listen**, the app downloads the model from Hugging Face (about 330 MB with WebGPU, 92 MB without) and keeps it for next time; only the model is downloaded, and your text is never sent. Until it is ready, your system voice reads. **Settings → Reading voice** shows the download, and lets you start, cancel or remove it. Other languages use your system's own voices.
 

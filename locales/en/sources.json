@@ -43,7 +43,7 @@
     "description": "Sources stay in this browser. Their text is sent to your model when you ask questions or create something.",
     "tabs": {
       "file": "Upload",
-      "url": "Web page",
+      "url": "Link",
       "text": "Paste text",
       "cloud": "From storage",
       "media": "Transcript"
@@ -52,8 +52,9 @@
     "choose": "Choose files",
     "fileTypes": "PDF, EPUB, Markdown or text files, up to 20 MB each.",
     "urlLabel": "Address",
-    "urlPlaceholder": "https://example.com/article",
-    "urlHint": "The page's main text is saved as a source.",
+    "urlPlaceholder": "A web page, a PDF or a YouTube video",
+    "urlHint": "A page's main text, or a YouTube video's captions, is saved as a source.",
+    "urlVideo": "YouTube video: its captions are saved as a transcript with times.",
     "textTitle": "Title",
     "textTitlePlaceholder": "Pasted text",
     "textLabel": "Text",
@@ -68,7 +69,22 @@
     "type": "{{name}} is not a supported file type.",
     "tooLarge": "{{name}} is larger than 20 MB.",
     "read": "Could not read {{name}}: {{error}}",
+    "noCaptions": "{{name}} has no captions.",
     "url": "Enter a full address starting with http:// or https://."
+  },
+  "youtube": {
+    "noCaptions": "This video has no captions",
+    "video": "{{title}} · {{length}}",
+    "offer": "Gemini can watch it and write the transcript, with times.",
+    "cost": "It uses your Google key: about {{tokens}} tokens for this video.",
+    "costUnknown": "It uses your Google key.",
+    "noKey": "Turn on Google Gemini and add its key in Settings first.",
+    "tooLong": "This video is longer than 3 hours, more than Gemini can transcribe at once.",
+    "transcribe": "Transcribe with Gemini",
+    "otherWay": "Or add its subtitles or a recording in the Transcript tab.",
+    "working": "Gemini is watching the video. A long one takes a few minutes.",
+    "stop": "Stop",
+    "failed": "Gemini couldn't transcribe it: {{error}}"
   },
   "picture": "Picture from {{title}}",
   "transcript": {
