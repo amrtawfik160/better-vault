@@ -55,8 +55,11 @@ async function loadModel() {
 
 function load() {
   model ??= loadModel().then(
-    ({ tts, device }) => {
+    async ({ tts, device }) => {
       post({ type: "loaded", device });
+      // The first reading prepares the graphics chip's programs, which takes
+      // seconds; a word read here, unheard, spares the user that wait.
+      await tts.generate("Hello.", { voice: kokoroVoice }).catch(() => {});
       return tts;
     },
     (error: unknown) => {

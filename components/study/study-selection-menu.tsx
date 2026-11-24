@@ -9,7 +9,6 @@ import {
   MoreHorizontalIcon,
   NoteEditIcon,
   TranslateIcon,
-  VolumeHighIcon,
 } from "@hugeicons/core-free-icons";
 import {
   useEffect,
@@ -41,10 +40,11 @@ import {
   type StudyRecordOf,
 } from "@/lib/study/records";
 import { speechLanguage, translationLanguageLabel } from "@/lib/study/translation-language";
-import { speakStudyReply } from "@/lib/study/voice-session";
+import { warmUpSpeech } from "@/lib/speech/speak";
 import { textDirection } from "@/lib/text/direction";
 import { cn } from "@/lib/utils";
 import { highlightColors } from "./study-highlight-colors";
+import { ListenButton, useListen, useListenLabel } from "@/components/speech/listen";
 import { ReaderTip } from "./study-reader-tip";
 import { StudyText } from "./study-text";
 import { StudyTranslationLanguages, useTranslationLanguageName } from "./study-translation-language";
@@ -122,6 +122,36 @@ function ActionButton({
         <Icon icon={icon} size={16} />
         <span className="sr-only sm:not-sr-only">{label}</span>
       </Button>
+    </ReaderTip>
+  );
+}
+
+/** Listen, in the menu: a spinner while the audio is prepared, then Stop. */
+function SelectionListen({
+  text,
+  language,
+  label,
+  className,
+}: {
+  text: string;
+  language?: string;
+  label: string;
+  className?: string;
+}) {
+  const { t } = useTranslation("home");
+  const { state, toggle } = useListen();
+  return (
+    <ReaderTip label={useListenLabel(state, label)}>
+      <ListenButton
+        state={state}
+        label={label}
+        className={className}
+        onClick={() =>
+          void toggle(text, language || speechLanguage(text)).then((spoken) => {
+            if (!spoken) toast.info(t("study.selection.noVoice"));
+          })
+        }
+      />
     </ReaderTip>
   );
 }
@@ -251,6 +281,8 @@ export function StudySelectionMenu({
   }, [frame, viewport]);
 
   useEffect(() => () => pending.current?.abort(), []);
+  // A selection is often read aloud next: get the voice ready meanwhile.
+  useEffect(warmUpSpeech, []);
 
   useEffect(() => {
     if (view === "actions") return;
@@ -402,12 +434,6 @@ export function StudySelectionMenu({
     }
   }
 
-  function speak(text = selection.text, language = speechLanguage(text)) {
-    void speakStudyReply(text, language).then((spoken) => {
-      if (!spoken) toast.info(t("study.selection.noVoice"));
-    });
-  }
-
   const backToActions = () => setView("actions");
   const translated = translation && "text" in translation ? translation : undefined;
 
@@ -529,11 +555,7 @@ export function StudySelectionMenu({
                     ) : (
                       <DirectionalText text={selection.text} className="min-w-0 line-clamp-2 text-sm text-muted-foreground wrap-break-word" />
                     )}
-                    <ReaderTip label={t("study.selection.listen")}>
-                      <Button size="icon-sm" variant="ghost" aria-label={t("study.selection.listen")} onClick={() => speak()}>
-                        <Icon icon={VolumeHighIcon} size={16} />
-                      </Button>
-                    </ReaderTip>
+                    <SelectionListen text={selection.text} label={t("study.selection.listen")} />
                   </div>
                   <div aria-live="polite">
                     {busy ? (
@@ -546,16 +568,11 @@ export function StudySelectionMenu({
                           lang={translated.language}
                           className="min-w-0 text-lg leading-relaxed wrap-break-word"
                         />
-                        <ReaderTip label={t("study.selection.listenTranslation")}>
-                          <Button
-                            size="icon-sm"
-                            variant="ghost"
-                            aria-label={t("study.selection.listenTranslation")}
-                            onClick={() => speak(translated.text, translated.language || speechLanguage(translated.text))}
-                          >
-                            <Icon icon={VolumeHighIcon} size={16} />
-                          </Button>
-                        </ReaderTip>
+                        <SelectionListen
+                          text={translated.text}
+                          language={translated.language}
+                          label={t("study.selection.listenTranslation")}
+                        />
                       </div>
                     ) : translation && "error" in translation ? (
                       <div className="space-y-2">
@@ -725,17 +742,7 @@ export function StudySelectionMenu({
                     <Button size="sm" variant="ghost" onClick={() => onDraftCards(explanation.text)}>
                       {t("study.capture.cardsFromAnswer")}
                     </Button>
-                    <ReaderTip label={t("study.selection.listen")}>
-                      <Button
-                        size="icon-sm"
-                        variant="ghost"
-                        className="ms-auto"
-                        aria-label={t("study.selection.listen")}
-                        onClick={() => speak(explanation.text)}
-                      >
-                        <Icon icon={VolumeHighIcon} size={16} />
-                      </Button>
-                    </ReaderTip>
+                    <SelectionListen text={explanation.text} label={t("study.selection.listen")} className="ms-auto" />
                   </div>
                 </>
               ) : null}

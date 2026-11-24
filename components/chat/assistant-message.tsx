@@ -2,21 +2,20 @@ import {
   Cards01Icon,
   Globe02Icon,
   RepeatIcon,
-  StopIcon,
-  VolumeHighIcon,
 } from "@hugeicons/core-free-icons";
 import { getToolName, isToolUIPart } from "ai";
-import { useEffect, useMemo, useRef, useState, type Ref } from "react";
+import { useMemo, type Ref } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Icon } from "@/components/icon";
 import { Message } from "@/components/panelui/message";
+import { ListenIcon, useListen, useListenLabel } from "@/components/speech/listen";
 import { sourceKindIcons } from "@/components/sources/source-kind";
 import { answerFlashcardMaterial } from "@/lib/chat/study";
 import type { ChatMessage, PassageRef } from "@/lib/chat/types";
 import { cleanText } from "@/lib/grounding/clean";
 import { citedNumbers, stripCitations } from "@/lib/grounding/passages";
-import { canSpeak, speak, stopSpeaking } from "@/lib/speech/speak";
+import { canSpeak, warmUpSpeech } from "@/lib/speech/speak";
 
 const hostOf = (url: string) => {
   try {
@@ -47,34 +46,22 @@ interface AssistantMessageProps {
 /** Reads the answer aloud, and stops it while it reads. */
 function ListenAction({ text }: { text: string }) {
   const { t } = useTranslation("chat");
-  const [reading, setReading] = useState(false);
-  const readingNow = useRef(false);
-  // Leaving the answer stops its reading, but not one started elsewhere since.
-  useEffect(
-    () => () => {
-      if (readingNow.current) stopSpeaking();
-    },
-    [],
-  );
+  const { state, toggle } = useListen();
+  const label = useListenLabel(state, t("actions.listen"));
   if (!canSpeak()) return null;
   return (
     <Message.Action
-      label={reading ? t("actions.stopListening") : t("actions.listen")}
-      onClick={() => {
-        if (reading) return stopSpeaking();
-        setReading(true);
-        readingNow.current = true;
-        void speak(stripCitations(text))
-          .then((spoken) => {
-            if (!spoken) toast.info(t("actions.noVoice"));
-          })
-          .finally(() => {
-            readingNow.current = false;
-            setReading(false);
-          });
-      }}
+      label={label}
+      aria-busy={state === "preparing" || undefined}
+      onPointerEnter={warmUpSpeech}
+      onFocus={warmUpSpeech}
+      onClick={() =>
+        void toggle(stripCitations(text)).then((spoken) => {
+          if (!spoken) toast.info(t("actions.noVoice"));
+        })
+      }
     >
-      <Icon icon={reading ? StopIcon : VolumeHighIcon} />
+      <ListenIcon state={state} />
     </Message.Action>
   );
 }

@@ -1,7 +1,5 @@
-import { VolumeHighIcon } from "@hugeicons/core-free-icons";
 import { useTranslation } from "react-i18next";
-import { Icon } from "@/components/icon";
-import { Button } from "@/components/panelui/button";
+import { ListenButton, useListen } from "@/components/speech/listen";
 import { canSpeak, speak } from "@/lib/speech/speak";
 import { cn } from "@/lib/utils";
 
@@ -14,18 +12,17 @@ export function speakStudyText(text: string) {
 
 export function StudyListenButton({ text, className }: { text: string; className?: string }) {
   const { t } = useTranslation("home");
+  const { state, toggle } = useListen();
   if (!canSpeak()) return null;
+  const label = t("study.collection.listen", { term: text });
   return (
-    <Button
-      variant="ghost"
-      size="icon-sm"
+    <ListenButton
+      state={state}
+      label={label}
+      title={label}
       shape="pill"
       className={cn("text-muted-foreground", className)}
-      aria-label={t("study.collection.listen", { term: text })}
-      title={t("study.collection.listen", { term: text })}
-      onClick={() => speakStudyText(text)}
-    >
-      <Icon icon={VolumeHighIcon} size={16} />
-    </Button>
+      onClick={() => void toggle(text)}
+    />
   );
 }

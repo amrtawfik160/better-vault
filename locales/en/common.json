@@ -165,6 +165,8 @@
     "listenNow": "Listen",
     "failed": "The natural voice couldn’t download",
     "failedHint": "Your system voice reads for now. Check your connection and try again.",
-    "retry": "Try again"
+    "retry": "Try again",
+    "preparing": "Preparing the audio…",
+    "stop": "Stop"
   }
 }

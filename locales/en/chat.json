@@ -61,7 +61,6 @@
     "copy": "Copy",
     "copied": "Copied",
     "listen": "Listen",
-    "stopListening": "Stop reading",
     "noVoice": "No voice on this device can read this answer aloud.",
     "flashcards": "Make flashcards",
     "retry": "Try again"
