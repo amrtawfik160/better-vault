@@ -12,14 +12,15 @@ import {
   type RefObject,
 } from "react";
 import {
-  AiChat02Icon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
-  HighlighterIcon,
+  Bookmark02Icon,
+  InformationCircleIcon,
   LeftToRightListBulletIcon,
   MoreHorizontalIcon,
   Search01Icon,
-  TranslateIcon,
+  SidebarRightIcon,
+  TeachingIcon,
 } from "@hugeicons/core-free-icons";
 import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
@@ -30,11 +31,14 @@ import { StudyDocumentEdits } from "./study-document-edits";
 import { StudyDocumentSearch } from "./study-document-search";
 import { StudyReaderSettings } from "./study-reader-settings";
 import {
-  StudyReaderPanel,
+  StudyReaderCompanion,
+  useReaderCompanionLayout,
+  type ReaderCompanionTab,
   type ReaderConversations,
-  type ReaderPanelTab,
   type ReaderTutor,
-} from "./study-reader-panel";
+} from "./study-reader-companion";
+import { StudyReaderContents, type ReaderContentsTab } from "./study-reader-contents";
+import { usePartName, useReaderPractice } from "./study-reader-practise";
 import type { ReaderChatSeed, ReaderQuote } from "./reader-chat";
 import { ReaderTip } from "./study-reader-tip";
 import { StudySelectionMenu, type SelectionMenuHandle, type StudySelection } from "./study-selection-menu";
@@ -43,6 +47,7 @@ import { flashcardMaterialLimit, flashcardPassageSize } from "@/lib/study/ai";
 import { flashcardDraftRanges } from "@/lib/study/flashcard-material";
 import { DirectionalText } from "@/components/common/directional-text";
 import { Icon } from "@/components/icon";
+import { Alert } from "@/components/panelui/alert";
 import { Button } from "@/components/panelui/button";
 import { StudyEpubChapter } from "./study-epub-chapter";
 import { StudyPdfPage } from "./study-pdf-page";
@@ -93,20 +98,77 @@ import type { StudyImageCapture } from "@/lib/study/visual-card";
 import { locateStudyMark, resolveStudyRange, studyTextRevision } from "@/lib/study/text-edits";
 import { studyDocumentFormulaMode } from "@/lib/study/markdown-document";
 import { canEditStudyText } from "@/lib/study/library";
+import { firstOpenStrip, leftOffLineStart, readerPart } from "@/lib/study/reader-companion";
 import { StudyDocumentRemovalDialog, type StudyDocumentRemoval } from "./study-document-dialogs";
 import { cn } from "@/lib/utils";
 
 type Selection = StudySelection;
 type Highlight = StudyRecordOf<"highlight">;
 
+/** Open layers that close on Escape themselves: a menu, a list, a dialog other than the reader's panels. */
+const escapeOwners =
+  "[role=menu], [role=listbox], [data-slot=model-picker-content], [role=dialog]:not([data-study-selection-menu]), [role=alertdialog]";
+
+const companionPreferenceKey = "deeple:reader-companion";
+const firstOpenKey = (bookId: string) => `deeple:reader-first-open:${bookId}`;
+
+/** Whether the companion column was last left open or closed, at full width. */
+function readCompanionPreference() {
+  try {
+    return localStorage.getItem(companionPreferenceKey);
+  } catch {
+    return null;
+  }
+}
+function rememberCompanionPreference(value: "open" | "closed") {
+  try {
+    localStorage.setItem(companionPreferenceKey, value);
+  } catch {
+    // Browser storage can be off; the companion then opens as it does the first time.
+  }
+}
+function readFirstOpen(bookId: string) {
+  try {
+    return localStorage.getItem(firstOpenKey(bookId));
+  } catch {
+    return null;
+  }
+}
+function rememberFirstOpen(bookId: string, value: "pending" | "done") {
+  try {
+    localStorage.setItem(firstOpenKey(bookId), value);
+  } catch {
+    // Without browser storage the strip shows on new documents until dismissed in this visit.
+  }
+}
+
 /** Keys that belong to the control that has focus, not to the reader. */
 const ownKeys =
   "input, textarea, select, [contenteditable]:not([contenteditable=false]), [role=menu], [role=listbox], [role=tablist], [role=radiogroup], [role=slider], [role=dialog]:not([data-study-selection-menu]), [data-slot=model-picker-content]";
+
+/**
+ * "You left off here": a quiet bookmark line before the line the reader left
+ * at. It holds no text of its own (the words are drawn by CSS), so offsets
+ * read from the article's text still match the document's.
+ */
+function LeftOffMarker({ label }: { label: string }) {
+  return (
+    <span
+      data-label={label}
+      contentEditable={false}
+      className="my-3 flex items-center gap-2 font-sans text-xs leading-4 text-muted-foreground select-none before:content-[attr(data-label)]"
+    >
+      <Icon icon={Bookmark02Icon} size={14} className="order-first shrink-0" />
+      <span aria-hidden className="order-last h-px flex-1 bg-border" />
+    </span>
+  );
+}
 
 function highlighted(
   text: string,
   highlights: Highlight[],
   focus?: { offset: number; length: number },
+  leftOff?: { at: number; label: string },
 ) {
   const candidates = highlights.flatMap(({ id, offset, quote, color }) => {
     const end = offset + quote.length;
@@ -162,11 +224,12 @@ function highlighted(
     if (at < end) content.push(inline(at, end));
     const lineOffset = start;
     start = end;
-    return (
+    const block = (
       <span key={lineOffset} dir={direction} className="block">
         {content}
       </span>
     );
+    return leftOff?.at === lineOffset ? [<LeftOffMarker key="left-off" label={leftOff.label} />, block] : block;
   });
 }
 
@@ -193,7 +256,6 @@ export function StudyReader({
   tutor,
   conversations,
   tutorPane,
-  wide,
   openPage,
   resume,
   openPassage,
@@ -207,6 +269,7 @@ export function StudyReader({
   reviewHighlights,
   reviewWords,
   notebookTitle,
+  setupModel,
 }: {
   book: StudyBook;
   scanDraft?: StudyOcrDraft;
@@ -221,11 +284,9 @@ export function StudyReader({
   highlights: Highlight[];
   words: StudyWord[];
   tutor?: ReaderTutor;
-  /** This document's earlier conversations, for the Ask AI panel. */
+  /** This document's earlier conversations, for Ask's History. */
   conversations: ReaderConversations;
   tutorPane: RefObject<HTMLElement | null>;
-  /** The panel sits beside the page; on a narrow screen it covers it. */
-  wide: boolean;
   openPage: (section: number) => void;
   resume: () => void;
   openPassage: (section: number, range: { offset: number; length: number }) => void;
@@ -246,6 +307,8 @@ export function StudyReader({
   reviewWords: (cardIds: string[]) => void;
   /** The title of the book's notebook, for the delete and remove-progress questions. */
   notebookTitle?: string;
+  /** Opens Settings → AI providers, the fix wherever a model is missing. */
+  setupModel?: () => void;
 }) {
   const [removal, setRemoval] = useState<StudyDocumentRemoval | null>(null);
   const [openedSection] = useState(book.section);
@@ -290,6 +353,9 @@ export function StudyReader({
   const passageNotice = useRef<HTMLDivElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
   const panelElement = useRef<HTMLElement>(null);
+  const contentsElement = useRef<HTMLElement>(null);
+  const contentsTrigger = useRef<HTMLButtonElement>(null);
+  const companionToggle = useRef<HTMLButtonElement>(null);
   const selectionMenu = useRef<SelectionMenuHandle>(null);
   const anchorRange = useRef<Range | null>(null);
   const lastPointer = useRef("mouse");
@@ -309,18 +375,28 @@ export function StudyReader({
   const [openingScanReview, setOpeningScanReview] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const tutorShown = tutor?.visible ? tutor.thread.id : undefined;
-  const [panel, setPanel] = useState<ReaderPanelTab | null>(tutorShown ? "ai" : null);
+  const layoutMode = useReaderCompanionLayout();
+  const [companion, setCompanion] = useState<ReaderCompanionTab | null>(() =>
+    tutorShown || (layoutMode === "column" && readCompanionPreference() !== "closed") ? "ask" : null,
+  );
+  const [contents, setContents] = useState<ReaderContentsTab | null>(null);
   const [chatQuote, setChatQuote] = useState<ReaderQuote>();
   const [chatSeed, setChatSeed] = useState<ReaderChatSeed>();
   const [shownTutor, setShownTutor] = useState(tutorShown);
-  // Set while the Ask AI panel goes back from a conversation to the list, so it stays open.
+  // Set while Ask goes back from a conversation to the list, so the companion stays open.
   const [listingConversations, setListingConversations] = useState(false);
   if (shownTutor !== tutorShown) {
     setShownTutor(tutorShown);
-    if (tutorShown) setPanel("ai");
-    else if (panel === "ai" && shownTutor && !listingConversations) setPanel(null);
+    if (tutorShown) setCompanion("ask");
+    else if (companion === "ask" && shownTutor && !listingConversations) setCompanion(null);
     if (listingConversations) setListingConversations(false);
   }
+  // The first-open strip, once per new document, and where "You left off here" goes: both as the reader was opened.
+  const [firstOpen] = useState(() =>
+    firstOpenStrip(readFirstOpen(book.id), book.lastReadAt !== undefined || book.readingPlace !== undefined),
+  );
+  const [strip, setStrip] = useState(firstOpen.show);
+  const [openedPlace] = useState(book.readingPlace);
   const [within, setWithin] = useState(0);
   const appearance = { ...defaultStudyReadingAppearance, ...book.readingAppearance };
   const { textSize: font, pdfZoom: zoom, epubTheme } = appearance;
@@ -414,7 +490,20 @@ export function StudyReader({
   );
   const showsTitle = !showingOriginal && book.format !== "pdf" &&
     !section.text.trimStart().startsWith(section.title.trim());
-  const panelCovers = panel !== null && !wide;
+  const companionCovers = companion !== null && layoutMode !== "column";
+  const part = readerPart(book, index);
+  const partName = usePartName(part);
+  const practice = useReaderPractice(book, index, vaultId);
+  const companionId = `reader-companion-${book.id}`;
+  const contentsId = `reader-contents-${book.id}`;
+  const leftOffAt = !visitingPassage && openedPlace?.section === index && openedPlace.surface === "text" &&
+      openedPlace.anchor && markdown === undefined && !showingOriginal && hasPageText
+    ? leftOffLineStart(section.text, locateStudyMark(book, { ...openedPlace.anchor, section: index }))
+    : undefined;
+
+  useEffect(() => {
+    if (firstOpen.remember) rememberFirstOpen(book.id, firstOpen.remember);
+  }, [book.id, firstOpen]);
 
   useEffect(() => {
     if (!visitingPassage) void updateStudyBook(book.id, { section: index });
@@ -646,20 +735,29 @@ export function StudyReader({
     });
   }
 
-  function showPanel(next: ReaderPanelTab) {
-    setPanel(next);
-    if (next === "ai" && tutor && !tutor.visible) tutor.show();
+  function showCompanion(next: ReaderCompanionTab) {
+    setCompanion(next);
+    if (layoutMode !== "column") setContents(null);
+    else rememberCompanionPreference("open");
+    if (next === "ask" && tutor && !tutor.visible) tutor.show();
   }
 
-  function closePanel() {
-    setPanel(null);
+  /** Closes the companion; over the text, focus goes back to the button that opens it. */
+  function closeCompanion() {
+    setCompanion(null);
+    if (layoutMode === "column") rememberCompanionPreference("closed");
     if (tutor?.visible) tutor.hide();
-    if (!wide) (textBody.current ?? viewport)?.focus({ preventScroll: true });
+    if (layoutMode !== "column") requestAnimationFrame(() => companionToggle.current?.focus({ preventScroll: true }));
   }
 
-  function togglePanel(next: ReaderPanelTab) {
-    if (panel === next) closePanel();
-    else showPanel(next);
+  function showContents(next: ReaderContentsTab) {
+    setContents(next);
+    if (layoutMode !== "column") setCompanion(null);
+  }
+
+  function closeContents(restoreFocus = true) {
+    setContents(null);
+    if (restoreFocus) requestAnimationFrame(() => contentsTrigger.current?.focus({ preventScroll: true }));
   }
 
   function readerKey(event: KeyboardEvent | ReactKeyboardEvent) {
@@ -681,22 +779,31 @@ export function StudyReader({
         event.preventDefault();
         setSearchOpen(false);
         (textBody.current ?? viewport)?.focus({ preventScroll: true });
-      } else if (panel && !target?.closest(ownKeys)) {
+      } else if (target?.closest(escapeOwners)) {
+        return;
+      } else if (contents) {
         event.preventDefault();
-        closePanel();
+        closeContents();
+      } else if (companion && layoutMode !== "column") {
+        // At full width the companion is a column of the page and stays; over the text it closes.
+        event.preventDefault();
+        closeCompanion();
       }
       return;
     }
     if (
-      selection && event.key === "Tab" && !event.shiftKey &&
-      !selectionMenu.current?.contains(target) && !target?.closest(ownKeys)
+      selection && (
+        (event.key === "F10" && event.altKey) ||
+        (event.key === "Tab" && !event.shiftKey && !target?.closest(ownKeys))
+      ) &&
+      !selectionMenu.current?.contains(target)
     ) {
       event.preventDefault();
       selectionMenu.current?.focus();
       return;
     }
     if (event.metaKey || event.ctrlKey || event.altKey || target?.closest(ownKeys)) return;
-    if (target && panelElement.current?.contains(target)) return;
+    if (target && (panelElement.current?.contains(target) || contentsElement.current?.contains(target))) return;
     if (selection) {
       const key = event.key.toLowerCase();
       if (key === "h") void saveHighlight(color);
@@ -1030,12 +1137,18 @@ export function StudyReader({
     toast.success(t("study.selection.noteSaved"));
   }
 
-  /** Sends a passage to Ask AI in the side panel: asked about next, or an explanation carried on. */
+  /** Closes the tutor session in Ask and goes back to the document's chat, keeping the companion open. */
+  function leaveTutor() {
+    if (tutor?.visible) setListingConversations(true);
+    conversations.leave();
+  }
+
+  /** Sends a passage to Ask in the companion: asked about next, or an explanation carried on. */
   function askInPanel(quote: ReaderQuote, explanation?: string) {
     if (explanation) setChatSeed({ id: crypto.randomUUID(), quote, explanation });
     else setChatQuote(quote);
-    if (tutor) conversations.leave();
-    setPanel("ai");
+    if (tutor) leaveTutor();
+    showCompanion("ask");
   }
 
   function ask() {
@@ -1044,14 +1157,14 @@ export function StudyReader({
     closeSelection(false);
   }
 
-  /** Discussing opens Ask AI beside the page, which reads the rest of the book itself; Teach it back is a tutor session. */
+  /** Discussing opens Ask beside the page, which reads the rest of the book itself; Teach it back is a tutor session. */
   function discuss(what: "chapter" | "book" | "teach-back") {
     if (what === "teach-back") {
       startChat("chapter", index, undefined, "teach-back");
       return;
     }
-    if (tutor) conversations.leave();
-    setPanel("ai");
+    if (tutor) leaveTutor();
+    showCompanion("ask");
   }
 
   const originalDownload = fileId && originalFile
@@ -1136,95 +1249,33 @@ export function StudyReader({
             <Icon icon={ArrowLeft01Icon} size={18} className="rtl:rotate-180" />
           </Button>
         </ReaderTip>
-        <Menu>
-          <Menu.Trigger
-            render={<Button size="icon-sm" variant="ghost" aria-label={t("study.reader.contents")} title={t("study.reader.contents")} />}
-          >
-            <Icon icon={LeftToRightListBulletIcon} size={18} className="rtl:-scale-x-100" />
-          </Menu.Trigger>
-          <Menu.Content align="start" className="max-w-[min(24rem,calc(100vw-1rem))]">
-            <Menu.Group>
-              <Menu.GroupLabel>{t(book.format === "pdf" ? "study.reader.pages" : "study.reader.contents")}</Menu.GroupLabel>
-              <Menu.RadioGroup
-                value={index}
-                onValueChange={(value: unknown) => {
-                  if (typeof value === "number" && value !== index) go(value);
-                }}
+        <div className="min-w-0 flex-1 px-1 leading-tight">
+          {notebookTitle ? (
+            <nav aria-label={t("study.readerCompanion.breadcrumb")} className="hidden sm:block">
+              <Link
+                to={routes.notebook(book.notebookId)}
+                state={returnState}
+                className="block truncate text-xs text-muted-foreground outline-none hover:text-foreground focus-visible:underline"
+                dir="auto"
               >
-                {book.sections.map((entry, at) => (
-                  <Menu.RadioItem key={at} value={at} closeOnClick>
-                    <span className="min-w-0 truncate" dir="auto">{entry.title}</span>
-                  </Menu.RadioItem>
-                ))}
-              </Menu.RadioGroup>
-            </Menu.Group>
-            {book.bookmarks.length ? (
-              <>
-                <Menu.Separator />
-                <Menu.Group>
-                  <Menu.GroupLabel>{t("study.reader.bookmarkedPages")}</Menu.GroupLabel>
-                  {book.bookmarks.map((at) => (
-                    <Menu.Item key={at} onClick={() => go(at)}>
-                      <span className="min-w-0 truncate" dir="auto">{book.sections[at]?.title ?? at + 1}</span>
-                    </Menu.Item>
-                  ))}
-                </Menu.Group>
-              </>
-            ) : null}
-            {bookmarkPlaces.length ? (
-              <>
-                <Menu.Separator />
-                <Menu.Group>
-                  <Menu.GroupLabel>{t("study.reader.bookmarkedPassages")}</Menu.GroupLabel>
-                  {bookmarkPlaces.map((place) => {
-                    const at = locateStudyMark(book, place);
-                    return (
-                      <Menu.Sub key={place.id}>
-                        <Menu.SubTrigger>
-                          <span className="min-w-0 max-w-64 truncate" dir="auto">{place.quote}</span>
-                        </Menu.SubTrigger>
-                        <Menu.SubContent>
-                          <Menu.Item
-                            render={
-                              <Link
-                                to={originHref({
-                                  kind: "book",
-                                  bookId: book.id,
-                                  section: place.section,
-                                  offset: at < 0 ? place.offset : at,
-                                  length: place.quote.length,
-                                  revision: at < 0 ? place.revision : revision,
-                                }, readerParams)}
-                                state={returnState}
-                              />
-                            }
-                          >
-                            {t("study.reader.goToPassage")}
-                          </Menu.Item>
-                          <Menu.Item
-                            variant="destructive"
-                            onClick={() =>
-                              void updateStudyBook(book.id, {
-                                bookmarkPlaces: bookmarkPlaces.filter(({ id }) => id !== place.id),
-                              })
-                            }
-                          >
-                            {t("study.reader.removeBookmark")}
-                          </Menu.Item>
-                        </Menu.SubContent>
-                      </Menu.Sub>
-                    );
-                  })}
-                </Menu.Group>
-              </>
-            ) : null}
-          </Menu.Content>
-        </Menu>
-        <div className="min-w-0 flex-1 px-1 text-center leading-tight">
-          <p className="truncate text-[0.8125rem] font-semibold" dir={textDirection(book.title)}>{book.title}</p>
-          <p className="truncate text-xs text-muted-foreground" dir="auto">{section.title}</p>
+                {notebookTitle}
+              </Link>
+            </nav>
+          ) : null}
+          <h1 className="truncate text-[0.8125rem] font-medium" title={book.title} dir={textDirection(book.title)}>
+            {book.title}
+          </h1>
+          <p className="truncate text-xs text-muted-foreground sm:hidden" dir="auto">{section.title}</p>
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
+          <span className="me-1 hidden text-xs text-muted-foreground tabular-nums md:block">
+            {t(book.format === "pdf" ? "study.reader.pageOf" : "study.reader.sectionOf", {
+              current: index + 1,
+              count: book.sections.length,
+            })}
+            {" · "}
+            {percent}
+          </span>
           {hasBookText ? (
             <ReaderTip label={t("study.reader.search")} keys={searchKeys} side="bottom">
               <Button
@@ -1238,6 +1289,19 @@ export function StudyReader({
               </Button>
             </ReaderTip>
           ) : null}
+          <Button
+            ref={contentsTrigger}
+            size="sm"
+            variant="ghost"
+            className={cn("gap-1.5 px-2", contents && "bg-muted text-foreground")}
+            aria-label={t("study.readerCompanion.contents.label")}
+            aria-expanded={contents !== null}
+            aria-controls={contentsId}
+            onClick={() => (contents ? closeContents() : showContents("outline"))}
+          >
+            <Icon icon={LeftToRightListBulletIcon} size={17} className="rtl:-scale-x-100" />
+            <span className="hidden sm:inline">{t("study.readerCompanion.contents.label")}</span>
+          </Button>
           <StudyReaderSettings
             appearance={appearance}
             original={showingOriginal && book.format !== "text" ? book.format : undefined}
@@ -1251,44 +1315,6 @@ export function StudyReader({
             onOpen={() => { appearanceCheckpoint.current = captureLayout(); }}
             onChange={(change) => void changeAppearance(change)}
           />
-          <ReaderTip label={t("study.reader.panel.highlights")} side="bottom">
-            <Button
-              size="sm"
-              variant={panel === "highlights" ? "secondary" : "ghost"}
-              className="gap-1 px-2"
-              aria-label={t("study.reader.highlightsCount", { count: highlights.length })}
-              aria-pressed={panel === "highlights"}
-              onClick={() => togglePanel("highlights")}
-            >
-              <Icon icon={HighlighterIcon} size={17} />
-              <span aria-hidden className="text-xs tabular-nums">{highlights.length}</span>
-            </Button>
-          </ReaderTip>
-          <ReaderTip label={t("study.reader.panel.words")} side="bottom">
-            <Button
-              size="sm"
-              variant={panel === "words" ? "secondary" : "ghost"}
-              className="hidden gap-1 px-2 sm:inline-flex"
-              aria-label={t("study.reader.wordsCount", { count: words.length })}
-              aria-pressed={panel === "words"}
-              onClick={() => togglePanel("words")}
-            >
-              <Icon icon={TranslateIcon} size={17} />
-              <span aria-hidden className="text-xs tabular-nums">{words.length}</span>
-            </Button>
-          </ReaderTip>
-          <Button
-            size="sm"
-            shape="pill"
-            variant={panel === "ai" ? "default" : "outline"}
-            className="ms-1 gap-1.5 px-2.5 sm:px-3"
-            aria-pressed={panel === "ai"}
-            aria-label={t("study.selection.ask")}
-            onClick={() => togglePanel("ai")}
-          >
-            <Icon icon={AiChat02Icon} size={16} />
-            <span className="hidden sm:inline">{t("study.selection.ask")}</span>
-          </Button>
           <Menu>
             <Menu.Trigger
               render={<Button size="icon-sm" variant="ghost" aria-label={t("study.reader.more")} title={t("study.reader.more")} />}
@@ -1374,8 +1400,64 @@ export function StudyReader({
               </Menu.Item>
             </Menu.Content>
           </Menu>
+          <span aria-hidden className="mx-1 hidden h-5 w-px bg-border sm:block" />
+          {/* The one filled button. While the Practise tab is open it steps back, and Start is filled there. */}
+          <Button
+            variant={companion === "practise" ? "outline" : "default"}
+            className="h-auto min-h-8 gap-2 rounded-xl py-1 ps-2.5 pe-3 sm:min-h-10 sm:ps-3 sm:pe-4"
+            aria-describedby={`${companionId}-practise-reason`}
+            onClick={() => showCompanion("practise")}
+          >
+            <Icon icon={TeachingIcon} size={16} className="shrink-0" />
+            <span className="flex flex-col items-start text-start leading-4">
+              <span className="sr-only text-[0.8125rem] font-semibold sm:not-sr-only">{t("study.readerCompanion.practiseThis")}</span>
+              <span
+                id={`${companionId}-practise-reason`}
+                className={cn(
+                  "hidden text-xs font-normal whitespace-nowrap lg:block",
+                  companion === "practise" ? "text-muted-foreground" : "text-primary-foreground/72",
+                )}
+              >
+                {t(`study.readerCompanion.practiseReason.${practice.exercise}`, { part: partName.inline })}
+              </span>
+            </span>
+          </Button>
+          <ReaderTip label={t("study.readerCompanion.toggle")} side="bottom">
+            <Button
+              ref={companionToggle}
+              size="icon-sm"
+              variant="ghost"
+              className={cn(companion && "bg-muted text-foreground")}
+              aria-label={t("study.readerCompanion.toggle")}
+              aria-expanded={companion !== null}
+              aria-controls={companionId}
+              onClick={() => (companion ? closeCompanion() : showCompanion("ask"))}
+            >
+              <Icon icon={SidebarRightIcon} size={18} className="rtl:-scale-x-100" />
+            </Button>
+          </ReaderTip>
         </div>
       </header>
+      {strip ? (
+        <Alert variant="banner" className="shrink-0 [&_[data-slot=alert-body]]:bg-background">
+          <Alert.Icon>
+            <Icon icon={InformationCircleIcon} size={16} className="text-muted-foreground" />
+          </Alert.Icon>
+          <Alert.Description>{t("study.readerCompanion.firstOpen.body")}</Alert.Description>
+          <Alert.Actions>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setStrip(false);
+                rememberFirstOpen(book.id, "done");
+              }}
+            >
+              {t("study.readerCompanion.firstOpen.dismiss")}
+            </Button>
+          </Alert.Actions>
+        </Alert>
+      ) : null}
       <StudyDocumentRemovalDialog
         removal={removal}
         notebook={notebookTitle}
@@ -1407,7 +1489,7 @@ export function StudyReader({
         <div
           ref={setFrame}
           className="relative flex min-h-0 min-w-0 flex-1 flex-col"
-          inert={panelCovers}
+          inert={companionCovers || (contents !== null && layoutMode === "sheet")}
           onPointerMove={() => {
             latestInteraction.current = Date.now();
           }}
@@ -1484,10 +1566,15 @@ export function StudyReader({
               {section.ocrLanguages ? (
                 <p className="mx-auto mt-6 max-w-[44rem] text-sm font-medium text-muted-foreground">{t("study.scan.recognized")}</p>
               ) : null}
+              <p id={`${contentsId}-selection-hint`} className="sr-only">
+                {t("study.readerCompanion.selectionHint")}
+              </p>
               <article
                 ref={textBody}
                 tabIndex={0}
                 aria-label={section.title}
+                aria-keyshortcuts="Alt+F10"
+                aria-describedby={`${contentsId}-selection-hint`}
                 className={cn(
                   "mx-auto max-w-[44rem] leading-[1.8] wrap-break-word outline-none rounded-sm focus-visible:ring-1 focus-visible:ring-ring/40 focus-visible:ring-offset-8 focus-visible:ring-offset-card",
                   showingOriginal && "mt-8",
@@ -1503,7 +1590,12 @@ export function StudyReader({
                 {markdown !== undefined ? (
                   <StudyMarkdown bare imageAltOnly math={formulaMode} onMathReady={onMathReady} text={markdown} />
                 ) : hasPageText ? (
-                  highlighted(section.text, pageHighlights, focus)
+                  highlighted(
+                    section.text,
+                    pageHighlights,
+                    focus,
+                    leftOffAt === undefined ? undefined : { at: leftOffAt, label: t("study.readerCompanion.leftOff") },
+                  )
                 ) : (
                   <span className="font-sans text-base text-muted-foreground">{t("study.reader.noSelectableText")}</span>
                 )}
@@ -1557,46 +1649,71 @@ export function StudyReader({
               }}
               onShowWords={() => {
                 closeSelection(false);
-                showPanel("words");
+                showContents("words");
               }}
               onViewCards={() => navigate(studyHref("cards", { book: book.id }), { state: returnState })}
               onClose={() => closeSelection()}
             />
           ) : null}
         </div>
-        {panel ? (
-          <StudyReaderPanel
-            tab={panel}
-            chooseTab={showPanel}
-            close={closePanel}
-            wide={wide}
+        {contents ? (
+          <StudyReaderContents
+            id={contentsId}
+            tab={contents}
+            chooseTab={showContents}
+            close={() => closeContents()}
+            full={layoutMode === "sheet"}
             book={book}
             vaultId={vaultId}
+            index={index}
             highlights={highlights}
             words={words}
-            tutor={tutor}
-            conversations={{
-              ...conversations,
-              leave: () => {
-                if (tutor?.visible) setListingConversations(true);
-                conversations.leave();
-              },
-            }}
             openingTutor={openingTutor}
-            canDiscussPage={hasPageText}
-            index={index}
-            chatQuote={chatQuote}
-            clearChatQuote={() => setChatQuote(undefined)}
-            chatSeed={chatSeed}
-            openSection={(section) => go(section - 1)}
+            go={(at) => {
+              closeContents(false);
+              if (at !== index) go(at);
+              (textBody.current ?? viewport)?.focus({ preventScroll: true });
+            }}
             goToHighlight={(item) => {
-              if (!wide) setPanel(null);
+              closeContents(false);
               navigate(originHref(studyHighlightOrigin(item), readerParams), { state: returnState });
             }}
             askHighlight={(item) => askInPanel({ text: item.quote, section: item.section + 1 })}
-            discuss={discuss}
             reviewHighlights={reviewHighlights}
             reviewWords={reviewWords}
+            panelRef={contentsElement}
+          />
+        ) : null}
+        {companion && layoutMode === "overlay" ? (
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-hidden
+            className="absolute inset-0 z-20 cursor-default bg-foreground/10 motion-safe:animate-in motion-safe:fade-in-0"
+            onClick={closeCompanion}
+          />
+        ) : null}
+        {companion ? (
+          <StudyReaderCompanion
+            id={companionId}
+            tab={companion}
+            chooseTab={showCompanion}
+            close={closeCompanion}
+            layout={layoutMode}
+            book={book}
+            vaultId={vaultId}
+            index={index}
+            part={part}
+            notebookTitle={notebookTitle}
+            tutor={tutor}
+            conversations={{ ...conversations, leave: leaveTutor }}
+            canDiscussPage={hasPageText}
+            chatQuote={chatQuote}
+            clearChatQuote={() => setChatQuote(undefined)}
+            chatSeed={chatSeed}
+            openSection={(at) => go(at - 1)}
+            makeCards={() => draftCards(section.text)}
+            setupModel={setupModel}
             panelRef={panelElement}
             tutorPane={tutorPane}
           />

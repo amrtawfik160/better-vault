@@ -1610,6 +1610,115 @@
       "clearBoth": "Clear search and filters",
       "clearSearch": "Clear search",
       "clearFilters": "Clear filters"
+    },
+    "readerCompanion": {
+      "label": "Companion",
+      "toggle": "Companion panel",
+      "close": "Close companion",
+      "breadcrumb": "Notebook",
+      "tabs": {
+        "ask": "Ask",
+        "practise": "Practise",
+        "make": "Make"
+      },
+      "part": {
+        "title": {
+          "page": "Page {{number}}",
+          "chapter": "Chapter {{number}}",
+          "document": "This document"
+        },
+        "inline": {
+          "page": "page {{number}}",
+          "chapter": "chapter {{number}}",
+          "document": "this document"
+        }
+      },
+      "practiseThis": "Practise this",
+      "practiseReason": {
+        "teach": "Explain {{part}} back · about 3 minutes",
+        "questions": "Questions on {{part}} · about 4 minutes"
+      },
+      "firstOpen": {
+        "body": "You can ask about it, practise it, or make cards from it.",
+        "dismiss": "Got it"
+      },
+      "leftOff": "You left off here",
+      "selectionHint": "With text selected, press Alt+F10 to reach the selection menu. Escape comes back to the text.",
+      "contents": {
+        "label": "Contents",
+        "close": "Close contents",
+        "outline": "Outline",
+        "inThisDocument": "In this document",
+        "savedFromHere": "Saved from here",
+        "bookmarked": "Bookmarked"
+      },
+      "ask": {
+        "answersFrom": "Answers from",
+        "scopeLabel": "What Ask reads: {{scope}}. Change",
+        "scopeMenu": "Ask reads",
+        "passage": "Passage",
+        "passageInline": "this passage",
+        "passageDetail": "The text you selected",
+        "passageNone": "Select text in the reader first",
+        "partDetail": "The text on screen, and the rest of the document when a question needs it",
+        "history": "History",
+        "newQuestion": "New question",
+        "emptyTitle": "Ask about {{scope}}",
+        "emptyLine": "Ask reads the text on screen and looks further in the document when it needs to.",
+        "noModel": "Ask needs a model. Reading, highlights, words and cards still work.",
+        "addKey": "Add a key",
+        "errorTitle": "Ask couldn't answer",
+        "errorLine": "{{error}} Retry asks the question again.",
+        "retry": "Retry"
+      },
+      "practise": {
+        "material": "Material",
+        "change": "Change",
+        "changeLabel": "Change the material",
+        "wholeDocument": "The whole document",
+        "exercise": "Exercise",
+        "exercises": {
+          "teach": "Put it in your own words. You'll see what's missing. About 3 minutes.",
+          "questions": "Answer five questions on it, checked against the text. About 4 minutes.",
+          "roleplay": "Talk it through in a meeting, an interview or a language."
+        },
+        "why": {
+          "teach": "You haven't explained this back yet",
+          "questions": "You explained this back before. Questions check the details."
+        },
+        "recent": "Recent results",
+        "noResults": "None for this document yet. They appear here after your first session.",
+        "today": "Today",
+        "yesterday": "Yesterday",
+        "open": "Open",
+        "openLabel": "Open {{name}}",
+        "start": "Start",
+        "startReason": {
+          "written": "Opens Practice and starts at once. You can finish at any time.",
+          "roleplay": "Opens Practice with Role-play chosen, to pick the setting.",
+          "noModel": "Start needs a model. Practice uses it to read your answers."
+        },
+        "addKey": "Add a key"
+      },
+      "make": {
+        "noModel": "Cards need a model.",
+        "noText": "This part has no text to make cards from.",
+        "addKey": "Add a key",
+        "makeCards": "Make cards from {{part}}",
+        "cardsGo": "They go to {{notebook}} and into Review.",
+        "cardsGoAnywhere": "They go into Review.",
+        "tools": "Studio tools",
+        "outputs": "Outputs in {{notebook}}",
+        "outputsHere": "Outputs in this notebook",
+        "noOutputs": "Nothing made in this notebook yet.",
+        "cards": "Cards",
+        "cardsCount_one": "{{count}} card in {{notebook}}",
+        "cardsCount_other": "{{count}} cards in {{notebook}}",
+        "cardsCountHere_one": "{{count}} card in this notebook",
+        "cardsCountHere_other": "{{count}} cards in this notebook",
+        "open": "Open",
+        "openCards": "Open the cards"
+      }
     }
   },
   "actions": {

@@ -595,8 +595,8 @@ export default function StudyWorkspace({
             highlights={highlights.filter((highlight) => highlight.bookId === book.id)}
             words={words.filter((word) => word.bookId === book.id)}
             viewportRef={setReaderViewport}
-            wide={sideBySide}
             tutorPane={tutorPane}
+            setupModel={() => setSettings(true)}
             tutor={readerThread ? {
               thread: readerThread,
               visible: tutorVisible,
