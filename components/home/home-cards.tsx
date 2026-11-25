@@ -8,11 +8,10 @@ import { Icon } from "@/components/icon";
 import { Menu } from "@/components/panelui/menu";
 import type { Folder, Notebook, Vault } from "@/lib/db/database";
 import { formatRelativeTime } from "@/lib/format";
-import { itemColor } from "@/lib/notebooks/colors";
-import { notebookIcon } from "@/lib/notebooks/icons";
 import { routes } from "@/lib/routes";
 import { cn } from "@/lib/utils";
 import { useFolderActions, useNotebookActions } from "./item-actions";
+import { documentSummary } from "./notebook-list";
 
 /** Drag types for moving notebooks and folders; files use the browser's own "Files". */
 export const NOTEBOOK_DRAG = "application/x-better-vault-notebook";
@@ -47,33 +46,48 @@ export function useDropTarget(onDropCards: (event: DragEvent) => void) {
   };
 }
 
-/** A large tinted mark: a folder, or a notebook's own icon. */
-function ItemMark({
-  icon,
-  color,
-  size,
-}: {
-  icon: Parameters<typeof Icon>[0]["icon"];
-  color?: string;
-  size: "lg" | "sm";
-}) {
+/**
+ * The notebook's book tile, as on its overview: a neutral cover with the
+ * name's first letter in the reading serif.
+ */
+function BookTile({ title, size }: { title: string; size: "sm" | "lg" }) {
   return (
     <span
+      aria-hidden="true"
       className={cn(
-        "flex shrink-0 items-center justify-center",
-        size === "lg" ? "size-20 rounded-[1.375rem]" : "size-7 rounded-lg",
-        itemColor(color).tile,
+        "flex shrink-0 items-end bg-background font-serif font-semibold text-foreground/90 inset-ring inset-ring-border [font-optical-sizing:auto]",
+        size === "sm"
+          ? "h-12 w-9 rounded-sm ps-1.5 pb-1 text-[1.0625rem] leading-5"
+          : "h-28 w-21 rounded-md ps-3 pb-2.5 text-[2rem] leading-9",
       )}
     >
-      <Icon icon={icon} size={size === "lg" ? 34 : 15} />
+      {Array.from(title.trim())[0]?.toLocaleUpperCase() ?? ""}
     </span>
   );
 }
 
-const tileClass =
-  "group relative flex flex-col items-center gap-2 rounded-2xl px-2 pt-4 pb-3 text-center outline-none transition-colors hover:bg-accent/60 focus-within:bg-accent/60";
+function FolderTile({ size }: { size: "sm" | "lg" }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "flex shrink-0 items-center justify-center bg-muted text-muted-foreground inset-ring inset-ring-border",
+        size === "sm" ? "h-12 w-9 rounded-sm" : "h-28 w-21 rounded-md",
+      )}
+    >
+      <Icon icon={Folder01Icon} size={size === "sm" ? 18 : 28} strokeWidth={1.5} />
+    </span>
+  );
+}
+
+/** A list row: hairline above, the whole row a link, its menu at the end. */
 const rowClass =
-  "group relative grid grid-cols-[minmax(0,1fr)_8rem_9rem_2rem] items-center gap-3 rounded-xl px-3 py-1.5 text-sm transition-colors hover:bg-accent/60 focus-within:bg-accent/60";
+  "group relative -mx-2 flex min-h-19 items-center gap-4 rounded-[10px] border-t px-2 py-3 transition-colors duration-150 hover:bg-foreground/[0.04] focus-within:bg-foreground/[0.04]";
+const tileClass =
+  "group relative flex flex-col items-center gap-3 rounded-xl px-2 pt-4 pb-3 text-center transition-colors duration-150 hover:bg-foreground/[0.04] focus-within:bg-foreground/[0.04]";
+/** A link or button covering its row, so the row opens with one target and keeps its menu clickable. */
+const coverClass =
+  "absolute inset-0 rounded-[inherit] outline-none focus-visible:ring-2 focus-visible:ring-muted-foreground focus-visible:ring-inset";
 
 export function FolderItem({
   folder,
@@ -91,10 +105,11 @@ export function FolderItem({
   onDropCards: (event: DragEvent) => void;
 }) {
   const { t, i18n } = useTranslation("home");
+  const { t: tShell } = useTranslation("shell");
   const drop = useDropTarget(onDropCards);
   const meta = t("folders.items", { count: size });
   const { actions, dialogs, onKeyDown } = useFolderActions(folder, folders, onOpen);
-  const menu = <CardMenu label={t("folders.menu")} actions={actions} />;
+  const menu = <CardMenu label={tShell("list.menu", { name: folder.name })} actions={actions} />;
   const common = {
     onKeyDown,
     draggable: true,
@@ -104,27 +119,20 @@ export function FolderItem({
     },
     ...drop.props,
   };
-  const open = (
-    <button
-      type="button"
-      onClick={onOpen}
-      aria-label={folder.name}
-      className="absolute inset-0 cursor-pointer rounded-[inherit] outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    />
-  );
+  const open = <button type="button" onClick={onOpen} aria-label={folder.name} className={cn(coverClass, "cursor-pointer")} />;
+  const over = drop.over && "bg-muted ring-1 ring-muted-foreground";
 
   if (view === "list")
     return (
       <WithContextMenu actions={actions} dialogs={dialogs}>
-        <div {...common} className={cn(rowClass, drop.over && "bg-accent ring-1 ring-primary")}>
+        <div {...common} className={cn(rowClass, over)}>
           {open}
-          <span className="pointer-events-none flex min-w-0 items-center gap-3">
-            <ItemMark icon={Folder01Icon} color={folder.color} size="sm" />
-            <span className="truncate font-medium">{folder.name}</span>
-          </span>
-          <span className="pointer-events-none truncate text-muted-foreground">{meta}</span>
-          <span className="pointer-events-none truncate text-muted-foreground">
-            {formatRelativeTime(folder.updatedAt, i18n.language)}
+          <FolderTile size="sm" />
+          <span className="pointer-events-none flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="truncate text-sm font-medium">{folder.name}</span>
+            <span className="truncate text-[0.8125rem] leading-5 text-muted-foreground tabular-nums">
+              {meta} · {tShell("list.changed", { time: formatRelativeTime(folder.updatedAt, i18n.language) })}
+            </span>
           </span>
           {menu}
         </div>
@@ -133,16 +141,14 @@ export function FolderItem({
 
   return (
     <WithContextMenu actions={actions} dialogs={dialogs}>
-      <div {...common} className={cn(tileClass, drop.over && "bg-accent ring-1 ring-primary")}>
+      <div {...common} className={cn(tileClass, over)}>
         {open}
-        <span className="pointer-events-none">
-          <ItemMark icon={Folder01Icon} color={folder.color} size="lg" />
-        </span>
+        <FolderTile size="lg" />
         <span className="pointer-events-none w-full min-w-0">
           <span className="block truncate text-sm font-medium">{folder.name}</span>
-          <span className="block truncate text-xs text-muted-foreground">{meta}</span>
+          <span className="block truncate text-xs text-muted-foreground tabular-nums">{meta}</span>
         </span>
-        <span className="absolute end-1.5 top-1.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 has-[[data-popup-open]]:opacity-100">
+        <span className="absolute end-1.5 top-1.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 has-[[data-popup-open]]:opacity-100 max-md:opacity-100">
           {menu}
         </span>
       </div>
@@ -155,6 +161,9 @@ export function NotebookItem({
   folders,
   vaults,
   sources,
+  titles = [],
+  progress,
+  where,
   view,
   book = false,
 }: {
@@ -163,15 +172,23 @@ export function NotebookItem({
   /** The vaults it can be moved to. */
   vaults: Vault[];
   sources: number;
+  /** Its documents' titles, the first of which the row names. */
+  titles?: readonly string[];
+  /** One quiet sentence on how far it has got, if anything is known. */
+  progress?: string;
+  /** The folder it is in, shown in search results. */
+  where?: string;
   view: HomeView;
   /** It was made to hold one document added in Study. */
   book?: boolean;
 }) {
   const { t, i18n } = useTranslation("home");
-  const { t: tCommon } = useTranslation();
-  const meta = tCommon("sourceCount", { count: sources });
+  const { t: tShell } = useTranslation("shell");
+  const documents = sources ? tShell("list.documents", { count: sources }) : tShell("list.noDocuments");
+  const summary = documentSummary(titles);
+  const changed = tShell("list.changed", { time: formatRelativeTime(notebook.updatedAt, i18n.language) });
   const { actions, dialogs, onKeyDown } = useNotebookActions(notebook, folders, vaults);
-  const menu = <CardMenu label={t("menu")} actions={actions} />;
+  const menu = <CardMenu label={tShell("list.menu", { name: notebook.title })} actions={actions} />;
   const common = {
     onKeyDown,
     draggable: true,
@@ -185,20 +202,19 @@ export function NotebookItem({
       to={routes.notebook(notebook.id)}
       draggable={false}
       aria-label={notebook.title}
-      className="absolute inset-0 rounded-[inherit] outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className={coverClass}
     />
   );
   const badge = book ? (
-    <span className="me-1.5 inline-flex shrink-0 items-center rounded-full bg-muted px-1.5 align-[1px] text-[0.6875rem] leading-4 font-medium text-muted-foreground ring-1 ring-border">
+    <span className="inline-flex h-5 shrink-0 items-center rounded-full border border-input px-2 text-xs text-muted-foreground">
       {t("bookBadge")}
     </span>
   ) : null;
   const pin = notebook.pinned ? (
-    <Icon
-      icon={PinIcon}
-      size={12}
-      className="me-1 inline shrink-0 align-[-1px] text-muted-foreground"
-    />
+    <>
+      <Icon icon={PinIcon} size={12} strokeWidth={1.5} className="shrink-0 text-muted-foreground" />
+      <span className="sr-only">{tShell("nav.pinned")}</span>
+    </>
   ) : null;
 
   if (view === "list")
@@ -206,19 +222,24 @@ export function NotebookItem({
       <WithContextMenu actions={actions} dialogs={dialogs}>
         <div {...common} className={rowClass}>
           {open}
-          <span className="pointer-events-none flex min-w-0 items-center gap-3">
-            <ItemMark icon={notebookIcon(notebook.icon)} color={notebook.color} size="sm" />
-            <span className="truncate font-medium">
+          <BookTile title={notebook.title} size="sm" />
+          <span className="pointer-events-none flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="flex min-w-0 items-center gap-2">
               {pin}
-              {notebook.title}
+              <span className="truncate text-sm font-medium" dir="auto">
+                {notebook.title}
+              </span>
+              {badge}
             </span>
-          </span>
-          <span className="pointer-events-none truncate text-muted-foreground">
-            {badge}
-            {meta}
-          </span>
-          <span className="pointer-events-none truncate text-muted-foreground">
-            {formatRelativeTime(notebook.updatedAt, i18n.language)}
+            <span className="truncate text-[0.8125rem] leading-5 text-muted-foreground">
+              <span className="text-foreground/90 tabular-nums">{documents}</span>
+              {summary ? ` · ${summary}` : ""}
+            </span>
+            <span className="truncate text-xs text-muted-foreground tabular-nums">
+              {[where && tShell("list.inFolder", { folder: where }), progress, changed]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
           </span>
           {menu}
         </div>
@@ -229,23 +250,19 @@ export function NotebookItem({
     <WithContextMenu actions={actions} dialogs={dialogs}>
       <div {...common} className={tileClass}>
         {open}
-        <span className="pointer-events-none">
-          <ItemMark icon={notebookIcon(notebook.icon)} color={notebook.color} size="lg" />
-        </span>
+        <BookTile title={notebook.title} size="lg" />
         <span className="pointer-events-none w-full min-w-0">
-          <span className="block truncate text-sm font-medium">
+          <span className="flex min-w-0 items-center justify-center gap-1.5">
             {pin}
-            {notebook.title}
+            <span className="truncate text-sm font-medium" dir="auto">
+              {notebook.title}
+            </span>
           </span>
-          <span
-            className="block truncate text-xs text-muted-foreground"
-            title={t("updated", { time: formatRelativeTime(notebook.updatedAt, i18n.language) })}
-          >
-            {badge}
-            {meta}
+          <span className="block truncate text-xs text-muted-foreground tabular-nums" title={changed}>
+            {progress ?? documents}
           </span>
         </span>
-        <span className="absolute end-1.5 top-1.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 has-[[data-popup-open]]:opacity-100">
+        <span className="absolute end-1.5 top-1.5 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 has-[[data-popup-open]]:opacity-100 max-md:opacity-100">
           {menu}
         </span>
       </div>
@@ -253,22 +270,17 @@ export function NotebookItem({
   );
 }
 
-function MenuButton({ label }: { label: string }) {
-  return (
-    <Menu.Trigger
-      aria-label={label}
-      className="relative flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-background hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-popup-open:bg-background"
-    >
-      <Icon icon={MoreHorizontalIcon} size={16} />
-    </Menu.Trigger>
-  );
-}
-
 /** The card's "⋯" menu: the same actions as its right-click menu. */
 function CardMenu({ label, actions }: { label: string; actions: MenuAction[] }) {
   return (
     <Menu>
-      <MenuButton label={label} />
+      <Menu.Trigger
+        aria-label={label}
+        title={label}
+        className="relative flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-none transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 data-popup-open:bg-muted data-popup-open:text-foreground max-md:size-11"
+      >
+        <Icon icon={MoreHorizontalIcon} size={16} strokeWidth={1.5} />
+      </Menu.Trigger>
       <Menu.Content align="end">
         <MenuActions actions={actions} />
       </Menu.Content>
@@ -297,14 +309,5 @@ function WithContextMenu({
       </ContextMenu>
       {dialogs}
     </>
-  );
-}
-
-/** The column headings of the list view. */
-export function ListHeader({ children }: { children: ReactNode }) {
-  return (
-    <div className="grid grid-cols-[minmax(0,1fr)_8rem_9rem_2rem] gap-3 border-b px-3 pb-2 text-xs font-medium text-muted-foreground">
-      {children}
-    </div>
   );
 }
