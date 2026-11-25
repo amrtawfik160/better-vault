@@ -1,9 +1,9 @@
+import { SettingsSection } from "./settings-section";
 import { ComputerIcon, Moon02Icon, Sun03Icon, Tick02Icon } from "@hugeicons/core-free-icons";
 import { useTranslation } from "react-i18next";
 import { Field } from "@/components/common/field";
 import { Segmented } from "@/components/common/segmented";
 import { Icon } from "@/components/icon";
-import { Sheet } from "@/components/panelui/sheet";
 import { useTheme, type Theme } from "@/components/providers/theme-provider";
 import { accents } from "@/lib/theme/script";
 import { cn } from "@/lib/utils";
@@ -14,8 +14,7 @@ export function AppearancePanel() {
 
   return (
     <>
-      <Sheet.Header title={t("appearance.title")} />
-      <Sheet.Body>
+      <SettingsSection title={t("appearance.title")}>
         <div className="flex flex-col gap-5 pb-4">
           <Field label={t("appearance.theme")}>
             <Segmented<Theme>
@@ -81,7 +80,7 @@ export function AppearancePanel() {
             </div>
           </Field>
         </div>
-      </Sheet.Body>
+      </SettingsSection>
     </>
   );
 }

@@ -1,3 +1,4 @@
+import { SettingsSection } from "./settings-section";
 import {
   Add01Icon,
   Calendar01Icon,
@@ -15,7 +16,6 @@ import { Field } from "@/components/common/field";
 import { Segmented } from "@/components/common/segmented";
 import { Icon, type IconSvgElement } from "@/components/icon";
 import { Select } from "@/components/panelui/select";
-import { Sheet } from "@/components/panelui/sheet";
 import { Switch } from "@/components/panelui/switch";
 import {
   calendarViews,
@@ -53,8 +53,7 @@ export function CalendarPanel({ onSubscribe }: { onSubscribe: () => void }) {
 
   return (
     <>
-      <Sheet.Header title={t("calendar.title")} description={t("calendar.description")} />
-      <Sheet.Body>
+      <SettingsSection title={t("calendar.title")} description={t("calendar.description")}>
         <div className="flex flex-col gap-6 pb-4">
           <section aria-label={t("calendar.preferences")} className="flex flex-col gap-4">
             <h3 className="text-xs font-medium text-muted-foreground">
@@ -175,7 +174,7 @@ export function CalendarPanel({ onSubscribe }: { onSubscribe: () => void }) {
             ))}
           </Group>
         </div>
-      </Sheet.Body>
+      </SettingsSection>
     </>
   );
 }
