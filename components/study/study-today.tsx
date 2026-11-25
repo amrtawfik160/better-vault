@@ -14,6 +14,8 @@ import { Icon, type IconSvgElement } from "@/components/icon";
 import { Button } from "@/components/panelui/button";
 import { Card } from "@/components/panelui/card";
 import { studyVocabularyCards } from "@/lib/db/study";
+import { usePracticeSessions } from "@/lib/db/writing-practice";
+import { todayPlan, type TodayStep } from "@/lib/study/today-plan";
 import { studyActivityGroups } from "@/lib/study/activity";
 import { studyCollectionHref, studyHighlightOrigin, studyHref } from "@/lib/study/links";
 import { difficultStudyItems, studyHighlightPreview, studyReviewFeedback } from "@/lib/study/recall";
@@ -36,6 +38,7 @@ import { recentPracticeSessions } from "@/lib/study/writing-practice";
 import { textDirection } from "@/lib/text/direction";
 import { cn } from "@/lib/utils";
 import { StudyActivity } from "./study-activity";
+import { TodayPlanCard, useSkippedToday } from "./study-today-plan";
 import { StudyBookCover, StudyProgressBar } from "./study-book-cover";
 import { studyDueLabel } from "./study-due";
 import { StudyFollowUps } from "./study-follow-ups";
@@ -97,6 +100,7 @@ export function DailyStudy({
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState({ card: false, highlight: false });
   const [openingWords, setOpeningWords] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
   const wordRequest = useRef(false);
   const { vaultOf } = useStudyVaultScope();
   const reviewable = review.filter((row) => row.kind === "card" || row.kind === "highlight");
@@ -148,6 +152,19 @@ export function DailyStudy({
     cursor.setDate(cursor.getDate() - 1);
   }
   const percent = new Intl.NumberFormat(i18n.language, { style: "percent" });
+  const writtenSessions = usePracticeSessions(vaultId);
+  const dayKey = `${today.getFullYear()}-${today.getMonth() + 1}-${today.getDate()}`;
+  const { skipped, skip, undo } = useSkippedToday(vaultId, dayKey);
+  const plan = todayPlan({
+    books,
+    sessions: writtenSessions ?? [],
+    now,
+    due: daily.due.length,
+    reviewPaused: Boolean(resume),
+    doneToday:
+      activity.length > 0 || (writtenSessions ?? []).some((session) => session.updatedAt >= today.getTime()),
+    skipped,
+  });
   const practisable = savedWords.filter((word) => vocabularyCardSides(word));
 
   async function practiseWords() {
@@ -181,6 +198,26 @@ export function DailyStudy({
     else go("review");
   }
 
+  function startStep(step: TodayStep) {
+    switch (step.kind) {
+      case "resume-practice":
+        void navigate(studyHref("practice", { vault: vaultId, writing: step.session.id }));
+        return;
+      case "resume-review":
+      case "cards":
+        startReview();
+        return;
+      case "practise":
+        if (step.mode === "teach") teachBack(step.book);
+        else go("practice");
+        return;
+      case "read":
+      case "new":
+        read(step.book);
+        return;
+    }
+  }
+
   const breakdown: { key: keyof typeof daily.counts; icon: IconSvgElement; label: string }[] = [
     { key: "highlight", icon: HighlighterIcon, label: t("study.collection.filters.highlights") },
     { key: "word", icon: TranslateIcon, label: t("study.collection.filters.words") },
@@ -206,7 +243,34 @@ export function DailyStudy({
         ) : null}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
+      {writtenSessions ? (
+        <TodayPlanCard
+          plan={plan}
+          vaultId={vaultId}
+          start={startStep}
+          skip={(step) => skip(step.id)}
+          undo={undo}
+          add={() => go("library")}
+          percent={percent}
+        />
+      ) : null}
+
+      <div>
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-expanded={showDetails}
+          aria-controls="study-today-details"
+          onClick={() => setShowDetails((value) => !value)}
+        >
+          {t(showDetails ? "study.todayPlan.hideDetails" : "study.todayPlan.details")}
+        </Button>
+      </div>
+
+      <div
+        id="study-today-details"
+        className={cn("gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]", showDetails ? "grid" : "hidden")}
+      >
         {lastRead ? (
           <ContinueReading
             book={lastRead}

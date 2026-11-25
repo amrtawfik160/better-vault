@@ -155,6 +155,97 @@
       "noteCreated": "Note created",
       "openNote": "Open note"
     },
+    "todayPlan": {
+      "nextStep": "Next step",
+      "start": "Start",
+      "startAria": "Start: {{title}}",
+      "notToday": "Not today",
+      "chooseElse": "Choose something else",
+      "hideChoices": "Hide choices",
+      "hiddenOne": "{{title}} is hidden until tomorrow.",
+      "hiddenMany": "{{count}} steps are hidden until tomorrow.",
+      "undo": "Undo",
+      "then": "Then",
+      "thenDetail": "{{label}} · {{detail}}",
+      "chooseTitle": "How Today chose this",
+      "chooseNote": "Today takes the first that fits, from the top. Start any of them, in any order.",
+      "moreTitle": "If you want more",
+      "moreNote": "Picked from what you did today.",
+      "openPractice": "Open Practice to pick freely",
+      "nextTag": "Next",
+      "noneRight": "None right now",
+      "noneSessions": "Sessions you leave open come first",
+      "firstTitle": "Add your first material",
+      "firstDescription": "Paste a link, drop a file or write some text. Today then picks where to start, and tells you why.",
+      "firstAction": "Add",
+      "doneTitle": "That's today's plan",
+      "doneDescription": "You studied today. Choose something else if you want more.",
+      "nothingTitle": "Nothing to study right now",
+      "nothingDescription": "Cards you save come back here when they are due. Add more material to keep going.",
+      "details": "Reading and review",
+      "hideDetails": "Hide reading and review",
+      "rules": {
+        "resume": "An unfinished session",
+        "practise": "Read in the last 48 hours",
+        "cards": "Cards due",
+        "read": "Continue reading",
+        "new": "New material"
+      },
+      "steps": {
+        "resumePractice": {
+          "title": "Resume {{title}}",
+          "what": "A written practice you left open",
+          "reason": "You left it unfinished",
+          "detail": "{{answered}} of {{total}} done",
+          "label": "Resume your practice"
+        },
+        "resumeReview": {
+          "title": "Resume your review",
+          "what": "A review you paused",
+          "reason": "You left it open",
+          "detail_one": "{{count}} item due",
+          "detail_other": "{{count}} items due",
+          "label": "Resume your review"
+        },
+        "teach": {
+          "title": "Explain {{title}} back",
+          "what": "Say it in your own words and get feedback",
+          "reason": "You read it in the last 48 hours",
+          "detail": "Written practice",
+          "label": "Explain {{title}} back"
+        },
+        "questions": {
+          "title": "Answer questions on {{title}}",
+          "what": "Written questions on what you read",
+          "reason": "You read it in the last 48 hours",
+          "detail": "Written practice",
+          "label": "Questions on {{title}}"
+        },
+        "cards": {
+          "title_one": "Review {{count}} item",
+          "title_other": "Review {{count}} items",
+          "what": "Cards, highlights and words",
+          "reason": "They are due today",
+          "detail_one": "{{count}} item due",
+          "detail_other": "{{count}} items due",
+          "label_one": "{{count}} item due",
+          "label_other": "{{count}} items due"
+        },
+        "read": {
+          "title": "Continue reading {{title}}",
+          "reason": "You stopped here",
+          "detail": "{{percent}} read",
+          "label": "Continue reading"
+        },
+        "new": {
+          "title": "Start {{title}}",
+          "what": "New in your library",
+          "reason": "You have not opened it yet",
+          "detail": "Not opened yet",
+          "label": "Start new material"
+        }
+      }
+    },
     "today": {
       "resumeReview": "Resume review",
       "resumeReading": "Continue reading",
