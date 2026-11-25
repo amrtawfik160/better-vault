@@ -6,7 +6,18 @@ import type { Conversation, Notebook, StudioOutput } from "@/lib/db/database";
 import { studyReturnState } from "@/lib/study/return-links";
 import type { StudioToolId } from "@/studio/tools";
 
-export type WorkspaceTab = "chat" | "sources" | "studio";
+/**
+ * What the notebook's main column shows: its overview, its sources (to choose
+ * what Ask reads), or Studio (an output, or the list of them). "chat" is kept
+ * for links and callers that ask for the chat: it opens Ask in the companion.
+ */
+export type WorkspaceTab = "overview" | "sources" | "studio" | "chat";
+export type MainView = Exclude<WorkspaceTab, "chat">;
+/** The companion panel beside the main column. */
+export type CompanionTab = "ask" | "practise" | "make";
+
+/** Wide screens dock the companion; narrower ones lay it over the page when it is opened. */
+export const companionDockQuery = "(min-width: 1280px)";
 
 /** A rename or delete asked for on a conversation in History. */
 export interface ConversationAction {
@@ -22,8 +33,13 @@ export interface OutputAction {
 
 interface WorkspaceState {
   notebook: Notebook;
-  tab: WorkspaceTab;
+  /** The main column's view. */
+  tab: MainView;
+  /** Shows a view in the main column; "chat" opens Ask in the companion instead. */
   setTab: (tab: WorkspaceTab) => void;
+  /** The companion's open tab, or null while it is closed. */
+  companion: CompanionTab | null;
+  setCompanion: (tab: CompanionTab | null) => void;
   /** The Studio output shown in the Studio tab. */
   openOutputId: string | null;
   openOutput: (id: string) => void;
@@ -76,12 +92,25 @@ export function WorkspaceProvider({
   const [params, setParams] = useSearchParams();
   const { state } = useLocation();
   const openOutputId = params.get("output");
-  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>(() =>
-    params.has("output") ? "studio" : "chat",
+  const [workspaceTab, setWorkspaceTab] = useState<MainView>(() =>
+    params.has("output") ? "studio" : "overview",
   );
+  // Open beside the overview on wide screens, and when a link asks for the chat or an answer.
+  const [companion, setCompanion] = useState<CompanionTab | null>(() => {
+    if (params.get("tab") === "chat" || params.has("answer")) return "ask";
+    try {
+      return window.matchMedia(companionDockQuery).matches ? "ask" : null;
+    } catch {
+      return null;
+    }
+  });
   const tab = openOutputId ? "studio" : workspaceTab;
   const setTab = useCallback(
     (next: WorkspaceTab) => {
+      if (next === "chat") {
+        setCompanion("ask");
+        return;
+      }
       setWorkspaceTab(next);
       if (next !== "studio" && openOutputId)
         setParams(
@@ -111,6 +140,8 @@ export function WorkspaceProvider({
       notebook,
       tab,
       setTab,
+      companion,
+      setCompanion,
       openOutputId,
       openOutput: (id) => {
         setStudioOpen(false);
@@ -174,6 +205,7 @@ export function WorkspaceProvider({
     [
       notebook,
       tab,
+      companion,
       openOutputId,
       studioOpen,
       settingsOpen,

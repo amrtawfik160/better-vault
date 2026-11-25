@@ -31,7 +31,7 @@ export function ChatView() {
   const location = useLocation();
   const navigate = useNavigate();
   const chat = useChatSession();
-  const { notebook, readSource, tab } = useWorkspace();
+  const { notebook, readSource, companion } = useWorkspace();
   const scroller = useRef<HTMLDivElement>(null);
   const focusedAnswer = useRef<HTMLDivElement>(null);
   const [draft, setDraft] = useState<FlashcardSource | null>(null);
@@ -48,11 +48,11 @@ export function ChatView() {
   const vaultId = vaultOf(notebook);
 
   useLayoutEffect(() => {
-    if (focusId && tab === "chat") {
+    if (focusId && companion === "ask") {
       focusedAnswer.current?.scrollIntoView({ block: "start" });
       focusedAnswer.current?.focus({ preventScroll: true });
     }
-  }, [focusId, location.key, tab]);
+  }, [focusId, location.key, companion]);
 
   // Follows the answer as it is written, unless the reader has scrolled up.
   useEffect(() => {

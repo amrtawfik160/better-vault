@@ -1,11 +1,11 @@
 import { Link, useLocation, useSearchParams } from "react-router";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { buttonVariants } from "@/components/panelui/button";
+import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
+import { Icon } from "@/components/icon";
+import { Button, buttonVariants } from "@/components/panelui/button";
 import { ChatProvider } from "@/components/chat/chat-provider";
 import { ConversationActionDialogs } from "@/components/chat/conversation-action-dialogs";
-import { PromptBar } from "@/components/chat/prompt-bar";
-import { Tabs } from "@/components/panelui/tabs";
 import { OutputActionDialogs } from "@/components/studio/output-action-dialogs";
 import { StudioRunnerProvider } from "@/components/studio/studio-runner";
 import { ToolDialog } from "@/components/studio/tool-dialog";
@@ -14,12 +14,12 @@ import { SourceReader } from "@/components/sources/source-reader";
 import { StudyReturnLinks } from "@/components/study/study-return-links";
 import { useNotebook } from "@/lib/db/notebooks";
 import { studyReturnState } from "@/lib/study/return-links";
-import { ChatView } from "./chat-view";
-import { NotebookStudyStrip } from "./notebook-study-strip";
+import { Companion } from "./companion";
+import { NotebookOverview } from "./notebook-overview";
 import { SourcesView } from "./sources-view";
 import { StudioView } from "./studio-view";
 import { TopBar } from "./top-bar";
-import { WorkspaceProvider, useWorkspace, type WorkspaceTab } from "./workspace-context";
+import { WorkspaceProvider, useWorkspace } from "./workspace-context";
 import { routes } from "@/lib/routes";
 import { studioMakeRequest } from "@/studio/make-link";
 
@@ -79,7 +79,7 @@ function WorkspaceLayout() {
         params.get("passage") ?? undefined,
         typeof snippet === "string" ? snippet.slice(0, 280) : undefined,
       );
-    } else if (view === "chat" || view === "sources" || view === "studio") {
+    } else if (view === "chat" || view === "sources" || view === "studio" || view === "overview") {
       setTab(view);
     }
     if (addSource) setAddSourceOpen(true);
@@ -94,26 +94,25 @@ function WorkspaceLayout() {
   }, [notebook.title, t]);
 
   return (
-    <Tabs
-      value={tab}
-      onValueChange={(value) => setTab(value as WorkspaceTab)}
-      className="h-full gap-0"
-    >
+    <div className="flex h-full flex-col">
       <TopBar />
       <StudyReturnLinks className="shrink-0 px-3 sm:px-5" />
-      <NotebookStudyStrip className="shrink-0 px-3 pb-2 sm:px-5" />
-      <div className="relative min-h-0 flex-1">
-        {/* The prompt belongs to the chat; kept mounted so a draft survives a tab switch. */}
-        <Tabs.Content value="chat" keepMounted className="relative h-full">
-          <ChatView />
-          <PromptBar />
-        </Tabs.Content>
-        <Tabs.Content value="sources" className="h-full">
-          <SourcesView />
-        </Tabs.Content>
-        <Tabs.Content value="studio" className="h-full">
-          <StudioView />
-        </Tabs.Content>
+      <div className="flex min-h-0 flex-1">
+        {/* The main column: the overview, the sources to choose from, or Studio. */}
+        <main className="flex min-w-0 flex-1 flex-col">
+          {tab !== "overview" ? (
+            <div className="shrink-0 px-3 pt-2 sm:px-5">
+              <Button variant="ghost" size="sm" onClick={() => setTab("overview")}>
+                <Icon icon={ArrowLeft01Icon} size={16} className="rtl:rotate-180" />
+                {t("overview.back", { ns: "workspace", notebook: notebook.title })}
+              </Button>
+            </div>
+          ) : null}
+          <div className="relative min-h-0 flex-1">
+            {tab === "sources" ? <SourcesView /> : tab === "studio" ? <StudioView /> : <NotebookOverview />}
+          </div>
+        </main>
+        <Companion />
       </div>
       <AddSourceDialog
         notebookId={notebook.id}
@@ -129,7 +128,7 @@ function WorkspaceLayout() {
       />
       <OutputActionDialogs />
       <ConversationActionDialogs />
-    </Tabs>
+    </div>
   );
 }
 
