@@ -882,7 +882,7 @@ export default function StudyWorkspace({
       }}
       className={cn(
         "h-full min-h-0 gap-0 overflow-hidden bg-card",
-        !focusedReader && "rounded-3xl ring-1 ring-border",
+        !focusedReader && "md:rounded-xl md:border",
       )}
     >
       {/* The vault sidebar moves between these on wider screens; phones, which have none, keep the tabs. */}

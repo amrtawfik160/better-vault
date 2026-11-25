@@ -19,7 +19,9 @@ export function ToolHeader({
   className?: string;
 }) {
   return (
+    // On macOS desktop the header is also the window's title strip, like the sidebar's top.
     <header
+      data-window-bar
       className={cn(
         "flex min-h-13 shrink-0 items-center gap-x-3 gap-y-2 border-b ps-5 pe-2 max-md:ps-4",
         className,
