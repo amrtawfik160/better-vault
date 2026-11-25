@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { Markdown } from "@/components/chat/markdown";
 import { isVisualPart, VisualPart } from "@/components/chat/visual/visual-part";
 import { Icon } from "@/components/icon";
+import { Button } from "@/components/panelui/button";
 import { Menu } from "@/components/panelui/menu";
 import { Message } from "@/components/panelui/message";
 import { Prompt, type PromptState } from "@/components/panelui/prompt";
@@ -100,31 +101,29 @@ function ThreadHeader({
   const { t } = useTranslation("bot");
   const state = useBotActivity(bot.id);
   return (
-    <div
-      data-window-bar
-      className="grid min-h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 px-3"
-    >
-      <div>
-        <button
-          type="button"
-          onClick={onBack}
-          aria-label={t("thread.back")}
-          title={t("thread.back")}
-          className="flex size-8 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring md:hidden"
-        >
-          <Icon icon={ArrowLeft01Icon} size={18} />
-        </button>
-      </div>
-      <div className="flex min-w-0 items-center gap-2 rounded-full bg-muted/60 py-1 ps-1.5 pe-3.5">
-        <BotAvatar avatar={bot.avatar} size={24} mood={moodOf(state)} />
-        <span className="truncate text-sm font-medium">{bot.name}</span>
-      </div>
-      <div className="flex justify-end">
+    <div className="flex min-h-13 shrink-0 items-center gap-2 border-b ps-4 pe-2">
+      <Button
+        type="button"
+        size="icon-sm"
+        variant="ghost"
+        onClick={onBack}
+        aria-label={t("thread.back")}
+        title={t("thread.back")}
+        className="text-muted-foreground max-md:size-11 md:hidden"
+      >
+        <Icon icon={ArrowLeft01Icon} size={18} className="rtl:rotate-180" />
+      </Button>
+      <BotAvatar avatar={bot.avatar} size={24} mood={moodOf(state)} />
+      <h2 className="truncate text-[0.8125rem] leading-5 font-medium">{bot.name}</h2>
+      {bot.title ? (
+        <span className="hidden truncate text-xs text-muted-foreground sm:inline">{bot.title}</span>
+      ) : null}
+      <div className="ms-auto flex justify-end">
         <Menu>
           <Menu.Trigger
             aria-label={t("menu.label")}
             title={t("menu.label")}
-            className="flex size-8 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-popup-open:bg-accent"
+            className="flex size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-popup-open:bg-muted data-popup-open:text-foreground max-md:size-11"
           >
             <Icon icon={MoreHorizontalIcon} size={18} />
           </Menu.Trigger>

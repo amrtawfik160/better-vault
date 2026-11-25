@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next";
 import { MenuActions } from "@/components/common/action-menu";
 import { ContextMenu, ContextMenuTrigger } from "@/components/common/context-menu";
 import { Icon } from "@/components/icon";
+import { Button } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
 import { Menu } from "@/components/panelui/menu";
 import { Sheet } from "@/components/panelui/sheet";
@@ -109,59 +110,67 @@ export function NoteList({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* The panel's head: its title, then import and a new note. */}
-      <div className={cn("flex h-14 shrink-0 items-center gap-1 border-b ps-4 pe-3", inSheet && "mt-3")}>
-        {inSheet ? (
-          <Sheet.Title className="min-w-0 flex-1 truncate text-base font-semibold">{title}</Sheet.Title>
-        ) : (
-          <h2 className="min-w-0 flex-1 truncate text-base font-semibold">{title}</h2>
-        )}
-        {onOpenGraph ? (
-          <button
+      {/* In the phone sheet the list keeps its own head; on the page the header above holds the title. */}
+      {inSheet ? (
+        <div className="mt-3 flex h-13 shrink-0 items-center gap-1 border-b ps-4 pe-2">
+          <Sheet.Title className="min-w-0 flex-1 truncate text-[0.8125rem] font-medium">
+            {title}
+          </Sheet.Title>
+          {onOpenGraph ? (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              onClick={onOpenGraph}
+              aria-label={t("actions.graph")}
+              title={t("actions.graph")}
+              className="size-11 text-muted-foreground"
+            >
+              <Icon icon={HierarchyCircle01Icon} size={16} />
+            </Button>
+          ) : null}
+          <Button
             type="button"
-            onClick={onOpenGraph}
-            aria-label={t("actions.graph")}
-            title={t("actions.graph")}
-            className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            size="icon"
+            variant="ghost"
+            onClick={onCreate}
+            aria-label={t("new")}
+            title={t("new")}
+            className="size-11 text-muted-foreground"
           >
-            <Icon icon={HierarchyCircle01Icon} size={17} />
-          </button>
-        ) : null}
-        <button
-          type="button"
-          onClick={() => importInput.current?.click()}
-          aria-label={t("actions.import")}
-          title={t("actions.import")}
-          className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring md:size-8"
-        >
-          <Icon icon={FileImportIcon} size={17} />
-        </button>
-        <button
-          type="button"
-          onClick={onCreate}
-          aria-label={t("new")}
-          title={t("new")}
-          className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full bg-foreground text-background outline-none hover:bg-foreground/85 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card md:size-8"
-        >
-          <Icon icon={Add01Icon} size={17} />
-        </button>
-        {inSheet ? <Sheet.Close aria-label={common("actions.close")} className="size-10" /> : null}
-      </div>
-      <div className="border-b p-3">
-        <Input.Group size="sm">
-          <Input.Addon>
-            <Icon icon={Search01Icon} size={14} />
-          </Input.Addon>
-          <Input
-            ref={searchRef}
-            size="sm"
-            type="search"
-            aria-label={t("search")}
-            placeholder={t("search")}
-            value={query}
-            onChange={(event) => onQuery(event.target.value)}
-          />
-        </Input.Group>
+            <Icon icon={Add01Icon} size={16} />
+          </Button>
+          <Sheet.Close aria-label={common("actions.close")} className="size-11" />
+        </div>
+      ) : null}
+      <div className="px-3 pt-3 pb-2">
+        <div className="flex items-center gap-1">
+          <Input.Group size="sm" className="min-w-0 flex-1">
+            <Input.Addon>
+              <Icon icon={Search01Icon} size={14} />
+            </Input.Addon>
+            <Input
+              ref={searchRef}
+              size="sm"
+              type="search"
+              aria-label={t("search")}
+              placeholder={t("search")}
+              value={query}
+              onChange={(event) => onQuery(event.target.value)}
+            />
+          </Input.Group>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            onClick={() => importInput.current?.click()}
+            aria-label={t("actions.import")}
+            title={t("actions.import")}
+            className="text-muted-foreground max-md:size-11"
+          >
+            <Icon icon={FileImportIcon} size={16} />
+          </Button>
+        </div>
         {banner ? <div className="mt-2">{banner}</div> : null}
         <input
           ref={importInput}

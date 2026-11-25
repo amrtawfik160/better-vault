@@ -11,7 +11,14 @@
   "search": "Search notes",
   "searchAll": "Search in all notes",
   "empty": "No notes yet",
-  "emptyBody": "Write in Markdown and connect ideas with [[links]].",
+  "emptyBody": "Notes are Markdown, for the whole of this vault. Link them to notebooks, documents and other notes with [[double brackets]]; a note you save from a passage links to it by itself.",
+  "emptyTitle": "Write your first note, or save one while reading",
+  "emptyOpen": "Choose a note",
+  "emptyOpenBody": "Pick one from the list, or start a new one.",
+  "header": {
+    "count_one": "{{count}} note in this vault",
+    "count_other": "{{count}} notes in this vault"
+  },
   "noMatches": "Nothing matches “{{query}}”.",
   "placeholder": "Start writing… Type [[ to link a note, # for a tag.",
   "editorLabel": "Note text",
@@ -134,9 +141,12 @@
     }
   },
   "skills": {
+    "scope": "In {{vault}}",
+    "choose": "Choose a skill",
+    "chooseBody": "Pick one from the list to read or edit it, or write a new one.",
     "new": "New skill",
     "empty": "No skills yet",
-    "emptyBody": "A skill is a Markdown file of instructions (SKILL.md). Chats can use it, and AI agents can read and edit it through MCP in the desktop app.",
+    "emptyBody": "A skill is a Markdown file of instructions, SKILL.md. Ask can use it, and AI agents on this computer reach it through the desktop app’s MCP server.",
     "name": "Name",
     "nameHint": "Lowercase words joined by hyphens, as agents expect.",
     "description": "Description",

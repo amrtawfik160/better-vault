@@ -1,4 +1,5 @@
 import {
+  Add01Icon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
   BookOpen01Icon,
@@ -14,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { toast } from "sonner";
+import { ToolHeader, ToolHeaderDivider } from "@/components/common/tool-header";
 import { Icon } from "@/components/icon";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { openCommandPalette } from "@/lib/command";
@@ -509,16 +511,59 @@ export default function NotesWorkspace() {
     );
   }
 
+  const hasNotes = world.notes.length > 0;
+  const noteCount = world.notes.filter((each) => each.vaultId === vaultId).length;
+
   return (
-    <div className="flex h-full min-h-0 gap-2">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-card">
+      {/* One header: the page, then the graph, the keys and the one filled button. */}
+      <ToolHeader
+        title={t("title")}
+        detail={hasNotes ? t("header.count", { count: noteCount }) : undefined}
+      >
+        {hasNotes ? (
+          <>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              aria-pressed={graphOpen}
+              aria-label={t("actions.graph")}
+              title={`${t("actions.graph")} (${keyLabel("Mod+G")})`}
+              onClick={() => (graphOpen ? show({ note: activeId }) : openGraph())}
+              className={cn("text-muted-foreground", graphOpen && "bg-muted text-foreground")}
+            >
+              <Icon icon={HierarchyCircle01Icon} size={16} />
+              <span className="max-sm:sr-only">{t("tabs.graph")}</span>
+            </Button>
+            <Button
+              type="button"
+              size="icon-sm"
+              variant="ghost"
+              aria-label={t("actions.shortcuts")}
+              title={`${t("actions.shortcuts")} (?)`}
+              onClick={() => setShortcuts(true)}
+              className="hidden text-muted-foreground sm:inline-flex"
+            >
+              <Icon icon={KeyboardIcon} size={16} />
+            </Button>
+            <ToolHeaderDivider />
+            <Button type="button" size="sm" onClick={() => void newNote()}>
+              <Icon icon={Add01Icon} size={16} />
+              <span className="max-sm:sr-only">{t("new")}</span>
+            </Button>
+          </>
+        ) : null}
+      </ToolHeader>
+      <div className="flex min-h-0 flex-1">
       {libraryOnly || layout !== "narrow" ? (
-        <div className={cn("flex min-w-0 shrink-0 flex-col overflow-hidden rounded-3xl bg-card ring-1 ring-border", libraryOnly ? "w-full" : "w-72")}>
+        <div className={cn("flex min-w-0 shrink-0 flex-col overflow-hidden", libraryOnly ? "w-full" : "w-72 border-e")}>
           {renderLibrary()}
         </div>
       ) : null}
       {/* Tabs, then the open note or the graph. */}
-      <div className={cn("flex min-w-0 flex-1 flex-col overflow-hidden rounded-3xl bg-card ring-1 ring-border", libraryOnly && "hidden")}>
-        <div className="flex h-14 shrink-0 items-center gap-1 border-b px-3">
+      <div className={cn("flex min-w-0 flex-1 flex-col overflow-hidden", libraryOnly && "hidden")}>
+        <div className="flex h-11 shrink-0 items-center gap-1 border-b px-3">
           {layout === "narrow" ? (
             <Sheet
               open={!libraryOnly && mobilePane === "library"}
@@ -549,7 +594,7 @@ export default function NotesWorkspace() {
             onClick={() => go("back")}
             aria-label={t("actions.back")}
             title={`${t("actions.back")} (${keyLabel("Mod+Alt+←")})`}
-            className="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex size-7 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Icon icon={ArrowLeft01Icon} size={16} className="rtl:rotate-180" />
           </button>
@@ -558,7 +603,7 @@ export default function NotesWorkspace() {
             onClick={() => go("forward")}
             aria-label={t("actions.forward")}
             title={`${t("actions.forward")} (${keyLabel("Mod+Alt+→")})`}
-            className="flex size-7 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex size-7 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Icon icon={ArrowRight01Icon} size={16} className="rtl:rotate-180" />
           </button>
@@ -577,9 +622,9 @@ export default function NotesWorkspace() {
                   role="tab"
                   aria-selected={active}
                   className={cn(
-                    "group flex h-8 max-w-48 shrink-0 items-center gap-1.5 rounded-lg ps-2.5 pe-1 text-sm",
+                    "group flex h-8 max-w-48 shrink-0 items-center gap-1.5 rounded-md ps-2.5 pe-1 text-[0.8125rem]",
                     active
-                      ? "bg-foreground/10 font-medium"
+                      ? "bg-muted font-medium"
                       : "text-muted-foreground hover:bg-accent/60",
                   )}
                 >
@@ -615,33 +660,11 @@ export default function NotesWorkspace() {
               onClick={toggleMode}
               aria-label={t("modes.toggle")}
               title={`${displayedMode === "edit" ? t("modes.edit") : t("modes.read")} · ${t("modes.toggle")} (${keyLabel("Mod+E")})`}
-              className="flex size-8 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
             >
               <Icon icon={displayedMode === "edit" ? Edit02Icon : BookOpen01Icon} size={16} />
             </button>
           ) : null}
-          <button
-            type="button"
-            onClick={() => (graphOpen ? show({ note: activeId }) : openGraph())}
-            aria-label={t("actions.graph")}
-            aria-pressed={graphOpen}
-            title={`${t("actions.graph")} (${keyLabel("Mod+G")})`}
-            className={cn(
-              "flex size-8 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
-              graphOpen && "bg-accent text-foreground",
-            )}
-          >
-            <Icon icon={HierarchyCircle01Icon} size={16} />
-          </button>
-          <button
-            type="button"
-            onClick={() => setShortcuts(true)}
-            aria-label={t("actions.shortcuts")}
-            title={`${t("actions.shortcuts")} (?)`}
-            className="hidden size-8 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring sm:flex"
-          >
-            <Icon icon={KeyboardIcon} size={16} />
-          </button>
           {note && !graphOpen && layout !== "wide" ? (
             <Sheet
               open={mobilePane === "details"}
@@ -671,7 +694,7 @@ export default function NotesWorkspace() {
               aria-pressed={details}
               title={details ? t("panes.hide") : t("panes.show")}
               className={cn(
-                "hidden size-8 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring lg:flex",
+                "hidden size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring lg:flex",
                 details && "text-foreground",
               )}
             >
@@ -786,34 +809,22 @@ export default function NotesWorkspace() {
             ) : null}
           </div>
         ) : (
-          <div className="m-auto flex max-w-sm flex-col items-center gap-3 p-6 text-center">
-            <span className="flex size-14 items-center justify-center rounded-2xl bg-muted">
-              <Icon icon={Note01Icon} size={26} />
-            </span>
-            <h2 className="text-base font-semibold">
-              {listNotes.length ? t("title") : t("empty")}
-            </h2>
-            <p className="text-sm text-muted-foreground">{t("emptyBody")}</p>
-            <div className="flex flex-wrap justify-center gap-2 text-xs text-muted-foreground">
-              <span>
-                {t("shortcuts.items.newNote")} <kbd dir="ltr">{keyLabel("Mod+N")}</kbd>
-              </span>
-              <span>
-                {t("shortcuts.items.quickSwitcher")} <kbd dir="ltr">{keyLabel("Mod+O")}</kbd>
-              </span>
-              <span>
-                {t("shortcuts.items.graph")} <kbd dir="ltr">{keyLabel("Mod+G")}</kbd>
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => void newNote()}
-              className="mt-1 cursor-pointer rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground outline-none hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {t("new")}
-            </button>
+          <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto px-5 py-12">
+            <section aria-labelledby="notes-empty" className="w-full max-w-[27.5rem]">
+              <h2 id="notes-empty" className="text-sm leading-5 font-medium">
+                {listNotes.length ? t("emptyOpen") : t("emptyTitle")}
+              </h2>
+              <p className="mt-1 text-[0.8125rem] leading-5 text-pretty text-muted-foreground">
+                {listNotes.length ? t("emptyOpenBody") : t("emptyBody")}
+              </p>
+              <Button type="button" className="mt-5" size="sm" onClick={() => void newNote()}>
+                <Icon icon={Add01Icon} size={16} />
+                {t("new")}
+              </Button>
+            </section>
           </div>
         )}
+      </div>
       </div>
 
       <NoteSwitcher

@@ -1,6 +1,10 @@
 {
   "title": "Bot",
+  "header": {
+    "scope": "In {{vault}}"
+  },
   "roster": {
+    "note": "Each bot keeps one ongoing thread. Ask, beside your material, is separate.",
     "label": "Your bots",
     "search": "Search bots",
     "searchPlaceholder": "Search bots…",

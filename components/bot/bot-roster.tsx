@@ -1,7 +1,8 @@
-import { Add01Icon, Cancel01Icon, Search01Icon } from "@hugeicons/core-free-icons";
+import { Search01Icon } from "@hugeicons/core-free-icons";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Icon } from "@/components/icon";
+import { Input } from "@/components/panelui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Bot } from "@/lib/db/types";
 import { cn } from "@/lib/utils";
@@ -11,23 +12,17 @@ import { useBotActivity, type BotActivity } from "./bot-runtime";
 const moodOf = (state: BotActivity): BotMood =>
   state === "thinking" ? "thinking" : state === "done" ? "happy" : "idle";
 
-const iconButton =
-  "flex size-8 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring";
-
 /** Every bot: pinned ones as large tiles, the rest as rows with their last message. */
 export function BotRoster({
   bots,
   selected,
   onSelect,
-  onCreate,
 }: {
   bots: Bot[];
   selected: string | null;
   onSelect: (id: string) => void;
-  onCreate: () => void;
 }) {
   const { t } = useTranslation("bot");
-  const [searching, setSearching] = useState(false);
   const [query, setQuery] = useState("");
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const shown = words.length
@@ -40,49 +35,20 @@ export function BotRoster({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* A window bar on macOS: it moves the window and leaves room for its buttons. */}
-      <div data-window-bar className="flex min-h-14 shrink-0 items-center gap-1 ps-4 pe-2">
-        {searching ? (
-          <input
-            autoFocus
+      <div className="px-3 pt-3 pb-2">
+        <Input.Group size="sm">
+          <Input.Addon>
+            <Icon icon={Search01Icon} size={14} />
+          </Input.Addon>
+          <Input
+            size="sm"
+            type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                setQuery("");
-                setSearching(false);
-              }
-            }}
-            placeholder={t("roster.searchPlaceholder")}
+            placeholder={t("roster.search")}
             aria-label={t("roster.search")}
-            className="h-8 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
-        ) : (
-          <h2 className="min-w-0 flex-1 truncate text-sm font-medium text-muted-foreground">
-            {t("roster.label")}
-          </h2>
-        )}
-        <button
-          type="button"
-          aria-label={searching ? t("roster.clearSearch") : t("roster.search")}
-          title={searching ? t("roster.clearSearch") : t("roster.search")}
-          onClick={() => {
-            setQuery("");
-            setSearching(!searching);
-          }}
-          className={iconButton}
-        >
-          <Icon icon={searching ? Cancel01Icon : Search01Icon} size={17} />
-        </button>
-        <button
-          type="button"
-          aria-label={t("roster.newBot")}
-          title={t("roster.newBot")}
-          onClick={onCreate}
-          className={iconButton}
-        >
-          <Icon icon={Add01Icon} size={18} />
-        </button>
+        </Input.Group>
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
@@ -114,6 +80,9 @@ export function BotRoster({
           ) : null}
         </nav>
       </ScrollArea>
+      <p className="border-t px-5 pt-3 pb-4 text-xs text-pretty text-muted-foreground">
+        {t("roster.note")}
+      </p>
     </div>
   );
 }
@@ -136,7 +105,7 @@ function PinnedTile({
       title={bot.title || bot.name}
       className={cn(
         "flex cursor-pointer flex-col items-center gap-1.5 rounded-2xl px-1 pt-3 pb-2.5 transition-colors outline-none hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring",
-        selected && "bg-foreground/10 hover:bg-foreground/10",
+        selected && "bg-muted shadow-[inset_0_0_0_1px_var(--color-border)] hover:bg-muted",
       )}
     >
       <BotAvatar avatar={bot.avatar} size={56} mood={moodOf(state)} />
@@ -168,8 +137,8 @@ function BotRow({
       aria-current={selected ? "page" : undefined}
       onClick={onSelect}
       className={cn(
-        "flex w-full cursor-pointer items-center gap-3 rounded-xl px-2 py-2 text-start transition-colors outline-none hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring",
-        selected && "bg-foreground/10 hover:bg-foreground/10",
+        "flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-start transition-colors outline-none hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring",
+        selected && "bg-muted shadow-[inset_0_0_0_1px_var(--color-border)] hover:bg-muted",
       )}
     >
       <BotAvatar avatar={bot.avatar} size={36} mood={moodOf(state)} />

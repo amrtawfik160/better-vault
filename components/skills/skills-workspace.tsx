@@ -3,7 +3,6 @@ import {
   Delete02Icon,
   Download04Icon,
   FileImportIcon,
-  MagicWand01Icon,
   Search01Icon,
 } from "@hugeicons/core-free-icons";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
@@ -13,6 +12,8 @@ import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { Field } from "@/components/common/field";
 import { Icon } from "@/components/icon";
 import { NoteEditor } from "@/components/notes/editor/note-editor";
+import { ToolHeader, useScopeName } from "@/components/common/tool-header";
+import { Button } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
 import { Textarea } from "@/components/panelui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -35,6 +36,7 @@ export default function SkillsWorkspace() {
   const vaults = useVaults();
   const vaultId = useCurrentVault(vaults);
   const skills = useSkills();
+  const scope = useScopeName();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const importInput = useRef<HTMLInputElement>(null);
@@ -73,105 +75,106 @@ export default function SkillsWorkspace() {
   if (!skills) return null;
 
   return (
-    <div className="flex h-full min-h-0 gap-2">
-      {/* Two panels: the vault's skills, and the one open. */}
-      <div className="hidden w-72 shrink-0 flex-col overflow-hidden rounded-3xl bg-card ring-1 ring-border md:flex">
-        <div className="flex h-14 shrink-0 items-center gap-1 border-b ps-4 pe-3">
-          <h2 className="min-w-0 flex-1 truncate text-base font-semibold">{t("skillsTitle")}</h2>
-          <button
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-card">
+      <ToolHeader title={t("skillsTitle")} detail={t("skills.scope", { vault: scope })}>
+        {mine.length > 0 ? (
+          <Button
             type="button"
+            size="sm"
+            variant="ghost"
             onClick={() => importInput.current?.click()}
-            aria-label={t("skills.import")}
-            title={t("skills.import")}
-            className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            className="text-muted-foreground"
           >
-            <Icon icon={FileImportIcon} size={17} />
-          </button>
-          <button
-            type="button"
-            onClick={() => void create()}
-            aria-label={t("skills.new")}
-            title={t("skills.new")}
-            className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-foreground text-background outline-none hover:bg-foreground/85 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
-          >
-            <Icon icon={Add01Icon} size={17} />
-          </button>
-        </div>
-        <div className="border-b p-3">
-          <Input.Group size="sm">
-            <Input.Addon>
-              <Icon icon={Search01Icon} size={14} />
-            </Input.Addon>
-            <Input
-              size="sm"
-              type="search"
-              aria-label={t("skills.search")}
-              placeholder={t("skills.search")}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
+            <Icon icon={FileImportIcon} size={16} />
+            <span className="max-sm:sr-only">{t("skills.import")}</span>
+          </Button>
+        ) : null}
+        <Button type="button" size="sm" onClick={() => void create()}>
+          <Icon icon={Add01Icon} size={16} />
+          <span className="max-sm:sr-only">{t("skills.new")}</span>
+        </Button>
+      </ToolHeader>
+      <div className="flex min-h-0 flex-1">
+        {/* The vault's skills, and the one open. */}
+        <div className="hidden w-72 shrink-0 flex-col overflow-hidden border-e md:flex">
+          <div className="px-3 pt-3 pb-2">
+            <Input.Group size="sm">
+              <Input.Addon>
+                <Icon icon={Search01Icon} size={14} />
+              </Input.Addon>
+              <Input
+                size="sm"
+                type="search"
+                aria-label={t("skills.search")}
+                placeholder={t("skills.search")}
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </Input.Group>
+            <input
+              ref={importInput}
+              type="file"
+              multiple
+              accept=".md,.markdown,text/markdown"
+              className="hidden"
+              onChange={(event) => {
+                const files = [...(event.target.files ?? [])];
+                event.target.value = "";
+                if (files.length) void importFiles(files);
+              }}
             />
-          </Input.Group>
-          <input
-            ref={importInput}
-            type="file"
-            multiple
-            accept=".md,.markdown,text/markdown"
-            className="hidden"
-            onChange={(event) => {
-              const files = [...(event.target.files ?? [])];
-              event.target.value = "";
-              if (files.length) void importFiles(files);
-            }}
-          />
-        </div>
-        <ScrollArea className="min-h-0 flex-1">
-          <nav aria-label={t("skillsTitle")} className="flex flex-col gap-0.5 px-2 py-3">
-            {shown.map((skill) => (
-              <button
-                key={skill.id}
-                type="button"
-                aria-current={skill.id === activeId ? "page" : undefined}
-                onClick={() => setActiveId(skill.id)}
-                className={cn(
-                  "flex w-full min-w-0 cursor-pointer flex-col rounded-lg px-2 py-1.5 text-start outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  skill.id === activeId ? "bg-foreground/10" : "hover:bg-accent/60",
-                )}
-              >
-                <span className="truncate font-mono text-sm">{skill.name}</span>
-                <span className="truncate text-xs text-muted-foreground">
-                  {skill.description ||
-                    t("skills.updatedBy", {
-                      who: skill.updatedBy === "you" ? t("skills.you") : skill.updatedBy,
-                      time: formatRelativeTime(skill.updatedAt, i18n.language),
-                    })}
-                </span>
-              </button>
-            ))}
-          </nav>
-        </ScrollArea>
-      </div>
-
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-3xl bg-card ring-1 ring-border">
-        {active ? (
-          <SkillEditor key={active.id} skill={active} onDeleted={() => setActiveId(null)} />
-        ) : (
-          <div className="m-auto flex max-w-sm flex-col items-center gap-3 p-6 text-center">
-            <span className="flex size-14 items-center justify-center rounded-2xl bg-muted">
-              <Icon icon={MagicWand01Icon} size={26} />
-            </span>
-            <h2 className="text-base font-semibold">
-              {mine.length ? t("skillsTitle") : t("skills.empty")}
-            </h2>
-            <p className="text-sm text-muted-foreground">{t("skills.emptyBody")}</p>
-            <button
-              type="button"
-              onClick={() => void create()}
-              className="mt-1 cursor-pointer rounded-full bg-primary px-4 py-2 text-sm font-medium text-primary-foreground outline-none hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {t("skills.new")}
-            </button>
           </div>
-        )}
+          <ScrollArea className="min-h-0 flex-1">
+            <nav aria-label={t("skillsTitle")} className="flex flex-col gap-0.5 px-2 py-3">
+              {shown.map((skill) => (
+                <button
+                  key={skill.id}
+                  type="button"
+                  aria-current={skill.id === activeId ? "page" : undefined}
+                  onClick={() => setActiveId(skill.id)}
+                  className={cn(
+                    "flex w-full min-w-0 cursor-pointer flex-col rounded-md px-2 py-1.5 text-start outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    skill.id === activeId
+                      ? "bg-muted shadow-[inset_0_0_0_1px_var(--color-border)]"
+                      : "hover:bg-accent/60",
+                  )}
+                >
+                  <span className="truncate font-mono text-[0.8125rem]">{skill.name}</span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {skill.description ||
+                      t("skills.updatedBy", {
+                        who: skill.updatedBy === "you" ? t("skills.you") : skill.updatedBy,
+                        time: formatRelativeTime(skill.updatedAt, i18n.language),
+                      })}
+                  </span>
+                </button>
+              ))}
+            </nav>
+          </ScrollArea>
+        </div>
+
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          {active ? (
+            <SkillEditor key={active.id} skill={active} onDeleted={() => setActiveId(null)} />
+          ) : (
+            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto px-5 py-12">
+              <section aria-labelledby="skills-empty" className="w-full max-w-[27.5rem]">
+                <h2 id="skills-empty" className="text-sm leading-5 font-medium">
+                  {mine.length ? t("skills.choose") : t("skills.empty")}
+                </h2>
+                <p className="mt-1 text-[0.8125rem] leading-5 text-pretty text-muted-foreground">
+                  {mine.length ? t("skills.chooseBody") : t("skills.emptyBody")}
+                </p>
+                {mine.length ? null : (
+                  <Button type="button" className="mt-5" size="sm" onClick={() => void create()}>
+                    <Icon icon={Add01Icon} size={16} />
+                    {t("skills.new")}
+                  </Button>
+                )}
+              </section>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -228,7 +231,7 @@ function SkillEditor({ skill, onDeleted }: { skill: Skill; onDeleted: () => void
             }
             aria-label={t("skills.export")}
             title={t("skills.export")}
-            className="mt-6 flex size-9 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            className="mt-6 flex size-9 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Icon icon={Download04Icon} size={18} />
           </button>
@@ -237,7 +240,7 @@ function SkillEditor({ skill, onDeleted }: { skill: Skill; onDeleted: () => void
             onClick={() => setDeleting(true)}
             aria-label={t("skills.delete.confirm")}
             title={t("skills.delete.confirm")}
-            className="mt-6 flex size-9 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-accent hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring"
+            className="mt-6 flex size-9 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Icon icon={Delete02Icon} size={18} />
           </button>
