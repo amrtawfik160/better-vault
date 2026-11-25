@@ -8,6 +8,7 @@ import {
   foldersAbove,
   isActive,
   monogram,
+  pinnedNotebooks,
   sidebarLayout,
   vaultStats,
   type TreeNode,
@@ -45,10 +46,16 @@ describe("activeNavItem", () => {
     expect(activeNavItem("/study", "?tab=library")).toEqual({ kind: "library" });
   });
 
-  it("reads the notebooks list, its folders and Recent as Notebooks", () => {
+  it("reads Recent as its own entry, apart from Notebooks", () => {
+    expect(activeNavItem("/", "?view=recents")).toEqual({ kind: "recent" });
+    expect(isActive(activeNavItem("/", "?view=recents"), { kind: "recent" })).toBe(true);
+    expect(isActive(activeNavItem("/", "?view=recents"), { kind: "notebooks" })).toBe(false);
+    expect(isActive(activeNavItem("/", ""), { kind: "recent" })).toBe(false);
+  });
+
+  it("reads the notebooks list and its folders as Notebooks", () => {
     expect(activeNavItem("/", "")).toEqual({ kind: "notebooks" });
     expect(activeNavItem("/", "?folder=f1")).toEqual({ kind: "notebooks" });
-    expect(activeNavItem("/", "?view=recents")).toEqual({ kind: "notebooks" });
     expect(activeNavItem("/", "?view=vault")).toEqual({ kind: "notebooks" });
   });
 
@@ -69,6 +76,18 @@ describe("isActive", () => {
     expect(isActive({ kind: "notebook", id: "a" }, { kind: "notebook", id: "a" })).toBe(true);
     expect(isActive({ kind: "notebook", id: "a" }, { kind: "notebook", id: "b" })).toBe(false);
     expect(isActive(null, { kind: "today" })).toBe(false);
+  });
+});
+
+describe("pinnedNotebooks", () => {
+  it("lists every pinned notebook by name, including those inside folders", () => {
+    const pinned = pinnedNotebooks([
+      notebook("n1", "Zebra", { pinned: true }),
+      notebook("n2", "Loose"),
+      notebook("n3", "apple", { pinned: true, folderId: "f1" }),
+    ]);
+    expect(pinned.map(({ title }) => title)).toEqual(["apple", "Zebra"]);
+    expect(pinnedNotebooks([notebook("n4", "None")])).toEqual([]);
   });
 });
 

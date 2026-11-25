@@ -31,7 +31,7 @@ import { ContextMenu, ContextMenuTrigger } from "@/components/common/context-men
 import { Icon } from "@/components/icon";
 import { Button } from "@/components/panelui/button";
 import { Menu } from "@/components/panelui/menu";
-import { AppFrame, Desk } from "@/components/shell/app-frame";
+import { Desk, useBareFrame } from "@/components/shell/app-frame";
 import { SidebarMenuButton, useSidebar } from "@/components/shell/sidebar-state";
 import { StudyReturnLinks } from "@/components/study/study-return-links";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -173,6 +173,7 @@ export function NotebookHome() {
   // Collection is Review's Browse mode, so the title says Review.
   const studySection = studyTab && studySectionOf(studyTab);
   const focusedReader = isFocusedStudyReader(params);
+  useBareFrame(focusedReader);
   // The calendar, bot, notes and skills supply their own header on wider screens.
   const fullPage =
     section === "calendar" || section === "bot" || section === "notes" || section === "skills";
@@ -373,17 +374,17 @@ export function NotebookHome() {
   }
 
   return (
-    <AppFrame
-      bare={focusedReader}
-      className="relative"
+    <div
+      className="relative flex min-h-0 flex-1 flex-col"
       onDragEnter={(event) => {
-        if (!isFileDrag(event) || panelPage) return;
+        if (!isFileDrag(event)) return;
         event.preventDefault();
+        if (panelPage) return;
         dragDepth.current += 1;
         setFileDrag(true);
       }}
       onDragOver={(event) => {
-        if (isFileDrag(event) && !panelPage) event.preventDefault();
+        if (isFileDrag(event)) event.preventDefault();
       }}
       onDragLeave={(event) => {
         if (!isFileDrag(event) || panelPage) return;
@@ -391,10 +392,12 @@ export function NotebookHome() {
         if (dragDepth.current === 0) setFileDrag(false);
       }}
       onDrop={(event) => {
-        if (!isFileDrag(event) || panelPage) return;
+        if (!isFileDrag(event)) return;
+        const taken = event.defaultPrevented;
         event.preventDefault();
         dragDepth.current = 0;
         setFileDrag(false);
+        if (panelPage || taken) return;
         const files = [...event.dataTransfer.files];
         if (files.length > 0) setCreating({ files });
       }}
@@ -858,7 +861,7 @@ export function NotebookHome() {
           await createFolder(name, current, color, vaultId);
         }}
       />
-    </AppFrame>
+    </div>
   );
 }
 

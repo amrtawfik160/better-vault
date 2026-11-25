@@ -5,6 +5,7 @@ import {
   Books01Icon,
   Calendar03Icon,
   Cancel01Icon,
+  Clock01Icon,
   Folder01Icon,
   MagicWand01Icon,
   Note01Icon,
@@ -40,7 +41,7 @@ import { moveFolder, useFolders } from "@/lib/db/folders";
 import { updateNotebook, useNotebooks } from "@/lib/db/notebooks";
 import { useProfile } from "@/lib/db/profile";
 import type { Folder, Notebook } from "@/lib/db/types";
-import { setCurrentVault, useCurrentVault, useVaults, vaultOf } from "@/lib/db/vaults";
+import { currentVaultId, setCurrentVault, useCurrentVault, useVaults, vaultOf } from "@/lib/db/vaults";
 import { notebookIcon } from "@/lib/notebooks/icons";
 import { routes } from "@/lib/routes";
 import { studyHref } from "@/lib/study/links";
@@ -52,12 +53,13 @@ import {
   buildNotebookTree,
   foldersAbove,
   isActive,
+  pinnedNotebooks,
   type NavItem,
   type TreeNode,
 } from "./nav-model";
 import { useSidebar } from "./sidebar-state";
 import { useVaultStats } from "./vault-stats";
-import { VaultSwitcher } from "./vault-switcher";
+import { VaultDialogs, VaultSwitcher } from "./vault-switcher";
 
 const openFoldersKey = "better-vault:sidebar-folders";
 const toolsKey = "better-vault:sidebar-tools";
@@ -138,17 +140,31 @@ export function AppSidebar({ notebookId }: AppSidebarProps) {
     [allFolders, vaultId],
   );
 
-  function switchVault(id: string, announce = true) {
-    const previous = vaultId;
+  function switchVault(id: string, name?: string) {
+    // Undo goes back to the saved vault and to the page the switch left.
+    const previous = currentVaultId();
+    const back = `${location.pathname}${location.search}`;
     setCurrentVault(id);
     const next = afterVaultSwitch(location.pathname, location.search);
     if (next) navigate(next);
-    if (!announce) return;
     const chosen = vaults?.find((each) => each.id === id);
-    toast(t("vault.switched", { name: chosen ? vaultName(chosen) : "" }), {
-      action: { label: t("vault.undo"), onClick: () => switchVault(previous, false) },
+    toast(t("vault.switched", { name: chosen ? vaultName(chosen) : (name ?? "") }), {
+      action: {
+        label: t("vault.undo"),
+        onClick: () => {
+          setCurrentVault(previous);
+          navigate(back);
+        },
+      },
     });
   }
+
+  // The vault dialogs are drawn outside the drawer, so it closes first.
+  const [vaultDialog, setVaultDialog] = useState<"new" | "manage" | null>(null);
+  const openVaultDialog = (which: "new" | "manage") => {
+    setDrawerOpen(false);
+    setVaultDialog(which);
+  };
 
   // A dialog or sheet opened from the drawer is drawn outside it, so the drawer closes first.
   const openSettings = (page: SettingsPage | null) => {
@@ -173,6 +189,8 @@ export function AppSidebar({ notebookId }: AppSidebarProps) {
         active={activeNavItem(location.pathname, location.search)}
         openNotebook={notebookId}
         onSwitch={switchVault}
+        onNewVault={() => openVaultDialog("new")}
+        onManageVaults={() => openVaultDialog("manage")}
         onAdd={openAdd}
         onSettings={openSettings}
       />
@@ -203,6 +221,18 @@ export function AppSidebar({ notebookId }: AppSidebarProps) {
           </nav>
         </Sheet.Content>
       </Sheet>
+      {vaults && vault ? (
+        <VaultDialogs
+          vaults={vaults}
+          current={vault}
+          stats={stats}
+          creating={vaultDialog === "new"}
+          onCreatingChange={(open) => setVaultDialog(open ? "new" : null)}
+          managing={vaultDialog === "manage"}
+          onManagingChange={(open) => setVaultDialog(open ? "manage" : null)}
+          onSwitch={switchVault}
+        />
+      ) : null}
       {vaults && vault ? (
         <AddMaterial
           open={adding}
@@ -252,6 +282,8 @@ function SidebarBody({
   active,
   openNotebook,
   onSwitch,
+  onNewVault,
+  onManageVaults,
   onAdd,
   onSettings,
 }: {
@@ -265,6 +297,8 @@ function SidebarBody({
   active: NavItem | null;
   openNotebook?: string;
   onSwitch: (id: string) => void;
+  onNewVault: () => void;
+  onManageVaults: () => void;
   onAdd: () => void;
   onSettings: (page: SettingsPage | null) => void;
 }) {
@@ -301,7 +335,12 @@ function SidebarBody({
         data-window-bar
         className={cn("flex min-h-13 shrink-0 items-center gap-1", rail && "justify-center")}
       >
-        <VaultSwitcher vaults={vaults} current={vault} stats={stats} rail={rail} onSwitch={onSwitch} />
+        <VaultSwitcher vaults={vaults} current={vault} stats={stats}
+          rail={rail}
+          onSwitch={onSwitch}
+          onNew={onNewVault}
+          onManage={onManageVaults}
+        />
         {inDrawer ? (
           <Button
             variant="ghost"
@@ -367,7 +406,9 @@ function SidebarBody({
           {link({ kind: "library" }, studyHref("library"), Books01Icon, t("nav.library"))}
 
           <NotebooksHeading rail={rail} current={active?.kind === "notebooks"} folders={folders} />
+          {link({ kind: "recent" }, `${routes.home}?view=recents`, Clock01Icon, t("nav.recent"))}
           {link({ kind: "notes" }, `${routes.home}?view=notes`, Note01Icon, t("nav.notes"))}
+          <PinnedNotebooks rail={rail} notebooks={notebooks} active={active} openNotebook={openNotebook} />
           <NotebookTree
             rail={rail}
             folders={folders}
@@ -545,6 +586,32 @@ function readOpenFolders(): Set<string> {
   } catch {
     return new Set();
   }
+}
+
+/** Every pinned notebook of the vault, also those inside folders. */
+function PinnedNotebooks({
+  rail,
+  notebooks,
+  active,
+  openNotebook,
+}: {
+  rail: boolean;
+  notebooks: Notebook[];
+  active: NavItem | null;
+  openNotebook?: string;
+}) {
+  const { t } = useTranslation("shell");
+  const pinned = useMemo(() => pinnedNotebooks(notebooks), [notebooks]);
+  if (pinned.length === 0) return null;
+  const current = active?.kind === "notebook" ? active.id : openNotebook;
+  return (
+    <>
+      <Heading rail={rail}>{t("nav.pinned")}</Heading>
+      {pinned.map((notebook) => (
+        <NotebookRow key={notebook.id} notebook={notebook} depth={0} rail={rail} current={current === notebook.id} />
+      ))}
+    </>
+  );
 }
 
 /** The vault's folders and notebooks. Folders fold; the tree opens down to the notebook shown. */

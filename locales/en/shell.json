@@ -17,6 +17,7 @@
     "library": "Library",
     "notebooks": "Notebooks",
     "allNotebooks": "All notebooks",
+    "recent": "Recent",
     "notes": "Notes",
     "noNotebooks": "No notebooks yet",
     "pinned": "Pinned",

@@ -58,6 +58,8 @@ export function VaultSwitcher({
   stats,
   rail,
   onSwitch,
+  onNew,
+  onManage,
 }: {
   vaults: Vault[];
   current: Vault;
@@ -65,14 +67,14 @@ export function VaultSwitcher({
   /** Drawn as the monogram only, in the icon rail. */
   rail: boolean;
   onSwitch: (id: string) => void;
+  /** The New vault and Manage vaults dialogs are the sidebar's, drawn outside the drawer. */
+  onNew: () => void;
+  onManage: () => void;
 }) {
   const { t } = useTranslation("shell");
-  const { t: tHome } = useTranslation("home");
   const vaultName = useVaultName();
   const countLine = useVaultCountLine();
   const noteId = useId();
-  const [creating, setCreating] = useState(false);
-  const [managing, setManaging] = useState(false);
   const name = vaultName(current);
 
   return (
@@ -119,11 +121,11 @@ export function VaultSwitcher({
             </Menu.RadioGroup>
           </Menu.Group>
           <Menu.Separator />
-          <Menu.Item onClick={() => setCreating(true)}>
+          <Menu.Item onClick={onNew}>
             <Icon icon={Add01Icon} />
             {t("vault.new")}
           </Menu.Item>
-          <Menu.Item onClick={() => setManaging(true)}>
+          <Menu.Item onClick={onManage}>
             <Icon icon={Settings02Icon} />
             {t("vault.manage")}
           </Menu.Item>
@@ -132,10 +134,36 @@ export function VaultSwitcher({
           </p>
         </Menu.Content>
       </Menu>
+    </>
+  );
+}
 
+/** The dialogs the switcher's menu opens: a new vault, and the list to manage them. */
+export function VaultDialogs({
+  vaults,
+  current,
+  stats,
+  creating,
+  onCreatingChange,
+  managing,
+  onManagingChange,
+  onSwitch,
+}: {
+  vaults: Vault[];
+  current: Vault;
+  stats: Map<string, VaultStats> | undefined;
+  creating: boolean;
+  onCreatingChange: (open: boolean) => void;
+  managing: boolean;
+  onManagingChange: (open: boolean) => void;
+  onSwitch: (id: string, name?: string) => void;
+}) {
+  const { t: tHome } = useTranslation("home");
+  return (
+    <>
       <NotebookDialog
         open={creating}
-        onOpenChange={setCreating}
+        onOpenChange={onCreatingChange}
         mode="create"
         folders={[]}
         initial={{ title: "", icon: "notebook" }}
@@ -147,12 +175,12 @@ export function VaultSwitcher({
         }}
         onSubmit={async ({ title, icon, color }) => {
           const id = await createVault({ name: title, icon, color });
-          onSwitch(id);
+          onSwitch(id, title);
         }}
       />
       <ManageVaults
         open={managing}
-        onOpenChange={setManaging}
+        onOpenChange={onManagingChange}
         vaults={vaults}
         current={current.id}
         stats={stats}

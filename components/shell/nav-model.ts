@@ -6,7 +6,7 @@ import { DEFAULT_VAULT } from "@/lib/study/vault";
 /** The entries of the app sidebar that a page can be. */
 export type NavItem =
   | { kind: "today" | "practice" | "review" | "library" }
-  | { kind: "notebooks" }
+  | { kind: "notebooks" | "recent" }
   | { kind: "notes" | "calendar" | "bot" | "skills" }
   | { kind: "notebook"; id: string };
 
@@ -43,10 +43,11 @@ export function activeNavItem(pathname: string, search: string): NavItem | null 
     case "bot":
     case "skills":
       return { kind: view };
+    case "recents":
+      return { kind: "recent" };
     case null:
     case "all":
     case "vault":
-    case "recents":
       return { kind: "notebooks" };
     default:
       return null;
@@ -114,6 +115,11 @@ export function buildNotebookTree(folders: readonly Folder[], notebooks: readonl
     ];
   };
   return build(null, 0, new Set());
+}
+
+/** The vault's pinned notebooks by name, wherever they sit in folders. */
+export function pinnedNotebooks(notebooks: readonly Notebook[]): Notebook[] {
+  return notebooks.filter(({ pinned }) => pinned).sort((a, b) => byName(a.title, b.title));
 }
 
 function reachesItself(folder: Folder, folders: readonly Folder[]) {
