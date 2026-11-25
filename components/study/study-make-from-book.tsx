@@ -17,22 +17,9 @@ import { useBookNotes } from "./use-book-notes";
 
 const makeTools: StudioToolId[] = ["mind-map", "flashcards", "quiz", "report"];
 
-/**
- * Connects a Study book to the rest of the app: Studio tools made from it,
- * and the notes about it, with a way to start one.
- */
-export function StudyMakeFromBook({
-  book,
-  className,
-  compact = false,
-}: {
-  book: StudyBook;
-  className?: string;
-  /** Tighter layout for side panels. */
-  compact?: boolean;
-}) {
+/** The notes about a Study book, with a way to start one. */
+export function StudyBookNotes({ book, limit = 3 }: { book: StudyBook; limit?: number }) {
   const { t } = useTranslation("home");
-  const { t: tStudio } = useTranslation("studio");
   const navigate = useNavigate();
   const location = useLocation();
   const returnState = studyReturnState(location.state);
@@ -58,6 +45,56 @@ export function StudyMakeFromBook({
   }
 
   return (
+    <div className="flex flex-col gap-2">
+      <h4 className="text-xs font-medium text-muted-foreground">{t("study.make.notesTitle")}</h4>
+      {notes?.length ? (
+        <ul className="flex flex-col gap-1">
+          {notes.slice(0, limit).map((note) => (
+            <li key={note.id}>
+              <Link
+                to={originHref({ kind: "note", noteId: note.id })}
+                state={returnState}
+                className="flex min-h-10 items-center gap-2 rounded-lg px-2 text-sm outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <Icon icon={Note01Icon} size={16} className="shrink-0 text-muted-foreground" />
+                <span className="min-w-0 truncate" dir={textDirection(note.title)}>{note.title}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      ) : notes ? (
+        <p className="text-xs text-muted-foreground">
+          {t("study.make.noNotes", { source: source?.title ?? book.title })}
+        </p>
+      ) : null}
+      <Button size="sm" variant="outline" className="self-start" onClick={newNote}>
+        <Icon icon={PlusSignIcon} size={16} />
+        {t("study.make.newNote")}
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * Connects a Study book to the rest of the app: Studio tools made from it,
+ * and the notes about it, with a way to start one.
+ */
+export function StudyMakeFromBook({
+  book,
+  className,
+  compact = false,
+}: {
+  book: StudyBook;
+  className?: string;
+  /** Tighter layout for side panels. */
+  compact?: boolean;
+}) {
+  const { t } = useTranslation("home");
+  const { t: tStudio } = useTranslation("studio");
+  const location = useLocation();
+  const returnState = studyReturnState(location.state);
+
+  return (
     <section className={cn("flex min-w-0 flex-col gap-4", className)} aria-label={t("study.make.title", { title: book.title })}>
       <div className="flex flex-col gap-1">
         <h3 className="text-sm font-semibold" dir="auto">
@@ -78,33 +115,7 @@ export function StudyMakeFromBook({
           </Link>
         ))}
       </div>
-      <div className="flex flex-col gap-2">
-        <h4 className="text-xs font-medium text-muted-foreground">{t("study.make.notesTitle")}</h4>
-        {notes?.length ? (
-          <ul className="flex flex-col gap-1">
-            {notes.slice(0, compact ? 5 : 3).map((note) => (
-              <li key={note.id}>
-                <Link
-                  to={originHref({ kind: "note", noteId: note.id })}
-                  state={returnState}
-                  className="flex min-h-10 items-center gap-2 rounded-lg px-2 text-sm outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <Icon icon={Note01Icon} size={16} className="shrink-0 text-muted-foreground" />
-                  <span className="min-w-0 truncate" dir={textDirection(note.title)}>{note.title}</span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        ) : notes ? (
-          <p className="text-xs text-muted-foreground">
-            {t("study.make.noNotes", { source: source?.title ?? book.title })}
-          </p>
-        ) : null}
-        <Button size="sm" variant="outline" className="self-start" onClick={newNote}>
-          <Icon icon={PlusSignIcon} size={16} />
-          {t("study.make.newNote")}
-        </Button>
-      </div>
+      <StudyBookNotes book={book} limit={compact ? 5 : 3} />
     </section>
   );
 }

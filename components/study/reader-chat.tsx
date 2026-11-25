@@ -1,10 +1,9 @@
 import {
-  BubbleChatAddIcon,
+  ArrowDown01Icon,
   Chatting01Icon,
   Clock01Icon,
-  Idea01Icon,
+  PencilEdit02Icon,
   QuoteDownIcon,
-  TeachingIcon,
 } from "@hugeicons/core-free-icons";
 import { Chat, useChat } from "@ai-sdk/react";
 import {
@@ -26,6 +25,7 @@ import type { ChatQuote } from "@/lib/chat/quote";
 import type { BookLinks } from "@/components/chat/book-activity";
 import { UsageRing } from "@/components/chat/usage-ring";
 import { Icon } from "@/components/icon";
+import { Alert } from "@/components/panelui/alert";
 import { Button, buttonVariants } from "@/components/panelui/button";
 import { Menu } from "@/components/panelui/menu";
 import { Message } from "@/components/panelui/message";
@@ -50,7 +50,7 @@ import { StudyFlashcardDraftDialog, type FlashcardSource } from "./study-flashca
 
 /** How many earlier messages go with each question. */
 const HISTORY = 24;
-const SUGGESTIONS = ["summary", "explain", "quiz", "connect"] as const;
+const SUGGESTIONS = ["summary", "explain", "connect"] as const;
 const rememberKey = (bookId: string) => `deeple:reader-chat:${bookId}`;
 
 /** A passage of the book, to ask about. */
@@ -168,29 +168,32 @@ export function ReaderChat({
   quote,
   clearQuote,
   seed,
+  partTitle,
+  partInline,
   openSection,
-  teachBack,
-  canTeachBack,
-  openingTutor,
   tutorThreads,
   openTutorThread,
+  setupModel,
 }: {
   book: StudyBook;
   vaultId: string;
   /** The section on screen, from 0. */
   index: number;
+  /** What the reader calls the part on screen: "Chapter 7", "Page 3". */
+  partTitle: string;
+  /** The same in a sentence: "chapter 7", "this document". */
+  partInline: string;
   /** A passage to ask about with the next question. */
   quote?: ReaderQuote;
   clearQuote: () => void;
   seed?: ReaderChatSeed;
   /** Opens a section in the reader, from 1. */
   openSection: (section: number) => void;
-  teachBack: () => void;
-  canTeachBack: boolean;
-  openingTutor: boolean;
   /** This book's Study tutor sessions (Teach it back, pictures), opened in the panel. */
   tutorThreads: StudyThread[];
   openTutorThread: (thread: StudyThread) => void;
+  /** Opens Settings → AI providers, for the fix when no model is set up. */
+  setupModel?: () => void;
 }) {
   const { t: tHome } = useTranslation("home");
   const reading = useRef<Reading>({ book, index });
@@ -250,12 +253,12 @@ export function ReaderChat({
       quote={quote}
       clearQuote={clearQuote}
       start={start}
+      partTitle={partTitle}
+      partInline={partInline}
       openSection={openSection}
-      teachBack={teachBack}
-      canTeachBack={canTeachBack}
-      openingTutor={openingTutor}
       tutorThreads={tutorThreads}
       openTutorThread={openTutorThread}
+      setupModel={setupModel}
     />
   );
 }
@@ -268,12 +271,12 @@ function ReaderConversation({
   quote: fromReader,
   clearQuote: clearReaderQuote,
   start,
+  partTitle,
+  partInline,
   openSection,
-  teachBack,
-  canTeachBack,
-  openingTutor,
   tutorThreads,
   openTutorThread,
+  setupModel,
 }: {
   chat: Chat<ChatMessage>;
   book: StudyBook;
@@ -282,12 +285,13 @@ function ReaderConversation({
   quote?: ReaderQuote;
   clearQuote: () => void;
   start: (id?: string, messages?: ChatMessage[]) => void;
+  partTitle: string;
+  /** The same in a sentence: "chapter 7", "this document". */
+  partInline: string;
   openSection: (section: number) => void;
-  teachBack: () => void;
-  canTeachBack: boolean;
-  openingTutor: boolean;
   tutorThreads: StudyThread[];
   openTutorThread: (thread: StudyThread) => void;
+  setupModel?: () => void;
 }) {
   const { t } = useTranslation("chat");
   const { t: tHome } = useTranslation("home");
@@ -316,6 +320,8 @@ function ReaderConversation({
     setFromAnswer(undefined);
     clearReaderQuote();
   };
+  // What Ask reads, in words: the passage asked about, or the part on screen.
+  const scopeName = quote ? tHome("study.readerCompanion.ask.passage") : partTitle;
 
   // A passage sent from the reader, or chosen in an answer, is asked about next.
   useEffect(() => {
@@ -344,115 +350,153 @@ function ReaderConversation({
 
   return (
     <div className="relative flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center gap-1 border-b px-2 py-1.5">
+      <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
+        <span className="shrink-0 text-xs text-muted-foreground">{tHome("study.readerCompanion.ask.answersFrom")}</span>
         <Menu>
           <Menu.Trigger
             render={
-              <Button
-                size="icon-sm"
-                variant="ghost"
-                aria-label={t("reader.history")}
-                title={t("reader.history")}
+              <button
+                type="button"
+                aria-label={tHome("study.readerCompanion.ask.scopeLabel", { scope: scopeName })}
+                className="inline-flex h-7 min-w-0 cursor-pointer items-center gap-2 rounded-full border border-chart-5/50 bg-chart-5/15 ps-2.5 pe-2 text-[0.8125rem] font-medium outline-none hover:bg-chart-5/25 focus-visible:ring-[3px] focus-visible:ring-ring/40 data-popup-open:bg-chart-5/25"
               />
             }
           >
-            <Icon icon={Clock01Icon} size={16} />
+            <span aria-hidden className="h-3 w-0.5 shrink-0 rounded-full bg-chart-5" />
+            <span className="truncate" dir="auto">{scopeName}</span>
+            <Icon icon={ArrowDown01Icon} size={14} className="shrink-0 text-muted-foreground" />
           </Menu.Trigger>
-          <Menu.Content align="start" className="max-h-96 w-72">
+          <Menu.Content align="start" className="w-62">
             <Menu.Group>
-              <Menu.GroupLabel>{t("reader.notebookConversations")}</Menu.GroupLabel>
-              {conversations?.length ? (
-                conversations.slice(0, 30).map((conversation) => (
-                  <Menu.Item
-                    key={conversation.id}
-                    onClick={() =>
-                      void loadNotebookChat(book.notebookId, conversation.id).then(
-                        (messages) => messages && start(conversation.id, messages),
-                      )
-                    }
-                    className={cn(conversation.id === instance.id && "font-medium")}
-                  >
-                    <span className="truncate" dir="auto">{conversation.title}</span>
-                  </Menu.Item>
-                ))
-              ) : (
-                <Menu.Item disabled>{t("reader.noConversations")}</Menu.Item>
-              )}
+              <Menu.GroupLabel aria-hidden>{tHome("study.readerCompanion.ask.scopeMenu")}</Menu.GroupLabel>
+              <Menu.RadioGroup
+                value={quote ? "passage" : "part"}
+                onValueChange={(value) => {
+                  if (value === "part") clearQuote();
+                }}
+              >
+                <Menu.RadioItem value="passage" disabled={!quote} closeOnClick>
+                  <span className="flex min-w-0 flex-col">
+                    <span>{tHome("study.readerCompanion.ask.passage")}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {tHome(quote ? "study.readerCompanion.ask.passageDetail" : "study.readerCompanion.ask.passageNone")}
+                    </span>
+                  </span>
+                </Menu.RadioItem>
+                <Menu.RadioItem value="part" closeOnClick>
+                  <span className="flex min-w-0 flex-col">
+                    <span dir="auto">{partTitle}</span>
+                    <span className="text-xs text-muted-foreground">{tHome("study.readerCompanion.ask.partDetail")}</span>
+                  </span>
+                </Menu.RadioItem>
+              </Menu.RadioGroup>
             </Menu.Group>
-            {tutorThreads.length ? (
-              <>
-                <Menu.Separator />
-                <Menu.Group>
-                  <Menu.GroupLabel>{t("reader.tutorSessions")}</Menu.GroupLabel>
-                  {tutorThreads.slice(0, 20).map((thread) => (
-                    <Menu.Item key={thread.id} onClick={() => openTutorThread(thread)}>
-                      <span className="truncate" dir="auto">
-                        {[goalLabel(thread, tHome(`study.goals.labels.${thread.goal}`)), thread.title]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </span>
-                    </Menu.Item>
-                  ))}
-                </Menu.Group>
-              </>
-            ) : null}
           </Menu.Content>
         </Menu>
-        <p className="min-w-0 flex-1 truncate px-1 text-sm font-medium" dir="auto">
-          {chat.messages.length ? (title ?? textOf(chat.messages[0])) : t("newChat")}
-        </p>
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          aria-label={t("newChat")}
-          title={t("newChat")}
-          disabled={chat.messages.length === 0}
-          onClick={() => start()}
-        >
-          <Icon icon={BubbleChatAddIcon} size={16} />
-        </Button>
-        <Link
-          to={notebookHref}
-          aria-label={tHome("study.reader.panel.openInNotebook")}
-          title={tHome("study.reader.panel.openInNotebook")}
-          className={buttonVariants({ size: "icon-sm", variant: "ghost" })}
-        >
-          <Icon icon={Chatting01Icon} size={16} />
-        </Link>
+        <span className="ms-auto flex shrink-0 items-center">
+          <Menu>
+            <Menu.Trigger
+              render={
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label={tHome("study.readerCompanion.ask.history")}
+                  title={tHome("study.readerCompanion.ask.history")}
+                />
+              }
+            >
+              <Icon icon={Clock01Icon} size={16} />
+            </Menu.Trigger>
+            <Menu.Content align="end" className="max-h-96 w-72">
+              <Menu.Group>
+                <Menu.GroupLabel>{t("reader.notebookConversations")}</Menu.GroupLabel>
+                {conversations?.length ? (
+                  conversations.slice(0, 30).map((conversation) => (
+                    <Menu.Item
+                      key={conversation.id}
+                      onClick={() =>
+                        void loadNotebookChat(book.notebookId, conversation.id).then(
+                          (messages) => messages && start(conversation.id, messages),
+                        )
+                      }
+                      className={cn(conversation.id === instance.id && "font-medium")}
+                    >
+                      <span className="truncate" dir="auto">{conversation.title}</span>
+                    </Menu.Item>
+                  ))
+                ) : (
+                  <Menu.Item disabled>{t("reader.noConversations")}</Menu.Item>
+                )}
+              </Menu.Group>
+              {tutorThreads.length ? (
+                <>
+                  <Menu.Separator />
+                  <Menu.Group>
+                    <Menu.GroupLabel>{t("reader.tutorSessions")}</Menu.GroupLabel>
+                    {tutorThreads.slice(0, 20).map((thread) => (
+                      <Menu.Item key={thread.id} onClick={() => openTutorThread(thread)}>
+                        <span className="truncate" dir="auto">
+                          {[goalLabel(thread, tHome(`study.goals.labels.${thread.goal}`)), thread.title]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </span>
+                      </Menu.Item>
+                    ))}
+                  </Menu.Group>
+                </>
+              ) : null}
+            </Menu.Content>
+          </Menu>
+          <Button
+            size="icon-sm"
+            variant="ghost"
+            aria-label={tHome("study.readerCompanion.ask.newQuestion")}
+            title={tHome("study.readerCompanion.ask.newQuestion")}
+            disabled={chat.messages.length === 0}
+            onClick={() => start()}
+          >
+            <Icon icon={PencilEdit02Icon} size={16} />
+          </Button>
+          <Link
+            to={notebookHref}
+            aria-label={tHome("study.reader.panel.openInNotebook")}
+            title={tHome("study.reader.panel.openInNotebook")}
+            className={buttonVariants({ size: "icon-sm", variant: "ghost" })}
+          >
+            <Icon icon={Chatting01Icon} size={16} />
+          </Link>
+        </span>
       </div>
+      {chat.messages.length ? (
+        <p className="sr-only" dir="auto">{title ?? textOf(chat.messages[0])}</p>
+      ) : null}
 
       <ScrollArea className="min-h-0 flex-1" viewportRef={scroller}>
         {chat.messages.length === 0 ? (
-          <div className="flex min-h-full flex-col items-center justify-center gap-6 px-4 pt-6 pb-60 text-center">
-            <div className="flex flex-col gap-2">
-              <h2 className="text-xl font-semibold tracking-tight">{t("reader.title")}</h2>
-              <p className="text-sm text-muted-foreground">
-                {t("reader.body", { noun, section: context.section })}
+          <div className="flex min-h-full flex-col justify-center gap-5 px-4 pt-6 pb-60">
+            <div className="space-y-1">
+              <h2 className="text-sm font-medium" dir="auto">
+                {tHome("study.readerCompanion.ask.emptyTitle", { scope: quote ? tHome("study.readerCompanion.ask.passageInline") : partInline })}
+              </h2>
+              <p className="text-[0.8125rem] text-muted-foreground">
+                {tHome(settings !== undefined && !model ? "study.readerCompanion.ask.noModel" : "study.readerCompanion.ask.emptyLine")}
               </p>
             </div>
-            <div className="flex flex-wrap justify-center gap-2">
-              {SUGGESTIONS.map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  disabled={busy || !model}
-                  onClick={() => send(t(`reader.suggestions.${key}`, { noun }))}
-                  className="inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-                >
-                  <Icon icon={Idea01Icon} size={15} className="text-chart-4" />
-                  {t(`reader.suggestions.${key}`, { noun })}
-                </button>
-              ))}
-              <button
-                type="button"
-                disabled={openingTutor || !canTeachBack}
-                onClick={teachBack}
-                className="inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-              >
-                <Icon icon={TeachingIcon} size={15} className="text-chart-2" />
-                {tHome("study.reader.teachBack")}
-              </button>
-            </div>
+            {model ? (
+              <div className="flex flex-col gap-2">
+                {SUGGESTIONS.map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => send(t(`reader.suggestions.${key}`, { noun }))}
+                    className="min-h-9 cursor-pointer rounded-lg border px-3 py-1.5 text-start text-[0.8125rem] transition-colors outline-none hover:bg-foreground/[0.03] focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:opacity-50"
+                  >
+                    {t(`reader.suggestions.${key}`, { noun })}
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
         ) : (
           <SelectableText
@@ -529,19 +573,23 @@ function ReaderConversation({
               </Message>
             ) : null}
             {chat.status === "error" && chat.error ? (
-              <div
-                role="alert"
-                className="flex items-center gap-3 rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-destructive"
-              >
-                <span className="min-w-0 flex-1">{t("error", { error: chat.error.message })}</span>
-                <button
-                  type="button"
-                  onClick={retry}
-                  className="shrink-0 cursor-pointer font-medium underline-offset-4 hover:underline"
-                >
-                  {t("actions.retry")}
-                </button>
-              </div>
+              <Alert tone="destructive" variant="plain" className="rounded-xl">
+                <Alert.Icon />
+                <Alert.Title>{tHome("study.readerCompanion.ask.errorTitle")}</Alert.Title>
+                <Alert.Description>
+                  {tHome("study.readerCompanion.ask.errorLine", { error: chat.error.message })}
+                </Alert.Description>
+                <Alert.Actions>
+                  <Button size="sm" variant="secondary" className="border border-input" onClick={retry}>
+                    {tHome("study.readerCompanion.ask.retry")}
+                  </Button>
+                  {setupModel ? (
+                    <Button size="sm" variant="ghost" onClick={setupModel}>
+                      {tHome("study.readerCompanion.ask.addKey")}
+                    </Button>
+                  ) : null}
+                </Alert.Actions>
+              </Alert>
             ) : null}
           </SelectableText>
         )}
@@ -560,7 +608,14 @@ function ReaderConversation({
             onStop={() => void chat.stop()}
             onSubmit={({ text }) => send(text)}
           >
-            <Prompt.Banner open={settings !== undefined && !model}>{t("setup.banner")}</Prompt.Banner>
+            <Prompt.Banner open={settings !== undefined && !model}>
+              {tHome("study.readerCompanion.ask.noModel")}
+              {setupModel ? (
+                <Prompt.BannerAction variant="secondary" onClick={setupModel}>
+                  {tHome("study.readerCompanion.ask.addKey")}
+                </Prompt.BannerAction>
+              ) : null}
+            </Prompt.Banner>
             <Prompt.Field>
               {quote ? <PromptQuote quote={quote} clear={clearQuote} /> : null}
               <Prompt.Textarea
