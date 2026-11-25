@@ -12,8 +12,9 @@ Each step leaves the app fully working.
 |---|---|---|
 | 1 | Add a YouTube video from its link: captions as a timed transcript, Gemini for videos without captions (the Gemini card) | Done |
 | 2 | The chat that acts: "turn this into flashcards" adds cards to the deck, "make a quiz" starts a Studio output, each with a result row (Open, Undo); a confirm card for infographics and audio; "/" lists every action | Done |
-| 3 | The Practice page (`R5-Practice-C`) | Next |
-| 4 | Review (`R5-Review-Win`), then the app shell, reader and companion, Settings groups, onboarding, Notes and Tools, and the upgrade notice | To do |
+| 3 | The Practice page (`R5-Practice-C`): one suggestion with Start, the three exercises as rows (Explain it back written or spoken, Questions, Role-play in a meeting, interview or language), More options folded, one history of every run, earlier conversations folded | Done |
+| 4 | Review (`R5-Review-Win`) | Next |
+| 5 | Then the app shell, reader and companion, Settings groups, onboarding, Notes and Tools, and the upgrade notice | To do |
 
 ## Round 1 · Directions (hero screen: the document reader with the companion panel)
 

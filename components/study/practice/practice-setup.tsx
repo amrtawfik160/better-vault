@@ -1,4 +1,6 @@
+import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Icon } from "@/components/icon";
 import { useTranslation } from "react-i18next";
 import { Alert } from "@/components/panelui/alert";
 import { Button } from "@/components/panelui/button";
@@ -168,17 +170,26 @@ export function PracticeSetup({
   setup,
   cancel,
   created,
+  embedded = false,
+  preset,
+  autoStart = false,
 }: {
   mode: PracticeMode;
   vaultId: string;
   materials: PracticeMaterials;
   setup?: () => void;
-  cancel: () => void;
+  cancel?: () => void;
   created: (session: StudyPractice) => void;
+  /** Inside the Practice page's exercise row: no heading, the options folded under More options. */
+  embedded?: boolean;
+  /** Material chosen in advance (the page's suggestion). */
+  preset?: Partial<PracticeSetupDraft>;
+  /** Starts at once with the preset, as the suggestion's Start does. */
+  autoStart?: boolean;
 }) {
   const { t } = useTranslation("home");
   const [draft, setDraft] = useState<PracticeSetupDraft>(() => {
-    const saved = readPracticeSetupDraft(vaultId) ?? blankDraft(mode);
+    const saved = { ...(readPracticeSetupDraft(vaultId) ?? blankDraft(mode)), ...preset };
     const sources = mode === "teach" ? teachSources : questionSources;
     return sources.includes(saved.source) ? saved : { ...saved, source: sources[0] };
   });
@@ -283,6 +294,13 @@ export function PracticeSetup({
     }
   }
 
+  const started = useRef(false);
+  useEffect(() => {
+    if (!autoStart || started.current || !choice) return;
+    started.current = true;
+    void start();
+  });
+
   if (pending) {
     return (
       <div className="space-y-4 py-10 text-center" role="status">
@@ -302,8 +320,8 @@ export function PracticeSetup({
   const cardItems = cards.map(({ id, front, back }) => ({ id, title: front, searchText: back }));
 
   return (
-    <div className="space-y-8">
-      <div className="space-y-1">
+    <div className={embedded ? "space-y-6" : "space-y-8"}>
+      <div className={embedded ? "hidden" : "space-y-1"}>
         <h3 className="text-lg font-semibold">
           {t(mode === "teach" ? "study.writingPractice.modes.teach.title" : "study.writingPractice.modes.questions.title")}
         </h3>
@@ -418,6 +436,15 @@ export function PracticeSetup({
         ) : null}
       </Group>
 
+      <MoreOptions
+        embedded={embedded}
+        summary={[
+          t(`study.writingPractice.audiences.${draft.audience}.label`),
+          mode === "questions" ? t("study.writingPractice.setup.countSummary", { count: draft.count }) : "",
+        ]
+          .filter(Boolean)
+          .join(" · ")}
+      >
       <Group title={t("study.writingPractice.setup.whoTitle")} hint={t("study.writingPractice.setup.whoHint")}>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3" role="radiogroup" aria-label={t("study.writingPractice.setup.whoTitle")}>
           {studyPracticeAudiences.map((audience) => (
@@ -482,18 +509,45 @@ export function PracticeSetup({
         </Group>
       ) : null}
 
+      </MoreOptions>
+
       {error ? <PracticeError error={error} retry={() => void start()} setup={setup} /> : null}
 
-      <div className="flex flex-wrap items-center justify-end gap-2 border-t pt-4">
-        {!choice ? <p className="me-auto text-sm text-muted-foreground">{t(`study.writingPractice.setup.need.${draft.source}`)}</p> : null}
-        <Button variant="ghost" onClick={cancel}>
-          {t("study.writingPractice.cancel")}
-        </Button>
-        <Button disabled={!choice} onClick={() => void start()}>
-          {t(mode === "teach" ? "study.writingPractice.setup.startTeach" : "study.writingPractice.setup.create")}
-        </Button>
-      </div>
+      {embedded ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button disabled={!choice} onClick={() => void start()}>
+            {t("study.practicePage.start")}
+          </Button>
+          {!choice ? <p className="text-sm text-muted-foreground">{t(`study.writingPractice.setup.need.${draft.source}`)}</p> : null}
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t pt-4">
+          {!choice ? <p className="me-auto text-sm text-muted-foreground">{t(`study.writingPractice.setup.need.${draft.source}`)}</p> : null}
+          <Button variant="ghost" onClick={cancel}>
+            {t("study.writingPractice.cancel")}
+          </Button>
+          <Button disabled={!choice} onClick={() => void start()}>
+            {t(mode === "teach" ? "study.writingPractice.setup.startTeach" : "study.writingPractice.setup.create")}
+          </Button>
+        </div>
+      )}
     </div>
+  );
+}
+
+/** On the Practice page, who it is for and how many questions fold away, with a one-line summary. */
+function MoreOptions({ embedded, summary, children }: { embedded: boolean; summary: string; children: ReactNode }) {
+  const { t } = useTranslation("home");
+  if (!embedded) return <>{children}</>;
+  return (
+    <details className="group rounded-xl border">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-3 rounded-xl px-4 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 [&::-webkit-details-marker]:hidden">
+        <span className="font-medium">{t("study.practicePage.moreOptions")}</span>
+        <span className="min-w-0 flex-1 truncate text-muted-foreground">{summary}</span>
+        <Icon icon={ArrowDown01Icon} size={16} className="text-muted-foreground transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="space-y-8 border-t p-4">{children}</div>
+    </details>
   );
 }
 

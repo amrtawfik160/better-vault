@@ -1314,7 +1314,9 @@
         "generating_one": "Writing {{count}} question…",
         "generating_other": "Writing {{count}} questions…",
         "preparing": "Getting the material ready…",
-        "generatingHint": "This takes a few seconds. You can cancel and change the setup."
+        "generatingHint": "This takes a few seconds. You can cancel and change the setup.",
+        "countSummary_one": "{{count}} question",
+        "countSummary_other": "{{count}} questions"
       },
       "teach": {
         "explainTitle": "Teach it as if to someone new",
@@ -1371,6 +1373,82 @@
         "saveExplanation": "Save my explanation to Notes",
         "backToRound": "Back to the last round"
       }
+    },
+    "practicePage": {
+      "choose": "Choose an exercise",
+      "orChoose": "Or choose an exercise",
+      "start": "Start practice",
+      "back": "Practice",
+      "moreOptions": "More options",
+      "answerMode": "How you answer",
+      "answerModes": {
+        "write": "Write",
+        "speak": "Speak"
+      },
+      "setting": "Setting",
+      "settings": {
+        "meeting-simulation": "A meeting",
+        "technical-interview": "An interview",
+        "language": "A language"
+      },
+      "roleplayIn": "Role-play ({{setting}})",
+      "exercises": {
+        "teach": {
+          "name": "Explain it back",
+          "line": "Put it in your own words. You see what you left out, linked to the passage.",
+          "short": "Put it in your own words and see what you left out.",
+          "length": "A few rounds · about 3 min"
+        },
+        "questions": {
+          "name": "Questions",
+          "line": "Answer questions on it, one at a time, checked against the text.",
+          "short": "Answer questions on it, checked against the text.",
+          "length": "5 questions · about 4 min"
+        },
+        "roleplay": {
+          "name": "Role-play",
+          "line": "Talk it through in a meeting, an interview or a conversation in a language.",
+          "short": "Talk it through in a meeting, an interview or a language.",
+          "length": "A few turns · about 6 min"
+        }
+      },
+      "suggestion": {
+        "label": "Suggested",
+        "teach": "Explain {{material}} back",
+        "questions": "Questions on {{material}}",
+        "resume": "Finish {{title}}",
+        "progress": "{{answered}} of {{total}} answered",
+        "notSent": "nothing explained yet",
+        "readToday": "you read it today",
+        "readYesterday": "you read it yesterday",
+        "readOn": "you read it on {{date}}",
+        "minutes": {
+          "teach": "about 3 minutes",
+          "questions": "about 4 minutes"
+        },
+        "start": "Start",
+        "continue": "Continue"
+      },
+      "history": "History",
+      "sessions_one": "{{count}} session",
+      "sessions_other": "{{count}} sessions",
+      "showAll": "Show all {{count}}",
+      "turns_one": "{{count}} turn",
+      "turns_other": "{{count}} turns",
+      "noHistory": {
+        "title": "Your results will appear here",
+        "body": "Each session you finish adds one row: the date, what you practised and how it went."
+      },
+      "conversations_one": "{{count}} earlier conversation",
+      "conversations_other": "{{count}} earlier conversations",
+      "noMaterial": {
+        "title": "Add material to practise on",
+        "body": "Practice asks about your own material: a book, a PDF, a web page or a video.",
+        "add": "Add",
+        "then": "Then you can"
+      },
+      "noModel": "Start needs a model. Practice uses it to read your answers.",
+      "addKey": "Add a key"
     }
   },
   "actions": {
