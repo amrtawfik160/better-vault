@@ -9,7 +9,7 @@ import {
   TeachingIcon,
 } from "@hugeicons/core-free-icons";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Link, useLocation } from "react-router";
+import { Link, useLocation, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
@@ -25,6 +25,7 @@ import { modelFor, updateSettings, useSettings } from "@/lib/db/settings";
 import { deletePracticeSession } from "@/lib/db/writing-practice";
 import { studyHref } from "@/lib/study/links";
 import { practiceSuggestion, type WrittenMode } from "@/lib/study/practice-suggestion";
+import { practiceEntry, practiceEntryParams } from "@/lib/study/reader-companion";
 import type { PracticeSetupDraft } from "@/lib/study/writing-practice-drafts";
 import type { Note } from "@/lib/db/types";
 import { goalLabel, isPracticeThread, threadReaderBook, type PracticeGoal } from "@/lib/study/practice";
@@ -466,8 +467,45 @@ export function StudyPracticeTab({
   const chosen: Exercise = exercise ?? (hasHistory ? "questions" : "teach");
   const [answer, setAnswer] = useState<AnswerMode>("write");
   const [setting, setSetting] = useState<RoleplayGoal>("meeting-simulation");
-  const [suggested, setSuggested] = useState<{ mode: WrittenMode; preset: Partial<PracticeSetupDraft> }>();
+  const [suggested, setSuggested] = useState<{
+    mode: WrittenMode;
+    preset: Partial<PracticeSetupDraft>;
+    /** Whether the session starts at once; not without a model, which it needs. */
+    autoStart: boolean;
+  }>();
   const [presetKey, setPresetKey] = useState<string>();
+  // A link from the reader's Practise tab: `exercise`, `book` and `section` choose the row and its material.
+  const location = useLocation();
+  const [params, setParams] = useSearchParams();
+  const entry = practiceEntry(params);
+  const [entryKey, setEntryKey] = useState<string>();
+  if (entry && entryKey !== location.key && settings !== undefined) {
+    setEntryKey(location.key);
+    setExercise(entry.exercise);
+    const book = entry.bookId ? books.find(({ id }) => id === entry.bookId) : undefined;
+    if (entry.exercise !== "roleplay" && book) {
+      const section = entry.section !== undefined && entry.section < book.sections.length ? entry.section : undefined;
+      setAnswer("write");
+      setSuggested({
+        mode: entry.exercise,
+        preset: { source: "book", bookId: book.id, section, sectionEnd: section },
+        autoStart: Boolean(modelFor(settings, "writing")),
+      });
+    } else setSuggested(undefined);
+  }
+  // The link is read once: taken off the address, so going back or reloading doesn't start another session.
+  const readEntry = entry !== null && entryKey === location.key;
+  useEffect(() => {
+    if (!readEntry) return;
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        for (const name of practiceEntryParams) next.delete(name);
+        return next;
+      },
+      { replace: true, state: location.state },
+    );
+  }, [readEntry, location.state, setParams]);
   const [spokenChoice, setSpokenChoice] = useState<Pick<TutorMaterialSelection, "bookIds" | "sourceIds">>();
   if (preset && preset.key !== presetKey) {
     // "Practise this subject": explain the notebook's documents back, aloud, since they may be sources.
@@ -526,7 +564,7 @@ export function StudyPracticeTab({
               start={(mode, book, section) => {
                 setExercise(mode);
                 setAnswer("write");
-                setSuggested({ mode, preset: { source: "book", bookId: book.id, section, sectionEnd: section } });
+                setSuggested({ mode, preset: { source: "book", bookId: book.id, section, sectionEnd: section }, autoStart: true });
               }}
             />
           ) : null}
@@ -635,7 +673,7 @@ export function StudyPracticeTab({
                                 created={(session) => written.open(session.id)}
                                 embedded
                                 preset={suggested?.mode === value ? suggested.preset : undefined}
-                                autoStart={suggested?.mode === value}
+                                autoStart={suggested?.mode === value && suggested.autoStart}
                               />
                             )}
                           </>
