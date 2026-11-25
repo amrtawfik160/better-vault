@@ -776,6 +776,11 @@ export function saveStudyDraftCards(cards: StudyCard[]) {
   return store().insertStudy(cards);
 }
 
+/** Removes cards that were just added (the chat's Undo). */
+export async function removeStudyCards(ids: readonly string[]) {
+  for (const id of ids) await store().deleteStudy(id);
+}
+
 export function updateStudyReviewItem(write: StudyReviewItemWrite) {
   return store().patchStudyReviewItem(write);
 }
@@ -807,7 +812,8 @@ export async function studyVocabularyCards(ids: string[], vaultId: string) {
   return result.kind === "cards" ? result.cardIds : [];
 }
 
-function studioCardCitations(
+/** Citations for cards made from a notebook's passages (Studio, or the chat). */
+export function studioCardCitations(
   notebookId: string,
   sources?: readonly PassageRef[],
 ): StudyCard["citations"] {

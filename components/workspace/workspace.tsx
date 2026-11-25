@@ -30,11 +30,12 @@ export function Workspace({ notebookId }: { notebookId: string }) {
   if (notebook === null) return <NotebookNotFound />;
   return (
     <WorkspaceProvider notebook={notebook}>
-      <ChatProvider notebookId={notebook.id}>
-        <StudioRunnerProvider notebookId={notebook.id}>
+      {/* The chat makes Studio outputs when asked, so the runner is outside it. */}
+      <StudioRunnerProvider notebookId={notebook.id}>
+        <ChatProvider notebookId={notebook.id}>
           <WorkspaceLayout />
-        </StudioRunnerProvider>
-      </ChatProvider>
+        </ChatProvider>
+      </StudioRunnerProvider>
     </WorkspaceProvider>
   );
 }

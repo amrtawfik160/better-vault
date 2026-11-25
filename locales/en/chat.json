@@ -170,5 +170,87 @@
     "attached_other": "{{count}} skills",
     "clear": "Remove skills from this chat"
   },
-  "noSourcesLocal": "Select or add a source to ask a question."
+  "noSourcesLocal": "Select or add a source to ask a question.",
+  "make": {
+    "menu": {
+      "label": "Actions",
+      "busy": "Wait for the answer to finish first."
+    },
+    "commands": {
+      "cards": {
+        "name": "Flashcards",
+        "detail": "Adds cards to this notebook's deck"
+      },
+      "report": {
+        "name": "Report",
+        "detail": "A briefing doc of the main points"
+      },
+      "quiz": {
+        "name": "Quiz",
+        "detail": "Questions to test yourself"
+      },
+      "mind-map": {
+        "name": "Mind map",
+        "detail": "How the ideas connect"
+      },
+      "data-table": {
+        "name": "Data table",
+        "detail": "The facts in rows and columns"
+      },
+      "slide-deck": {
+        "name": "Slide deck",
+        "detail": "Slides to present"
+      },
+      "anatomy": {
+        "name": "Anatomy",
+        "detail": "A labelled figure of how it works"
+      },
+      "infographic": {
+        "name": "Infographic",
+        "detail": "A picture; asks first, as it uses your image model"
+      },
+      "audio-overview": {
+        "name": "Audio Overview",
+        "detail": "Two hosts talk it through; asks first"
+      }
+    },
+    "cards": {
+      "writing": "Writing flashcards…",
+      "count_one": "{{count}} card",
+      "count_other": "{{count}} cards",
+      "addedTo": "added to {{notebook}}",
+      "removed_one": "{{count}} card removed.",
+      "removed_other": "{{count}} cards removed."
+    },
+    "output": {
+      "starting": "Starting the {{tool}}…",
+      "making": "is being made. You can keep chatting.",
+      "ready": "is ready in Studio.",
+      "failed": "didn't work: {{error}}",
+      "removed": "{{tool}} removed.",
+      "gone": "{{tool}} was deleted."
+    },
+    "confirm": {
+      "title": "Make an {{tool}}?",
+      "from_one": "From {{count}} selected source",
+      "from_other": "From {{count}} selected sources",
+      "imageCost": "About a minute · uses your {{provider}} key, which is charged for the picture",
+      "audioCost": "A few minutes · uses your ElevenLabs key; you choose the voices next",
+      "make": "Make it",
+      "chooseVoices": "Choose voices",
+      "cancel": "Not now",
+      "cancelled": "{{tool}} not made.",
+      "opened": "Opened the {{tool}} options."
+    },
+    "open": "Open",
+    "undo": "Undo",
+    "retry": "Try again",
+    "stopped": "This stopped before it finished.",
+    "errors": {
+      "noSources": "Select a source to make it from.",
+      "noCards": "No flashcards were written. Try again, or say what to make them about.",
+      "noImageModel": "Add a key for an image model in Settings first.",
+      "invalid": "The request couldn't be read. Try asking again."
+    }
+  }
 }

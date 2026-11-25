@@ -11,6 +11,7 @@ import { Icon } from "@/components/icon";
 import { Message } from "@/components/panelui/message";
 import { ListenIcon, useListen, useListenLabel } from "@/components/speech/listen";
 import { sourceKindIcons } from "@/components/sources/source-kind";
+import { isChatActionPart } from "@/lib/chat/actions";
 import { answerFlashcardMaterial } from "@/lib/chat/study";
 import type { ChatMessage, PassageRef } from "@/lib/chat/types";
 import { cleanText } from "@/lib/grounding/clean";
@@ -24,6 +25,7 @@ const hostOf = (url: string) => {
     return url;
   }
 };
+import { ActionRow } from "./action-row";
 import { AnswerReferences, SearchStatus, type Reference } from "./answer-references";
 import { BookActivity, readingBook, type BookLinks } from "./book-activity";
 import { Markdown } from "./markdown";
@@ -105,6 +107,8 @@ export function AssistantMessage({
     return out;
   }, [message.parts]);
   const hasVisual = blocks.some((block) => block.kind === "visual");
+  // What the chat made (cards, Studio outputs), shown as rows under the answer.
+  const actions = useMemo(() => message.parts.filter(isChatActionPart), [message.parts]);
 
   const web = useMemo(() => {
     const references: Reference[] = [];
@@ -220,10 +224,17 @@ export function AssistantMessage({
               )}
             </Message.BubbleContent>
           </Message.Bubble>
-        ) : streaming && !web.searching && !(book && readingBook(message.parts)) ? (
+        ) : streaming && actions.length === 0 && !web.searching && !(book && readingBook(message.parts)) ? (
           <Message.Status>
             {passages.length > 0 ? t("status.reading") : t("status.thinking")}
           </Message.Status>
+        ) : null}
+        {actions.length > 0 ? (
+          <div className="flex flex-col gap-2">
+            {actions.map((part) => (
+              <ActionRow key={part.toolCallId} part={part} live={isLast} />
+            ))}
+          </div>
         ) : null}
         {(text || hasVisual) && (showNotebook || showWeb) ? (
           <AnswerReferences

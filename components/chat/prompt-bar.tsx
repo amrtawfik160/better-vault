@@ -5,6 +5,7 @@ import {
   FileAddIcon,
   Globe02Icon,
   Cancel01Icon,
+  Cards01Icon,
   MagicWand01Icon,
 } from "@hugeicons/core-free-icons";
 import { useEffect, useRef, useState } from "react";
@@ -17,6 +18,9 @@ import { AIModelPicker } from "@/components/ai/ai-model-picker";
 import { Prompt, type PromptState } from "@/components/panelui/prompt";
 import { useWorkspace } from "@/components/workspace/workspace-context";
 import { providers } from "@/lib/ai/catalog";
+import { parseSlash, slashCommands } from "@/lib/chat/actions";
+import { useStudioSettings } from "@/lib/studio/settings";
+import { studioTools } from "@/studio/tools";
 import type { ChatMode } from "@/lib/chat/types";
 import { availableModels, modelFor, useSettings } from "@/lib/db/settings";
 import { useSources } from "@/lib/db/sources";
@@ -42,6 +46,7 @@ export function PromptBar() {
     vaultSkills.some((skill) => skill.id === id),
   ).length;
   const settings = useSettings();
+  const studio = useStudioSettings();
   const sources = useSources(notebook.id);
   const [draft, setDraft] = useState("");
   const field = useRef<HTMLDivElement>(null);
@@ -60,6 +65,35 @@ export function PromptBar() {
   const selected = sources?.filter(selectedTextSource).length ?? 0;
   const needsSource = mode === "sources" && selected === 0;
   const status: PromptState = chat.status === "ready" ? "idle" : chat.status;
+  const busy = chat.status === "submitted" || chat.status === "streaming";
+
+  // "/" lists what the chat can make; tools turned off in Settings → Studio are left out.
+  const commands = slashCommands
+    .filter((command) => command.action === "add_cards" || !studio?.hidden.includes(command.tool))
+    .map((command) => ({
+      value: command.id,
+      description: `${t(`make.commands.${command.id}.name`)} · ${t(`make.commands.${command.id}.detail`)}`,
+      icon: (
+        <Icon
+          icon={command.action === "add_cards" ? Cards01Icon : studioTools[command.tool].icon}
+          size={16}
+          className={command.action === "add_cards" ? "text-chart-4" : studioTools[command.tool].tint}
+        />
+      ),
+    }));
+
+  /** Runs a "/" command; false when the text is a question. */
+  function runCommand(text: string): boolean {
+    if (!parseSlash(text)) return false;
+    if (needsSource) {
+      keepDraft.current = true;
+      toast(t(webAvailable ? "noSources" : "noSourcesLocal"));
+      return true;
+    }
+    setTab("chat");
+    chat.runCommand(text);
+    return true;
+  }
 
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-background via-background/80 to-transparent px-3 pt-8 pb-3 sm:px-4 sm:pb-4">
@@ -77,6 +111,7 @@ export function PromptBar() {
           disabled={!model}
           onStop={chat.stop}
           onSubmit={({ text }) => {
+            if (runCommand(text)) return;
             if (needsSource) {
               keepDraft.current = true;
               toast(t(webAvailable ? "noSources" : "noSourcesLocal"));
@@ -90,6 +125,17 @@ export function PromptBar() {
             });
           }}
         >
+          <Prompt.Commands
+            items={commands}
+            label={t("make.menu.label")}
+            onSelect={(item) => {
+              if (busy) {
+                toast(t("make.menu.busy"));
+                return;
+              }
+              runCommand(`/${item.value}`);
+            }}
+          />
           <Prompt.Banner open={settings !== undefined && !model}>
             {t(models.length > 0 ? "setup.choose" : "setup.banner")}
             <Prompt.BannerAction onClick={openModelSetup}>{t("setup.action")}</Prompt.BannerAction>

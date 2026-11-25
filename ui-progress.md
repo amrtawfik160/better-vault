@@ -2,7 +2,18 @@
 
 - **Canvas:** https://claude.ai/artifact/Txtty2Et1z6DYdUbNeij9J (private to the owner)
 - **Design system:** locked in round 4, written up in `design-system.md`. The existing look stays: Panel UI, `src/styles/tokens.css`, Geist for UI, Source Serif 4 for reading text, dark mode first.
-- **Current round:** Round 5 · Roll out, done. Every screen in the brief's inventory has an approved or single-version board; next is building it in the app, in steps.
+- **Current round:** Round 5 · Roll out, done. Every screen in the brief's inventory has an approved or single-version board; now being built in the app, in steps (see Build).
+
+## Build, in steps
+
+Each step leaves the app fully working.
+
+| Step | What | State |
+|---|---|---|
+| 1 | Add a YouTube video from its link: captions as a timed transcript, Gemini for videos without captions (the Gemini card) | Done |
+| 2 | The chat that acts: "turn this into flashcards" adds cards to the deck, "make a quiz" starts a Studio output, each with a result row (Open, Undo); a confirm card for infographics and audio; "/" lists every action | Done |
+| 3 | The Practice page (`R5-Practice-C`) | Next |
+| 4 | Review (`R5-Review-Win`), then the app shell, reader and companion, Settings groups, onboarding, Notes and Tools, and the upgrade notice | To do |
 
 ## Round 1 · Directions (hero screen: the document reader with the companion panel)
 

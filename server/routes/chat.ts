@@ -15,6 +15,7 @@ import { rejectCliProxyRequest } from "@/lib/ai/cliproxyapi";
 import { describeError } from "@/lib/ai/errors";
 import { chatSystemPrompt } from "@/lib/ai/prompts";
 import { createLanguageModel, createWebSearchTools } from "@/lib/ai/providers";
+import { createChatActionTools } from "../chat-action-tools";
 import { createVisualTools } from "../visual-tools";
 import { credentialsSchema, effortSchema, modelRefSchema } from "@/lib/ai/request";
 import { quotedForModel } from "@/lib/chat/quote";
@@ -123,11 +124,14 @@ export async function POST(request: Request) {
     return Response.json({ error: describeError(error) }, { status: 400 });
   }
 
-  // Local models often can't call tools, so they answer in text only.
-  const visuals = parsed.data.visuals && !providers[model.provider].local;
+  // Local models often can't call tools: they answer in text, and "/" makes things.
+  const actions = !providers[model.provider].local;
+  const visuals = parsed.data.visuals && actions;
   const searchTools = mode === "web" ? createWebSearchTools(model, credentials) : undefined;
-  const tools = visuals ? { ...searchTools, ...createVisualTools() } : searchTools;
-  const options = { skills: parsed.data.skills, visuals };
+  const tools = actions
+    ? { ...searchTools, ...(visuals ? createVisualTools() : {}), ...createChatActionTools() }
+    : searchTools;
+  const options = { skills: parsed.data.skills, visuals, actions };
   const system = chatSystemPrompt(mode, passages, options);
   const instructions = chatSystemPrompt(mode, [], options).length;
   const result = streamText({

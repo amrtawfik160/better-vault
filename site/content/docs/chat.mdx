@@ -17,6 +17,14 @@ In Web mode the model may also search the internet with its provider's own built
 
 Ollama and LM Studio have no built-in search, so Web mode is not available with them.
 
+## Make cards and Studio outputs
+
+Ask the chat to make something and it does it for you. "Turn this into flashcards" adds cards to the notebook's study deck, and "make a quiz about chapter 2" starts a quiz in Studio from your selected sources. A row under the answer says what was made, with **Open** to see it and **Undo** to remove it.
+
+The chat can make flashcards, a report, a quiz, a mind map, a data table, a slide deck, an anatomy figure, an infographic and an audio overview. Infographics and audio overviews are slow and use a paid key, so the chat asks first: a card states what it will use, and nothing runs until you press **Make it** or **Choose voices**.
+
+Type `/` in the prompt to list the same actions. Choose one to run it at once, or type a focus after its name, such as `/quiz pricing`, and press Enter. The `/` commands also work with Ollama and LM Studio, whose models cannot make things on request.
+
 ## Choose the model
 
 The model picker in the prompt bar switches provider and model at any time. Your choice applies to the next question.

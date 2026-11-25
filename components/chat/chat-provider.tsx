@@ -1,5 +1,11 @@
 import { Chat, useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, generateId } from "ai";
+import {
+  DefaultChatTransport,
+  generateId,
+  getToolName,
+  isToolUIPart,
+  type ChatOnToolCallCallback,
+} from "ai";
 import {
   useCallback,
   useContext,
@@ -9,8 +15,29 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { useLocation, useSearchParams } from "react-router";
 import { toast } from "sonner";
+import { useStudioRunner } from "@/components/studio/studio-runner";
+import { useWorkspace } from "@/components/workspace/workspace-context";
+import {
+  ADD_CARDS,
+  chatActionSchemas,
+  isChatAction,
+  parseSlash,
+  type ChatActionName,
+  type ChatActionOutput,
+  type ChatActionPart,
+} from "@/lib/chat/actions";
+import { vaultOf } from "@/lib/db/vaults";
+import {
+  generateChatCards,
+  needsConfirmation,
+  saveChatCards,
+  startChatOutput,
+  undoChatAction,
+  type ActionContext,
+} from "./chat-actions";
 import { stableContext } from "@/lib/context";
 import { providers } from "@/lib/ai/catalog";
 import type { ChatMessage, ChatMode } from "@/lib/chat/types";
@@ -49,6 +76,16 @@ interface ChatSession {
   startNew: () => void;
   /** Shows a saved conversation. */
   open: (conversationId: string) => Promise<void>;
+  /** Runs a "/" command typed in the prompt; false when the text is not one. */
+  runCommand: (text: string) => boolean;
+  /** The actions (tool calls) being run now. */
+  runningActions: ReadonlySet<string>;
+  /** Runs an action that waited for the user's OK, or ran into an error. */
+  runAction: (toolCallId: string) => void;
+  /** Answers a waiting action with "not now". */
+  cancelAction: (toolCallId: string) => void;
+  /** Removes what an action made. */
+  undoAction: (toolCallId: string) => void;
 }
 
 const ChatContext = stableContext<ChatSession | null>("chat-session", null);
@@ -60,15 +97,24 @@ const transport = new DefaultChatTransport<ChatMessage>({
   }),
 });
 
+type ToolCallHandler = ChatOnToolCallCallback<ChatMessage>;
+
 /**
  * One Chat per conversation. Each saves only into its own conversation, so
- * an answer that is stopped by switching never lands in another one.
+ * an answer that is stopped by switching never lands in another one. Its
+ * tool calls (the chat's actions) run in the page, through `onToolCall`.
  */
-function chatFor(notebookId: string, conversationId: string, messages: ChatMessage[]) {
+function chatFor(
+  notebookId: string,
+  conversationId: string,
+  messages: ChatMessage[],
+  onToolCall: ToolCallHandler,
+) {
   return new Chat<ChatMessage>({
     id: conversationId,
     messages,
     transport,
+    onToolCall,
     onFinish: ({ messages: finished }) =>
       void saveChat({ id: conversationId, notebookId }, finished),
   });
@@ -92,6 +138,9 @@ export function ChatProvider({
   const requested = params.has("answer") ? params.get("conversation") : null;
   const shown = useRef<ActiveChat | null>(null);
   const sequence = useRef(0);
+  // Set by the runner of the conversation shown, which has what the actions need.
+  const toolCalls = useRef<ToolCallHandler | null>(null);
+  const onToolCall = useCallback<ToolCallHandler>((call) => toolCalls.current?.(call), []);
 
   const show = useCallback((next: ActiveChat) => {
     void shown.current?.chat.stop();
@@ -124,7 +173,7 @@ export function ChatProvider({
         if (alive && attempt === sequence.current)
           show({
             notebookId,
-            chat: chatFor(notebookId, id, messages),
+            chat: chatFor(notebookId, id, messages, onToolCall),
             requested: requested ?? undefined,
           });
       } catch (error) {
@@ -132,7 +181,7 @@ export function ChatProvider({
           toast.error(error instanceof Error ? error.message : String(error));
           show({
             notebookId,
-            chat: chatFor(notebookId, generateId(), []),
+            chat: chatFor(notebookId, generateId(), [], onToolCall),
             requested: requested ?? undefined,
           });
         }
@@ -141,7 +190,7 @@ export function ChatProvider({
     return () => {
       alive = false;
     };
-  }, [notebookId, requested, show]);
+  }, [notebookId, requested, show, onToolCall]);
 
   const clearAnswer = useCallback(() => {
     if (!params.has("answer")) return;
@@ -153,9 +202,9 @@ export function ChatProvider({
 
   const startNew = useCallback(() => {
     sequence.current++;
-    show({ notebookId, chat: chatFor(notebookId, generateId(), []) });
+    show({ notebookId, chat: chatFor(notebookId, generateId(), [], onToolCall) });
     clearAnswer();
-  }, [clearAnswer, notebookId, show]);
+  }, [clearAnswer, notebookId, show, onToolCall]);
 
   const open = useCallback(
     async (conversationId: string) => {
@@ -167,14 +216,14 @@ export function ChatProvider({
       try {
         const messages = await loadNotebookChat(notebookId, conversationId);
         if (!messages || attempt !== sequence.current) return;
-        show({ notebookId, chat: chatFor(notebookId, conversationId, messages) });
+        show({ notebookId, chat: chatFor(notebookId, conversationId, messages, onToolCall) });
         clearAnswer();
       } catch (error) {
         if (attempt === sequence.current)
           toast.error(error instanceof Error ? error.message : String(error));
       }
     },
-    [clearAnswer, notebookId, show],
+    [clearAnswer, notebookId, show, onToolCall],
   );
 
   if (!current || current.notebookId !== notebookId) return null;
@@ -189,6 +238,7 @@ export function ChatProvider({
       setSkills={setSkills}
       startNew={startNew}
       open={open}
+      toolCallsRef={toolCalls}
     >
       {children}
     </ChatRunner>
@@ -210,8 +260,10 @@ function ChatRunner({
   setSkills,
   startNew,
   open,
+  toolCallsRef,
   children,
 }: {
+  toolCallsRef: { current: ToolCallHandler | null };
   notebookId: string;
   skills: string[];
   setSkills: (ids: string[]) => void;
@@ -224,6 +276,7 @@ function ChatRunner({
 }) {
   const chat = useChat<ChatMessage>({ chat: instance });
   const [quote, setQuote] = useState<ChatQuote>();
+  const actions = useChatActions(notebookId, instance, toolCallsRef);
 
   /** The model, the key and the passages for a question, read fresh each time. */
   const requestFor = useCallback(
@@ -283,8 +336,10 @@ function ChatRunner({
       stop: () => void stop(),
       startNew,
       open,
+      ...actions,
     }),
     [
+      actions,
       instance.id,
       messages,
       skills,
@@ -304,6 +359,207 @@ function ChatRunner({
   );
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>;
+}
+
+/** Sets a conversation's messages while no answer is streaming into it. */
+function replaceMessages(chat: Chat<ChatMessage>, messages: ChatMessage[]) {
+  chat.messages = messages;
+}
+
+/** Where an action's tool call is in the conversation. */
+function locate(messages: ChatMessage[], toolCallId: string) {
+  for (const message of messages) {
+    const part = message.parts.find(
+      (each): each is ChatActionPart => isToolUIPart(each) && each.toolCallId === toolCallId,
+    );
+    if (part) return { message, part, name: getToolName(part) as ChatActionName };
+  }
+  return undefined;
+}
+
+/** The "/" command a message was, for the focus typed after it. */
+function commandBefore(messages: ChatMessage[], assistant: ChatMessage | undefined) {
+  const at = assistant ? messages.indexOf(assistant) : -1;
+  const asked = at > 0 ? messages[at - 1] : undefined;
+  return asked?.role === "user" ? parseSlash(textOf(asked)) : null;
+}
+
+/**
+ * The chat's actions: the model's add_cards and make calls, and the same
+ * actions typed as "/" commands. Each runs here, and its result (what was
+ * made, or why not) is kept in the conversation as the call's output.
+ */
+function useChatActions(
+  notebookId: string,
+  instance: Chat<ChatMessage>,
+  toolCallsRef: { current: ToolCallHandler | null },
+) {
+  const { t } = useTranslation("chat");
+  const { notebook, openTool } = useWorkspace();
+  const runner = useStudioRunner();
+  const [runningActions, setRunning] = useState<ReadonlySet<string>>(() => new Set());
+
+  const contextFor = useCallback(
+    (messageId: string): ActionContext => ({
+      notebookId,
+      notebookTitle: notebook.title,
+      vaultId: vaultOf(notebook),
+      origin: { kind: "notebook-answer", notebookId, conversationId: instance.id, messageId },
+      createOutput: runner.create,
+      messages: {
+        noSources: t("make.errors.noSources"),
+        noCards: t("make.errors.noCards"),
+        noImageModel: t("make.errors.noImageModel"),
+      },
+    }),
+    [notebookId, notebook, instance.id, runner.create, t],
+  );
+
+  /** Keeps the result in the call, and saves it at once: what was made is never offered again. */
+  const finish = useCallback(
+    async (name: ChatActionName, toolCallId: string, output: ChatActionOutput) => {
+      await instance.addToolOutput({ tool: name as never, toolCallId, output: output as never });
+      await saveChat({ id: instance.id, notebookId }, instance.messages);
+    },
+    [instance, notebookId],
+  );
+
+  const track = useCallback(async (toolCallId: string, work: () => Promise<void>) => {
+    setRunning((current) => new Set(current).add(toolCallId));
+    try {
+      await work();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setRunning((current) => {
+        const next = new Set(current);
+        next.delete(toolCallId);
+        return next;
+      });
+    }
+  }, []);
+
+  const execute = useCallback(
+    (toolCallId: string, name: ChatActionName, raw: unknown, message: ChatMessage | undefined) =>
+      track(toolCallId, async () => {
+        const context = contextFor(message?.id ?? "");
+        let output: ChatActionOutput;
+        if (name === ADD_CARDS) {
+          const input = chatActionSchemas[ADD_CARDS].safeParse(raw);
+          if (input.success && input.data.cards.length > 0) {
+            output = await saveChatCards(context, input.data, message?.metadata?.passages ?? []);
+          } else {
+            // "/cards": the study model writes them from the selected sources.
+            const focus = commandBefore(instance.messages, message)?.focus ?? "";
+            const made = await generateChatCards(context, focus);
+            replaceMessages(
+              instance,
+              instance.messages.map((each) =>
+                each.id !== message?.id
+                  ? each
+                  : {
+                      ...each,
+                      metadata: { ...each.metadata, passages: made.passages },
+                      parts: each.parts.map((part) =>
+                        isToolUIPart(part) && part.toolCallId === toolCallId
+                          ? ({ ...part, input: made.input } as typeof part)
+                          : part,
+                      ),
+                    },
+              ),
+            );
+            output = made.output;
+          }
+        } else {
+          const input = chatActionSchemas.make.safeParse(raw);
+          output = input.success
+            ? await startChatOutput(context, input.data)
+            : { error: t("make.errors.invalid") };
+        }
+        await finish(name, toolCallId, output);
+      }),
+    [contextFor, finish, instance, t, track],
+  );
+
+  // The model's calls run as they arrive, except the slow or paid ones, which wait for an OK.
+  useEffect(() => {
+    const handler: ToolCallHandler = ({ toolCall }) => {
+      if (toolCall.dynamic || !isChatAction(toolCall.toolName)) return;
+      const name = toolCall.toolName;
+      if (needsConfirmation(name, toolCall.input)) return;
+      // The answer is already in the conversation: the stream writes it before each call.
+      const message =
+        locate(instance.messages, toolCall.toolCallId)?.message ??
+        instance.messages.findLast((each) => each.role === "assistant");
+      // Not awaited: the result is added once the answer's stream has ended.
+      void execute(toolCall.toolCallId, name, toolCall.input, message);
+    };
+    toolCallsRef.current = handler;
+    return () => {
+      if (toolCallsRef.current === handler) toolCallsRef.current = null;
+    };
+  }, [execute, instance, toolCallsRef]);
+
+  return useMemo(
+    () => ({
+      runningActions,
+      runCommand: (text: string) => {
+        const parsed = parseSlash(text);
+        if (!parsed) return false;
+        const { command, focus } = parsed;
+        const name = command.action;
+        const input = command.action === ADD_CARDS ? { cards: [] } : { tool: command.tool, focus };
+        const toolCallId = generateId();
+        const createdAt = Date.now();
+        const answer: ChatMessage = {
+          id: generateId(),
+          role: "assistant",
+          metadata: { createdAt },
+          parts: [
+            { type: `tool-${name}`, toolCallId, state: "input-available", input },
+          ] as ChatMessage["parts"],
+        };
+        replaceMessages(instance, [
+          ...instance.messages,
+          {
+            id: generateId(),
+            role: "user",
+            metadata: { createdAt },
+            parts: [{ type: "text", text: text.trim() }],
+          },
+          answer,
+        ]);
+        void saveChat({ id: instance.id, notebookId }, instance.messages);
+        if (!needsConfirmation(name, input)) void execute(toolCallId, name, input, answer);
+        return true;
+      },
+      runAction: (toolCallId: string) => {
+        const found = locate(instance.messages, toolCallId);
+        if (!found || runningActions.has(toolCallId)) return;
+        const tool = (found.part.input as { tool?: string } | undefined)?.tool;
+        if (found.name !== ADD_CARDS && tool === "audio-overview") {
+          // Its voices are chosen in its own dialog, which shows the cost too.
+          openTool("audio-overview");
+          void finish(found.name, toolCallId, { dialog: true, tool });
+          return;
+        }
+        void execute(toolCallId, found.name, found.part.input, found.message);
+      },
+      cancelAction: (toolCallId: string) => {
+        const found = locate(instance.messages, toolCallId);
+        if (found) void finish(found.name, toolCallId, { cancelled: true });
+      },
+      undoAction: (toolCallId: string) => {
+        const found = locate(instance.messages, toolCallId);
+        if (!found || found.part.state !== "output-available") return;
+        const output = found.part.output as ChatActionOutput;
+        void track(toolCallId, async () => {
+          await finish(found.name, toolCallId, await undoChatAction(output));
+        });
+      },
+    }),
+    [execute, finish, instance, notebookId, openTool, runningActions, track],
+  );
 }
 
 export function useChatSession(): ChatSession {
