@@ -77,7 +77,8 @@ export default function SkillsWorkspace() {
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-card">
       <ToolHeader title={t("skillsTitle")} detail={t("skills.scope", { vault: scope })}>
-        {mine.length > 0 ? (
+        {/* Import stays even in a vault with no skills yet: it is how existing SKILL.md files come in. */}
+        {skills ? (
           <Button
             type="button"
             size="sm"

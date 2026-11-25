@@ -209,7 +209,16 @@ export function DailyStudy({
         return;
       case "practise":
         if (step.mode === "teach") teachBack(step.book);
-        else go("practice");
+        // The Practice page starts Questions on this document from these parameters.
+        else
+          void navigate(
+            studyHref("practice", {
+              vault: vaultId,
+              exercise: "questions",
+              book: step.book.id,
+              section: step.book.sections.length > 1 ? step.book.section : undefined,
+            }),
+          );
         return;
       case "read":
       case "new":

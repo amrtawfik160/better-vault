@@ -218,7 +218,7 @@ export function AccountPanel() {
             <div className="-mx-2 flex flex-col gap-0.5">
               {subscriptionConnectionsAllowed() ? (
                 <SettingsRow
-                  to="subscriptions"
+                  to="group-ai"
                   icon={AiBrain01Icon}
                   label={t("cliproxyapi.title")}
                   hint={
@@ -232,7 +232,7 @@ export function AccountPanel() {
               ) : null}
               {desktop ? (
                 <SettingsRow
-                  to="providers"
+                  to="group-ai"
                   icon={<ProviderIcon provider="openai" />}
                   label={t("account.chatgpt")}
                   hint={
@@ -248,7 +248,7 @@ export function AccountPanel() {
                 />
               ) : null}
               <SettingsRow
-                to="providers"
+                to="group-ai"
                 icon={AiBrain01Icon}
                 label={t("account.providers")}
                 hint={

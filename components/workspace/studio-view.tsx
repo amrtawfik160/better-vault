@@ -11,7 +11,7 @@ import { useWorkspace } from "./workspace-context";
 /** The Studio tab: the open output, or every output when none is open. */
 export function StudioView() {
   const { t } = useTranslation("studio");
-  const { notebook, openOutput, openOutputId, setStudioOpen } = useWorkspace();
+  const { notebook, openOutput, openOutputId, setStudioOpen, setCompanion } = useWorkspace();
   const outputs = useOutputs(notebook.id);
 
   if (openOutputId) return <OutputViewer id={openOutputId} />;
@@ -22,7 +22,11 @@ export function StudioView() {
         <div className="max-w-sm text-center">
           <h2 className="text-xl font-semibold tracking-tight">{t("view.emptyTitle")}</h2>
           <p className="mt-2 text-muted-foreground">{t("view.emptyBody")}</p>
-          <Button className="mt-6" shape="pill" onClick={() => setStudioOpen(true)}>
+          <Button className="mt-6" shape="pill" onClick={() => {
+              // The Studio sheet lives in the companion's Make tab.
+              setCompanion("make");
+              setStudioOpen(true);
+            }}>
             <Icon icon={Add01Icon} />
             {t("view.openStudio")}
           </Button>

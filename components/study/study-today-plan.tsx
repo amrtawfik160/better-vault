@@ -11,33 +11,40 @@ import { cn } from "@/lib/utils";
 
 const storageKey = (vaultId: string) => `better-vault.study.today-skipped.${vaultId}`;
 
-/** The ids of the steps hidden "until tomorrow": kept per vault and per day, in this browser only. */
+function readSkipped(vaultId: string, day: string): string[] {
+  try {
+    const saved = JSON.parse(localStorage.getItem(storageKey(vaultId)) ?? "null") as {
+      day?: unknown;
+      ids?: unknown;
+    } | null;
+    if (saved?.day === day && Array.isArray(saved.ids))
+      return saved.ids.filter((id): id is string => typeof id === "string");
+  } catch {
+    // Storage can be blocked or hold something else; nothing is hidden then.
+  }
+  return [];
+}
+
+/**
+ * The ids of the steps hidden "until tomorrow": kept per vault and per day, in
+ * this browser only. Another vault, or a new day, reads its own list.
+ */
 export function useSkippedToday(vaultId: string, day: string) {
-  const [skipped, setSkipped] = useState<string[]>(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem(storageKey(vaultId)) ?? "null") as {
-        day?: unknown;
-        ids?: unknown;
-      } | null;
-      if (saved?.day === day && Array.isArray(saved.ids))
-        return saved.ids.filter((id): id is string => typeof id === "string");
-    } catch {
-      // Storage can be blocked or hold something else; nothing is hidden then.
-    }
-    return [];
-  });
+  const key = `${vaultId}:${day}`;
+  const [state, setState] = useState(() => ({ key, ids: readSkipped(vaultId, day) }));
+  const skipped = state.key === key ? state.ids : readSkipped(vaultId, day);
   const update = useCallback(
     (change: (ids: string[]) => string[]) =>
-      setSkipped((current) => {
-        const ids = change(current);
+      setState((current) => {
+        const ids = change(current.key === key ? current.ids : readSkipped(vaultId, day));
         try {
           localStorage.setItem(storageKey(vaultId), JSON.stringify({ day, ids }));
         } catch {
           // The choice still holds for this visit.
         }
-        return ids;
+        return { key, ids };
       }),
-    [vaultId, day],
+    [key, vaultId, day],
   );
   return {
     skipped,

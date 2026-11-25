@@ -553,6 +553,12 @@ export default function NotesWorkspace() {
               <span className="max-sm:sr-only">{t("new")}</span>
             </Button>
           </>
+        ) : libraryOnly ? (
+          // On a phone the empty pane with its New button is hidden behind the list.
+          <Button type="button" size="sm" onClick={() => void newNote()}>
+            <Icon icon={Add01Icon} size={16} />
+            <span className="max-sm:sr-only">{t("new")}</span>
+          </Button>
         ) : null}
       </ToolHeader>
       <div className="flex min-h-0 flex-1">

@@ -111,10 +111,20 @@ export function Companion() {
   );
 }
 
+/** Below 1280px the companion lies over the page: it steps aside for what it opened there. */
+function useStepAside() {
+  const docked = useCompanionDocked();
+  const { setCompanion } = useWorkspace();
+  return () => {
+    if (!docked) setCompanion(null);
+  };
+}
+
 function AskPanel() {
   const { t } = useTranslation("workspace");
   const { t: tChat } = useTranslation("chat");
   const { notebook, setTab } = useWorkspace();
+  const stepAside = useStepAside();
   const chat = useChatSession();
   return (
     <>
@@ -122,7 +132,10 @@ function AskPanel() {
         <span className="text-xs text-muted-foreground">{t("companion.answersFrom")}</span>
         <button
           type="button"
-          onClick={() => setTab("sources")}
+          onClick={() => {
+            setTab("sources");
+            stepAside();
+          }}
           aria-label={t("companion.scopeLabel", { notebook: notebook.title })}
           className="inline-flex h-7 min-w-0 cursor-pointer items-center gap-2 rounded-full border border-chart-5/50 bg-chart-5/15 px-3 text-[0.8125rem] font-medium outline-none hover:bg-chart-5/25 focus-visible:ring-[3px] focus-visible:ring-ring/40"
         >
@@ -202,6 +215,7 @@ function MakePanel() {
   const { t: tStudio } = useTranslation("studio");
   const { notebook, openTool, openOutput, setCompanion, studioOpen, setStudioOpen } = useWorkspace();
   const chat = useChatSession();
+  const stepAside = useStepAside();
   const outputs = useOutputs(notebook.id);
   const studio = useStudioSettings();
   const sources = useSources(notebook.id);
@@ -279,7 +293,10 @@ function MakePanel() {
                   <li key={output.id}>
                     <button
                       type="button"
-                      onClick={() => openOutput(output.id)}
+                      onClick={() => {
+                        openOutput(output.id);
+                        stepAside();
+                      }}
                       className="flex min-h-11 w-full cursor-pointer items-center gap-3 px-4 py-2 text-start outline-none hover:bg-muted/40 focus-visible:ring-[3px] focus-visible:ring-ring/40"
                     >
                       {meta ? <Icon icon={meta.icon} size={16} className={meta.tint} /> : null}

@@ -44,6 +44,8 @@ export function OnboardingDialog() {
   const [error, setError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const named = useRef(false);
+  // The Inbox made for the first try, reused when adding fails and is tried again.
+  const inbox = useRef<string | null>(null);
 
   // Start the name field from a saved profile, once.
   useEffect(() => {
@@ -64,7 +66,8 @@ export function OnboardingDialog() {
     setBusy(true);
     setError(null);
     try {
-      const id = await createNotebook(t("material.inbox"));
+      const id = inbox.current ?? (await createNotebook(t("material.inbox")));
+      inbox.current = id;
       await run(id);
       await finish();
       setOpen(false);
