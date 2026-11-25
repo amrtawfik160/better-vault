@@ -1,3 +1,4 @@
+import { SettingsSection } from "./settings-section";
 import {
   AiBrain01Icon,
   Camera01Icon,
@@ -16,7 +17,6 @@ import { Icon } from "@/components/icon";
 import { ProviderIcon } from "@/components/provider-icon";
 import { Button } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
-import { Sheet } from "@/components/panelui/sheet";
 import { signIn, signOut, useAccount } from "@/lib/account/account";
 import {
   subscriptionConnectionsAllowed,
@@ -101,8 +101,7 @@ export function AccountPanel() {
 
   return (
     <>
-      <Sheet.Header title={t("account.title")} description={t("account.description")} />
-      <Sheet.Body>
+      <SettingsSection title={t("account.title")} description={t("account.description")}>
         <div className="flex flex-col gap-6 pb-4">
           <div className="flex flex-col items-center gap-3 pt-2 text-center">
             <button
@@ -291,7 +290,7 @@ export function AccountPanel() {
             </Button>
           ) : null}
         </div>
-      </Sheet.Body>
+      </SettingsSection>
     </>
   );
 }

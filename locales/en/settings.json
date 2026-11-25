@@ -1,6 +1,6 @@
 {
   "title": "Settings",
-  "description": "Saved in this browser only.",
+  "description": "Saved on this device as you change them.",
   "rows": {
     "providers": "AI providers",
     "providersHint_one": "{{count}} ready",
@@ -487,5 +487,42 @@
     },
     "activity": "Recent activity",
     "noActivity": "No agent has connected yet."
+  },
+  "groups": {
+    "ai": {
+      "label": "AI",
+      "detail": "Choose who answers",
+      "lead": "Choose who answers. Keys stay on this device and go only with requests to their provider. Better Vault never shows a saved key."
+    },
+    "reading": {
+      "label": "Reading and voice",
+      "detail": "How words are read aloud",
+      "lead": "How words are read aloud while you read."
+    },
+    "account": {
+      "label": "Account and plan",
+      "detail": "Optional. Add your name and picture",
+      "lead": "An account is optional. Everything works without one; it is only for Better Vault AI and Cloud. Your notebooks, notes and keys never go to it."
+    },
+    "storage": {
+      "label": "Storage and data",
+      "detail": "On this device, no sync",
+      "lead": "Everything lives on this device. Connect a storage service to add files from it and keep backups there."
+    },
+    "appearance": {
+      "label": "Appearance and language",
+      "detail": "Theme, colour and language",
+      "lead": "How the app looks and the language of its interface."
+    },
+    "tools": {
+      "label": "Tools",
+      "detail": "Calendar and MCP for skills",
+      "lead": "Calendar and MCP for skills."
+    },
+    "about": {
+      "label": "About and updates",
+      "detail": "Version and updates",
+      "lead": "An open-source, bring-your-own-model place to learn from what you bring."
+    }
   }
 }

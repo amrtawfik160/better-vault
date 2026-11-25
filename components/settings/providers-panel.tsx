@@ -1,3 +1,4 @@
+import { SettingsSection } from "./settings-section";
 import {
   AudioWave01Icon,
   Cancel01Icon,
@@ -67,8 +68,7 @@ export function ProvidersPanel({ onChatGPTSignIn }: ProvidersPanelProps) {
 
   return (
     <>
-      <Sheet.Header title={t("providers.title")} description={t("providers.description")} />
-      <Sheet.Body>
+      <SettingsSection title={t("providers.title")} description={t("providers.description")}>
         {/* Better Vault AI is managed by the account service. */}
         <ProviderList
           ids={[
@@ -81,7 +81,7 @@ export function ProvidersPanel({ onChatGPTSignIn }: ProvidersPanelProps) {
           {t("providers.speech")}
         </h3>
         <ProviderList ids={speechProviderIds} settings={settings} />
-      </Sheet.Body>
+      </SettingsSection>
       <Sheet.Next name="provider" closeLabel={tCommon("actions.close")}>
         {(id: ProviderId) => <ProviderDetail id={id} onChatGPTSignIn={onChatGPTSignIn} />}
       </Sheet.Next>

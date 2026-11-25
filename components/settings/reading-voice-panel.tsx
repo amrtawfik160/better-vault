@@ -1,3 +1,4 @@
+import { SettingsSection } from "./settings-section";
 import { AiVoiceIcon, PlayIcon, StopIcon } from "@hugeicons/core-free-icons";
 import { useState } from "react";
 import type { TFunction } from "i18next";
@@ -5,8 +6,11 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Icon } from "@/components/icon";
 import { Button } from "@/components/panelui/button";
-import { Sheet } from "@/components/panelui/sheet";
-import { useDownloadCaption, useMegabytes, VoiceProgress } from "@/components/speech/voice-progress";
+import {
+  useDownloadCaption,
+  useMegabytes,
+  VoiceProgress,
+} from "@/components/speech/voice-progress";
 import {
   cancelVoiceDownload,
   downloadReadingVoice,
@@ -34,7 +38,9 @@ function hintFor(voice: ReadingVoice, t: TFunction<"settings">) {
 export function ReadingVoiceRow() {
   const { t } = useTranslation("settings");
   const voice = useReadingVoice();
-  return <SettingsRow to="voice" icon={AiVoiceIcon} label={t("rows.voice")} hint={hintFor(voice, t)} />;
+  return (
+    <SettingsRow to="voice" icon={AiVoiceIcon} label={t("rows.voice")} hint={hintFor(voice, t)} />
+  );
 }
 
 function sizeOf(voice: ReadingVoice) {
@@ -74,8 +80,7 @@ export function ReadingVoicePanel() {
 
   return (
     <>
-      <Sheet.Header title={t("voice.title")} description={t("voice.description")} />
-      <Sheet.Body>
+      <SettingsSection title={t("voice.title")} description={t("voice.description")}>
         <div className="space-y-4">
           <section className="space-y-3 rounded-2xl bg-muted/50 p-4">
             <div className="flex items-center gap-3">
@@ -119,7 +124,12 @@ export function ReadingVoicePanel() {
                     <Icon icon={playing ? StopIcon : PlayIcon} size={15} />
                     {playing ? t("voice.stopSample") : t("voice.sample")}
                   </Button>
-                  <Button size="sm" variant="ghost" disabled={removing} onClick={() => void remove()}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={removing}
+                    onClick={() => void remove()}
+                  >
                     {t("voice.remove")}
                   </Button>
                 </>
@@ -136,7 +146,7 @@ export function ReadingVoicePanel() {
             <p>{t("voice.otherLanguages")}</p>
           </div>
         </div>
-      </Sheet.Body>
+      </SettingsSection>
     </>
   );
 }

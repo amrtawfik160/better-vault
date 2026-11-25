@@ -1,3 +1,4 @@
+import { SettingsSection } from "./settings-section";
 import {
   ArrowUpRight01Icon,
   Bug01Icon,
@@ -8,7 +9,6 @@ import {
 import { useTranslation } from "react-i18next";
 import { Logo } from "@/components/brand/logo";
 import { Icon } from "@/components/icon";
-import { Sheet } from "@/components/panelui/sheet";
 import { UpdateStatus } from "@/components/updates/update-status";
 import type { Updates } from "@/lib/updates/use-updates";
 import { releaseNotesUrl } from "@/lib/updates/version";
@@ -21,8 +21,7 @@ export function AboutPanel({ updates }: { updates: Updates }) {
 
   return (
     <>
-      <Sheet.Header title={t("about.title")} />
-      <Sheet.Body>
+      <SettingsSection title={t("about.title")}>
         <div className="flex flex-col gap-6 pb-4">
           <div className="flex flex-col items-center px-4 pt-2 text-center">
             <Logo size={56} />
@@ -58,7 +57,7 @@ export function AboutPanel({ updates }: { updates: Updates }) {
             />
           </nav>
         </div>
-      </Sheet.Body>
+      </SettingsSection>
     </>
   );
 }

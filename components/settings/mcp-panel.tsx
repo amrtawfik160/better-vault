@@ -1,10 +1,10 @@
+import { SettingsSection } from "./settings-section";
 import { Copy01Icon, RefreshIcon, ViewIcon, ViewOffIcon } from "@hugeicons/core-free-icons";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Segmented } from "@/components/common/segmented";
 import { Icon } from "@/components/icon";
-import { Sheet } from "@/components/panelui/sheet";
 import { Switch } from "@/components/panelui/switch";
 import { desktopBridge, type McpState } from "@/lib/desktop/bridge";
 import { formatRelativeTime } from "@/lib/format";
@@ -75,8 +75,7 @@ export function McpPanel() {
   if (!bridge) {
     return (
       <>
-        <Sheet.Header title={t("mcp.title")} description={t("mcp.description")} />
-        <Sheet.Body>
+        <SettingsSection title={t("mcp.title")} description={t("mcp.description")}>
           <div className="flex flex-col gap-3 rounded-2xl bg-muted/50 p-4 text-sm">
             <p className="font-medium">{t("mcp.desktopOnly")}</p>
             <p className="text-muted-foreground">{t("mcp.desktopOnlyBody")}</p>
@@ -89,7 +88,7 @@ export function McpPanel() {
               {t("mcp.download")}
             </a>
           </div>
-        </Sheet.Body>
+        </SettingsSection>
       </>
     );
   }
@@ -105,8 +104,7 @@ export function McpPanel() {
 
   return (
     <>
-      <Sheet.Header title={t("mcp.title")} description={t("mcp.description")} />
-      <Sheet.Body>
+      <SettingsSection title={t("mcp.title")} description={t("mcp.description")}>
         <div className="flex flex-col gap-5 pb-4">
           <label className="flex cursor-pointer items-center gap-3 rounded-2xl bg-muted/50 px-3 py-2.5">
             <span className="min-w-0 flex-1">
@@ -228,7 +226,7 @@ export function McpPanel() {
             )}
           </section>
         </div>
-      </Sheet.Body>
+      </SettingsSection>
     </>
   );
 }

@@ -1,7 +1,7 @@
+import { SettingsSection } from "./settings-section";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button, buttonVariants } from "@/components/panelui/button";
-import { Sheet } from "@/components/panelui/sheet";
 import { SubscriptionLogo } from "@/components/ai/subscription-logo";
 import {
   cancelSubscriptionLogin,
@@ -18,10 +18,9 @@ export function CliProxyPanel({ saved }: { saved?: ProviderSettings }) {
   const { t } = useTranslation("settings");
   return (
     <>
-      <Sheet.Header title={t("cliproxyapi.title")} description={t("cliproxyapi.description")} />
-      <Sheet.Body>
+      <SettingsSection title={t("cliproxyapi.title")} description={t("cliproxyapi.description")}>
         <SubscriptionConnect saved={saved} />
-      </Sheet.Body>
+      </SettingsSection>
     </>
   );
 }
