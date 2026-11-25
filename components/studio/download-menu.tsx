@@ -14,10 +14,13 @@ export function DownloadMenu<Data>({
   title,
   data,
   options,
+  primary = false,
 }: {
   title: string;
   data: Data;
   options: readonly ExportOption<Data>[];
+  /** The view's one filled button, for tools whose job is to be downloaded. */
+  primary?: boolean;
 }) {
   const { t } = useTranslation("studio");
   const { busy, save, saveTo } = useExporter();
@@ -28,7 +31,11 @@ export function DownloadMenu<Data>({
     <Menu>
       <Menu.Trigger
         disabled={busy}
-        className={buttonVariants({ variant: "outline", shape: "pill", size: "sm" })}
+        className={buttonVariants({
+          variant: primary ? "default" : "outline",
+          shape: "pill",
+          size: "sm",
+        })}
       >
         <Icon
           icon={busy ? Loading03Icon : Download04Icon}

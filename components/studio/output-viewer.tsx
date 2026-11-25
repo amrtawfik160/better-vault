@@ -20,7 +20,12 @@ import { useWorkspace } from "@/components/workspace/workspace-context";
 import { addQuizMissesToStudy, addStudioFlashcards } from "@/lib/db/study";
 import { vaultOf } from "@/lib/db/vaults";
 import { studyHref } from "@/lib/study/links";
-import { saveFlashcardPractice, saveQuizAttempt, updateOutputData, useOutput } from "@/lib/db/outputs";
+import {
+  saveFlashcardPractice,
+  saveQuizAttempt,
+  updateOutputData,
+  useOutput,
+} from "@/lib/db/outputs";
 import { formatRelativeTime } from "@/lib/format";
 import { storageIds, storages } from "@/lib/storage/catalog";
 import { isStorageReady, useStorageSettings } from "@/lib/storage/settings";
@@ -33,6 +38,9 @@ import type { OutputChrome } from "@/studio/shared/form";
 import { DownloadMenu } from "./download-menu";
 import { useStudioRunner } from "./studio-runner";
 import { useExporter } from "./use-exporter";
+
+/** Tools whose own viewer holds the primary button (Play, Start quiz, Review). */
+const ownPrimary = new Set<string>(["audio-overview", "quiz", "flashcards"]);
 
 /** One Studio output, full size in the Studio tab. */
 export function OutputViewer({ id }: { id: string }) {
@@ -97,7 +105,11 @@ export function OutputViewer({ id }: { id: string }) {
               toast.success(
                 added
                   ? t(quiz ? "quiz.viewer.savedMissed" : "viewer.studyCardsAdded", { count: added })
-                  : t(quiz ? "quiz.viewer.missedAlreadySaved" : "flashcards.viewer.missedAlreadySaved"),
+                  : t(
+                      quiz
+                        ? "quiz.viewer.missedAlreadySaved"
+                        : "flashcards.viewer.missedAlreadySaved",
+                    ),
               );
             }
             openStudyReview(output.id, cardIds);
@@ -209,97 +221,151 @@ export function OutputViewer({ id }: { id: string }) {
           )}
         >
           {immersive ? null : (
-            <header className="flex flex-wrap items-center gap-3 pb-5">
-              <Button variant="ghost" size="sm" className="-ms-2" onClick={closeOutput}>
-                <Icon icon={ArrowLeft01Icon} size={16} className="rtl:rotate-180" />
-                {t("viewer.back")}
-              </Button>
-              <div className="flex min-w-0 basis-full items-center gap-3">
+            <header className="mb-6 flex flex-col gap-3 border-b pb-4">
+              <nav aria-label={t("frame.breadcrumb")} className="-ms-2 flex items-center">
+                <Button variant="ghost" size="sm" onClick={closeOutput}>
+                  <Icon icon={ArrowLeft01Icon} size={16} className="rtl:rotate-180" />
+                  {t("viewer.back")}
+                </Button>
+              </nav>
+              <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-muted">
                   <Icon icon={tool.icon} size={20} className={tool.tint} />
                 </span>
-                <div className="min-w-0 flex-1">
-                  <h2 className="truncate text-xl font-semibold tracking-tight">{output.title}</h2>
-                  <p className="truncate text-xs text-muted-foreground">{meta}</p>
-                </div>
-                {parsed?.success && output.toolId === "flashcards" ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="shrink-0"
-                    disabled={addingCards}
-                    onClick={() => {
-                      setAddingCards(true);
-                      void addStudioFlashcards(output)
-                        .then(({ added, cardIds }) => {
-                          if (added > 0) toast.success(t("viewer.studyCardsAdded", { count: added }));
-                          openStudyReview(output.id, cardIds);
-                        })
-                        .catch((error: Error) => toast.error(error.message))
-                        .finally(() => setAddingCards(false));
-                    }}
-                  >
-                    {t("viewer.addToStudy")}
-                  </Button>
-                ) : null}
-                {parsed?.success && definition?.exports?.length ? (
-                  <DownloadMenu
+                <div className="min-w-0 flex-1 basis-48">
+                  <h1
+                    className="truncate text-xl font-semibold tracking-tight"
                     title={output.title}
-                    data={parsed.data}
-                    options={definition.exports}
-                  />
-                ) : null}
-                <Menu>
-                  <Menu.Trigger
-                    aria-label={t("viewer.actions")}
-                    className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    <Icon icon={MoreVerticalIcon} size={16} />
-                  </Menu.Trigger>
-                  <Menu.Content align="end">
-                    {annotate ? (
-                      <Menu.Item disabled={annotating} onClick={() => void annotate()}>
-                        <Icon icon={WhiteboardIcon} />
-                        {t("viewer.annotate")}
-                      </Menu.Item>
-                    ) : null}
-                    <Menu.Item onClick={() => requestOutputAction({ kind: "rename", output })}>
-                      <Icon icon={PencilEdit01Icon} />
-                      {tCommon("actions.rename")}
-                    </Menu.Item>
-                    <Menu.Item
-                      variant="destructive"
-                      onClick={() => requestOutputAction({ kind: "delete", output })}
+                    {output.title}
+                  </h1>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {t(`tools.${output.toolId}.name`)} · {meta}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {parsed?.success && output.toolId === "flashcards" ? (
+                    <Button
+                      shape="pill"
+                      size="sm"
+                      disabled={addingCards}
+                      onClick={() => {
+                        setAddingCards(true);
+                        void addStudioFlashcards(output)
+                          .then(({ added, cardIds }) => {
+                            if (added > 0)
+                              toast.success(t("viewer.studyCardsAdded", { count: added }));
+                            openStudyReview(output.id, cardIds);
+                          })
+                          .catch((error: Error) => toast.error(error.message))
+                          .finally(() => setAddingCards(false));
+                      }}
                     >
-                      <Icon icon={Delete02Icon} />
-                      {tCommon("actions.delete")}
-                    </Menu.Item>
-                  </Menu.Content>
-                </Menu>
+                      {t("viewer.addToStudy")}
+                    </Button>
+                  ) : null}
+                  {parsed?.success && definition?.exports?.length ? (
+                    <DownloadMenu
+                      title={output.title}
+                      data={parsed.data}
+                      options={definition.exports}
+                      primary={!ownPrimary.has(output.toolId)}
+                    />
+                  ) : null}
+                  <Menu>
+                    <Menu.Trigger
+                      aria-label={t("viewer.actions")}
+                      className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <Icon icon={MoreVerticalIcon} size={16} />
+                    </Menu.Trigger>
+                    <Menu.Content align="end">
+                      {annotate ? (
+                        <Menu.Item disabled={annotating} onClick={() => void annotate()}>
+                          <Icon icon={WhiteboardIcon} />
+                          {t("viewer.annotate")}
+                        </Menu.Item>
+                      ) : null}
+                      <Menu.Item onClick={() => requestOutputAction({ kind: "rename", output })}>
+                        <Icon icon={PencilEdit01Icon} />
+                        {tCommon("actions.rename")}
+                      </Menu.Item>
+                      <Menu.Item
+                        variant="destructive"
+                        onClick={() => requestOutputAction({ kind: "delete", output })}
+                      >
+                        <Icon icon={Delete02Icon} />
+                        {tCommon("actions.delete")}
+                      </Menu.Item>
+                    </Menu.Content>
+                  </Menu>
+                </div>
               </div>
             </header>
           )}
 
           {output.status === "generating" ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 py-20 text-center">
-              <Icon icon={Loading03Icon} size={28} className="animate-spin text-muted-foreground" />
-              <p className="font-medium">{t("status.generating")}</p>
-              <p className="max-w-sm text-sm text-muted-foreground">{t("view.generatingBody")}</p>
-            </div>
-          ) : output.status === "error" || !parsed?.success || !client ? (
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 py-20 text-center">
-              <Icon icon={Alert02Icon} size={28} className="text-destructive" />
-              <p className="font-medium">{t("view.failedTitle")}</p>
-              {output.error ? (
-                <p className="max-w-md text-sm text-muted-foreground">{output.error}</p>
-              ) : null}
-              {local ? null : (
-                <Button shape="pill" className="mt-2" onClick={() => void runner.retry(output)}>
-                  <Icon icon={RepeatIcon} size={16} />
-                  {t("view.retry")}
-                </Button>
-              )}
-            </div>
+            <section
+              aria-busy="true"
+              aria-labelledby="output-generating"
+              className="rounded-2xl border bg-card p-5"
+            >
+              <h2 id="output-generating" className="text-sm font-medium">
+                {t("frame.generatingTitle", { tool: t(`tools.${output.toolId}.name`) })}
+              </h2>
+              <p
+                role="status"
+                className="mt-1 flex items-center gap-2 text-sm text-muted-foreground"
+              >
+                <Icon icon={Loading03Icon} size={16} className="shrink-0 animate-spin" />
+                {t("view.generatingBody")}
+              </p>
+            </section>
+          ) : output.status === "error" ? (
+            <section role="alert" className="flex gap-3 rounded-2xl border bg-card p-4">
+              <Icon icon={Alert02Icon} size={20} className="mt-0.5 shrink-0 text-destructive" />
+              <div className="min-w-0 flex-1">
+                <h2 className="text-sm font-medium">
+                  {t("frame.failedTitle", { tool: t(`tools.${output.toolId}.name`) })}
+                </h2>
+                {output.error ? (
+                  <p className="mt-1 text-sm text-muted-foreground">{output.error}</p>
+                ) : null}
+                <p className="mt-1 text-xs text-muted-foreground">{t("frame.choicesKept")}</p>
+                {local ? null : (
+                  <Button
+                    variant="outline"
+                    shape="pill"
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => void runner.retry(output)}
+                  >
+                    <Icon icon={RepeatIcon} size={16} />
+                    {t("view.retry")}
+                  </Button>
+                )}
+              </div>
+            </section>
+          ) : !parsed?.success || !client ? (
+            <section role="alert" className="flex gap-3 rounded-2xl border bg-card p-4">
+              <Icon icon={Alert02Icon} size={20} className="mt-0.5 shrink-0 text-destructive" />
+              <div className="min-w-0 flex-1">
+                <h2 className="text-sm font-medium">{t("frame.brokenTitle")}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">{t("frame.brokenBody")}</p>
+                {local ? null : (
+                  <Button
+                    variant="outline"
+                    shape="pill"
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => void runner.retry(output)}
+                  >
+                    <Icon icon={RepeatIcon} size={16} />
+                    {t("frame.makeAgain")}
+                  </Button>
+                )}
+              </div>
+            </section>
           ) : (
             <client.Viewer
               key={output.id}
