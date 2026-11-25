@@ -39,28 +39,47 @@
     "confirm": "Delete source"
   },
   "addDialog": {
-    "title": "Add sources",
-    "description": "Sources stay in this browser. Their text is sent to your model when you ask questions or create something.",
+    "title": "Add",
+    "description": "Bring a link, a file or text into a notebook. Sources stay on this device; their text is sent to your model when you ask or create.",
     "tabs": {
-      "file": "Upload",
-      "url": "Link",
-      "text": "Paste text",
       "cloud": "From storage",
-      "media": "Transcript"
+      "media": "Transcript or recording"
     },
-    "drop": "Drop files here",
-    "choose": "Choose files",
-    "fileTypes": "PDF, EPUB, Markdown or text files, up to 20 MB each.",
-    "urlLabel": "Address",
-    "urlPlaceholder": "A web page, a PDF or a YouTube video",
-    "urlHint": "A page's main text, or a YouTube video's captions, is saved as a source.",
-    "urlVideo": "YouTube video: its captions are saved as a transcript with times.",
-    "textTitle": "Title",
+    "choose": "Choose a file",
+    "fileTypes": "Files: PDF, EPUB, Markdown or text, up to 20 MB each.",
     "textTitlePlaceholder": "Pasted text",
-    "textLabel": "Text",
-    "textPlaceholder": "Paste notes, an article or a transcript",
-    "submit": "Add",
-    "adding": "Adding…"
+    "submit": "Add to {{name}}",
+    "adding": "Adding…",
+    "inputLabel": "Link, file or text to add",
+    "placeholder": "Paste any link, drop a file, or type text",
+    "takes": "A web page, a PDF, a YouTube video, an article or your notes",
+    "kind": {
+      "video": "YouTube video: its captions are saved as a transcript with times.",
+      "link": "Web page or PDF: its main text is saved.",
+      "text": "Pasted text: saved as a document."
+    },
+    "reading": "Adding to {{name}}…",
+    "why": {
+      "empty": "Add needs a link, a file or some text.",
+      "ready": "Opens in the reader once it is added.",
+      "busy": "Working on it…",
+      "captions": "Add needs a transcript first.",
+      "media": "Saves the transcript as a document."
+    },
+    "failed": {
+      "title": "Couldn't read this link",
+      "body": "{{host}}: {{reason}} Nothing was saved. Paste the text yourself, or try the link again.",
+      "paste": "Paste the text",
+      "retry": "Try again"
+    },
+    "goesTo": "Goes to",
+    "current": "the notebook you are in",
+    "changed": "changed",
+    "notebook": "Notebook",
+    "newNotebook": "New notebook",
+    "newNotebookLabel": "New notebook name",
+    "newNotebookPlaceholder": "Name, then Enter",
+    "back": "Back"
   },
   "added_one": "Added {{count}} source",
   "added_other": "Added {{count}} sources",
