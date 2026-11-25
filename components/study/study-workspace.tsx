@@ -60,6 +60,7 @@ import { StudyReader } from "./study-reader";
 import { StudyReview } from "./study-review";
 import { DailyStudy } from "./study-today";
 import { StudyPracticeTab } from "./study-practice-tab";
+import { StudyReviewPlan } from "./study-review-plan";
 import { StudyTutor } from "./study-tutor";
 import { useStudyClock } from "./use-study-clock";
 import { StudyVaultScopeContext, type StudyVaultScope } from "./study-vault-scope";
@@ -247,7 +248,8 @@ export default function StudyWorkspace({
   const reviewSessionId =
     selection?.studyReviewSession ?? (location.key === "default" ? directReviewId : location.key);
   const now = useStudyClock([...review.cards, ...review.highlights]);
-  const dueNow = dailyReview(views.review, now).due.length;
+  const daily = dailyReview(views.review, now);
+  const dueNow = daily.due.length;
   const collected = tab === "collection" ? studyCollection(views.collection, params) : undefined;
   const lastRead =
     books.filter((entry) => entry.lastReadAt !== undefined).toSorted((a, b) => (b.lastReadAt ?? 0) - (a.lastReadAt ?? 0))[0];
@@ -262,6 +264,14 @@ export default function StudyWorkspace({
     ...(output ? { output } : {}),
     ...(cardId ? { card: cardId } : {}),
   };
+  // A plain visit to Review opens on today's plan; a selection, a scope or a mode starts at once.
+  const planning =
+    tab === "review" &&
+    !requestedReview &&
+    Object.keys(reviewScope).length === 0 &&
+    !weakMode &&
+    !practiceMode &&
+    !reviewKind;
   const highlightColor = studyHighlightColor.safeParse(params.get("color")).data;
   const collectionChips: StudyCollectionChip[] = [
     book ? { key: "book", label: book.title } : undefined,
@@ -742,8 +752,30 @@ export default function StudyWorkspace({
           }
         />
       ) : null}
-      {ready && !unavailableBook && tab === "review" ? (
+      {ready && !unavailableBook && tab === "review" && planning ? (
+        <StudyReviewPlan
+          key={studyVaultId}
+          items={daily.items}
+          cards={review.cards}
+          words={review.words}
+          books={review.books}
+          notebookTitles={notebookTitles}
+          now={now}
+          next={daily.next}
+          lastRead={lastRead}
+          openBook={read}
+          browse={(filter) => go("collection", { filter })}
+          start={(ids) =>
+            setParams(
+              { view: "study", tab: "review", vault: studyVaultId },
+              { state: { studyReviewIds: ids, studyReviewVault: studyVaultId, studyReviewOrdered: true } },
+            )
+          }
+        />
+      ) : null}
+      {ready && !unavailableBook && tab === "review" && !planning ? (
         <StudyReview
+          ordered={Boolean(selection?.studyReviewOrdered)}
           key={`${location.key}:${studyVaultId}`}
           vaultId={studyVaultId}
           items={reviewCollection(views.review, params, requestedReview)}

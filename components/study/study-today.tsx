@@ -40,6 +40,7 @@ import { StudyBookCover, StudyProgressBar } from "./study-book-cover";
 import { studyDueLabel } from "./study-due";
 import { StudyFollowUps } from "./study-follow-ups";
 import { StudyListenButton } from "./study-listen";
+import { reviewPlan, reviewPlanIds } from "@/lib/study/review-plan";
 import { PracticeSessionLink } from "./practice/study-writing-practice";
 import { StudyMakeFromBook } from "./study-make-from-book";
 import { StudyOriginLink } from "./study-origin-link";
@@ -167,7 +168,16 @@ export function DailyStudy({
   }
 
   function startReview() {
-    if (resume) void navigate(resume.path, { state: resume.state });
+    if (resume) {
+      void navigate(resume.path, { state: resume.state });
+      return;
+    }
+    // Everything due, a notebook at a time, as Review's plan would start it.
+    const ids = reviewPlanIds(reviewPlan(daily.items, books, now));
+    if (ids.length)
+      void navigate(studyHref("review", { vault: vaultId }), {
+        state: { studyReviewIds: ids, studyReviewVault: vaultId, studyReviewOrdered: true },
+      });
     else go("review");
   }
 

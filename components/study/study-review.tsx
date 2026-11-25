@@ -100,7 +100,10 @@ export function StudyReview({
   history,
   sessionId,
   continueReading,
+  ordered = false,
 }: {
+  /** The items come in the order given (a plan, a notebook at a time), not by due time. */
+  ordered?: boolean;
   items: (Card | Highlight)[];
   useHighlights: boolean;
   books: StudyBook[];
@@ -161,7 +164,7 @@ export function StudyReview({
   const status = useRef<HTMLParagraphElement>(null);
   const grading = useRef(false);
   const previewing = useRef<string | undefined>(undefined);
-  const queue = reviewQueue(items, practiced, now).filter(
+  const queue = reviewQueue(items, practiced, now, ordered).filter(
     ({ id, schedule }) => practiced || id !== finished?.id || schedule.dueAt !== finished.dueAt,
   );
   const pinned = queue.find(({ id, schedule }) =>

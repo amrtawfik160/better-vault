@@ -31,6 +31,8 @@ const selectionSchema = z.object({
   studyReviewSession: z.string().min(1).max(80).optional(),
   studyReviewIds: z.array(z.string()).optional(),
   studyReviewVault: z.string().optional(),
+  /** Started from the plan: the items come in the order given, a notebook at a time. */
+  studyReviewOrdered: z.literal(true).optional(),
 });
 const reviewIdentity = selectionSchema.extend({ studyReviewSession: z.string().min(1).max(80) });
 const reviewTarget = z.object({ path: z.string().refine(isReviewPath), state: reviewIdentity });
@@ -181,14 +183,13 @@ export function dailyReview(rows: StudyRecord[], now: number) {
   return { items, due, counts, next };
 }
 
-export function reviewQueue(items: ReviewItem[], practiced: string[] | null, now: number) {
+export function reviewQueue(items: ReviewItem[], practiced: string[] | null, now: number, ordered = false) {
   if (practiced) {
     const completed = new Set(practiced);
     return items.filter(({ id }) => !completed.has(id));
   }
-  return items
-    .filter(({ schedule }) => schedule.dueAt <= now)
-    .toSorted((a, b) => a.schedule.dueAt - b.schedule.dueAt);
+  const due = items.filter(({ schedule }) => schedule.dueAt <= now);
+  return ordered ? due : due.toSorted((a, b) => a.schedule.dueAt - b.schedule.dueAt);
 }
 
 const learningWindow = 30 * 60_000;
