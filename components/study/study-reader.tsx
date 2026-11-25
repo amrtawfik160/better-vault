@@ -735,11 +735,12 @@ export function StudyReader({
     });
   }
 
-  function showCompanion(next: ReaderCompanionTab) {
+  /** Opens the companion; Ask shows a hidden tutor session again, unless a passage is asked about. */
+  function showCompanion(next: ReaderCompanionTab, { showTutor = true }: { showTutor?: boolean } = {}) {
     setCompanion(next);
     if (layoutMode !== "column") setContents(null);
     else rememberCompanionPreference("open");
-    if (next === "ask" && tutor && !tutor.visible) tutor.show();
+    if (showTutor && next === "ask" && tutor && !tutor.visible) tutor.show();
   }
 
   /** Closes the companion; over the text, focus goes back to the button that opens it. */
@@ -779,7 +780,11 @@ export function StudyReader({
         event.preventDefault();
         setSearchOpen(false);
         (textBody.current ?? viewport)?.focus({ preventScroll: true });
-      } else if (target?.closest(escapeOwners)) {
+      } else if (
+        target?.closest(escapeOwners) ||
+        // Escape in a field keeps what was typed: it doesn't close the panel around it.
+        target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')
+      ) {
         return;
       } else if (contents) {
         event.preventDefault();
@@ -1148,7 +1153,7 @@ export function StudyReader({
     if (explanation) setChatSeed({ id: crypto.randomUUID(), quote, explanation });
     else setChatQuote(quote);
     if (tutor) leaveTutor();
-    showCompanion("ask");
+    showCompanion("ask", { showTutor: false });
   }
 
   function ask() {
@@ -1164,7 +1169,7 @@ export function StudyReader({
       return;
     }
     if (tutor) leaveTutor();
-    showCompanion("ask");
+    showCompanion("ask", { showTutor: false });
   }
 
   const originalDownload = fileId && originalFile

@@ -670,7 +670,11 @@ export function StudyPracticeTab({
                                 vaultId={vaultId}
                                 materials={writtenMaterials}
                                 setup={setupModel}
-                                created={(session) => written.open(session.id)}
+                                created={(session) => {
+                                  // Started once: coming back to the page must not start another.
+                                  setSuggested((current) => current && { ...current, autoStart: false });
+                                  written.open(session.id);
+                                }}
                                 embedded
                                 preset={suggested?.mode === value ? suggested.preset : undefined}
                                 autoStart={suggested?.mode === value && suggested.autoStart}
