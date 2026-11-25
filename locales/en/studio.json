@@ -762,5 +762,14 @@
     "menu": "Canvas options",
     "rename": "Rename canvas",
     "delete": "Delete canvas"
+  },
+  "frame": {
+    "breadcrumb": "Studio",
+    "generatingTitle": "Making your {{tool}}",
+    "failedTitle": "The {{tool}} couldn't be made",
+    "choicesKept": "Your choices are kept, so trying again needs no setup.",
+    "brokenTitle": "This output can't be shown",
+    "brokenBody": "Its saved content is damaged. The rest of the notebook is fine. You can make it again or delete it from the actions menu.",
+    "makeAgain": "Make it again"
   }
 }
