@@ -19,8 +19,8 @@ Each step leaves the app fully working.
 | 7 | Today (`R5-Today-Win`), Library (`R6-Library`) | Done |
 | 8 | Settings in seven groups (`R6-Settings`), onboarding (`R6-Onboarding`) and the upgrade notice (`R6-Upgrade`) | Done |
 | 9 | Notes and Tools on the new page frame (`R6-Notes`, `R6-Tools`) | Done |
-| 10 | The app sidebar, vault switcher and Notebooks list (`Sidebar`, `R6-Vault`, `R6-Notebooks`), on every page | In progress |
-| 11 | The reader with Contents and its companion (`R3-Fixed`) | In progress |
+| 10 | The app sidebar, vault switcher and Notebooks list (`Sidebar`, `R6-Vault`, `R6-Notebooks`), on every page | Done |
+| 11 | The reader with Contents and its companion (`R3-Fixed`): Contents (outline, highlights, words), Ask with its scope chip, Practise that starts the chapter's exercise, Make; the first-open strip and "You left off here" | Done |
 
 ## Round 1 · Directions (hero screen: the document reader with the companion panel)
 
