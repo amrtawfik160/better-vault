@@ -141,7 +141,8 @@
     "modified": "Modified"
   },
   "calendar": {
-    "title": "Calendar"
+    "title": "Calendar",
+    "scope": "In {{vault}}"
   },
   "study": {
     "sections": "Study sections",

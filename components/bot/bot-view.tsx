@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router";
+import { Add01Icon } from "@hugeicons/core-free-icons";
+import { ToolHeader, useScopeName } from "@/components/common/tool-header";
+import { Icon } from "@/components/icon";
+import { Button } from "@/components/panelui/button";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { useVaultName } from "@/components/home/vault-name";
 import { subscriptionConnectionsAllowed } from "@/lib/ai/cliproxyapi-client";
@@ -41,6 +45,7 @@ const blank: BotDetails = {
 export default function BotView() {
   const { t } = useTranslation("bot");
   const vaultName = useVaultName();
+  const scope = useScopeName();
   const bots = useBots();
   const [params, setParams] = useSearchParams();
   const [editing, setEditing] = useState<{ mode: "create" } | { mode: "edit"; bot: Bot } | null>(
@@ -79,7 +84,14 @@ export default function BotView() {
   if (!bots) return null;
 
   return (
-    <div className="flex h-full min-h-0">
+    <div className="flex h-full min-h-0 flex-col">
+      <ToolHeader title={t("title")} detail={t("header.scope", { vault: scope })}>
+        <Button type="button" size="sm" onClick={() => setEditing({ mode: "create" })}>
+          <Icon icon={Add01Icon} size={16} />
+          <span className="max-sm:sr-only">{t("roster.newBot")}</span>
+        </Button>
+      </ToolHeader>
+      <div className="flex min-h-0 flex-1">
       <aside
         className={cn(
           "min-h-0 w-full shrink-0 border-e border-border md:block md:w-72",
@@ -90,7 +102,6 @@ export default function BotView() {
           bots={bots}
           selected={shown?.id ?? null}
           onSelect={select}
-          onCreate={() => setEditing({ mode: "create" })}
         />
       </aside>
       <section className={cn("min-h-0 min-w-0 flex-1 md:block", selected ? "block" : "hidden")}>
@@ -111,6 +122,7 @@ export default function BotView() {
           </div>
         )}
       </section>
+      </div>
 
       <BotEditorDialog
         open={editing !== null}

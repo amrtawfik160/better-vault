@@ -163,8 +163,8 @@ export function ApprovalCard({
   };
 
   return (
-    <div className="flex w-full max-w-md flex-col gap-1 rounded-2xl border bg-card px-4 py-3.5">
-      <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+    <div className="flex w-full max-w-md flex-col gap-1 rounded-xl border border-input bg-card px-4 py-4">
+      <span className={cn("flex items-center gap-1.5 text-xs text-muted-foreground", (pending || streaming) && "font-medium text-foreground")}>
         <Icon
           icon={name === "add_calendar_event" ? Calendar03Icon : newBot ? BotIcon : Note01Icon}
           size={13}
@@ -188,7 +188,8 @@ export function ApprovalCard({
         <div className="mt-2 flex gap-2">
           <Button
             size="sm"
-            shape="pill"
+            variant="secondary"
+            className="border border-input hover:not-disabled:border-ring"
             disabled={busy !== null}
             aria-busy={busy === true}
             onClick={() => void answer(true)}
@@ -197,8 +198,7 @@ export function ApprovalCard({
           </Button>
           <Button
             size="sm"
-            shape="pill"
-            variant="outline"
+            variant="ghost"
             disabled={busy !== null}
             onClick={() => void answer(false)}
           >
