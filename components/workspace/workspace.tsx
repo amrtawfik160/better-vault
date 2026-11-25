@@ -11,6 +11,7 @@ import { StudioRunnerProvider } from "@/components/studio/studio-runner";
 import { ToolDialog } from "@/components/studio/tool-dialog";
 import { AddSourceDialog } from "@/components/sources/add-source-dialog";
 import { SourceReader } from "@/components/sources/source-reader";
+import { AppFrame, Desk } from "@/components/shell/app-frame";
 import { StudyReturnLinks } from "@/components/study/study-return-links";
 import { useNotebook } from "@/lib/db/notebooks";
 import { studyReturnState } from "@/lib/study/return-links";
@@ -27,13 +28,23 @@ import { studioMakeRequest } from "@/studio/make-link";
 export function Workspace({ notebookId }: { notebookId: string }) {
   const notebook = useNotebook(notebookId);
   if (notebook === undefined) return <div className="h-full" aria-busy="true" />;
-  if (notebook === null) return <NotebookNotFound />;
+  if (notebook === null)
+    return (
+      <AppFrame>
+        <NotebookNotFound />
+      </AppFrame>
+    );
   return (
     <WorkspaceProvider notebook={notebook}>
       {/* The chat makes Studio outputs when asked, so the runner is outside it. */}
       <StudioRunnerProvider notebookId={notebook.id}>
         <ChatProvider notebookId={notebook.id}>
-          <WorkspaceLayout />
+          {/* The app sidebar, then the notebook on its desk: the header, the main column and the companion. */}
+          <AppFrame notebookId={notebook.id}>
+            <Desk>
+              <WorkspaceLayout />
+            </Desk>
+          </AppFrame>
         </ChatProvider>
       </StudioRunnerProvider>
     </WorkspaceProvider>

@@ -34,6 +34,7 @@ export const namespaces = [
   "sources",
   "bot",
   "onboarding",
+  "shell",
 ] as const;
 
 export type Namespace = (typeof namespaces)[number];

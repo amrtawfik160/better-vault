@@ -1,28 +1,22 @@
-import {
-  Add01Icon,
-  ArrowRight01Icon,
-  LayoutRightIcon,
-  Settings01Icon,
-} from "@hugeicons/core-free-icons";
+import { Add01Icon, LayoutRightIcon } from "@hugeicons/core-free-icons";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router";
 import { Icon } from "@/components/icon";
 import { Button } from "@/components/panelui/button";
 import { SettingsSheet } from "@/components/settings/settings-sheet";
+import { SidebarMenuButton } from "@/components/shell/sidebar-state";
 import { useSources } from "@/lib/db/sources";
 import { selectedTextSource } from "@/lib/db/source-text";
-import { routes } from "@/lib/routes";
 import { NotebookMenu } from "./notebook-menu";
 import { useWorkspace } from "./workspace-context";
 
 /**
- * The notebook's one header: Settings and the way back to the notebooks, the
+ * The notebook's one header: the sidebar's menu button on phones, the
  * notebook's name with its menu, then Add, Practise this (the page's one
- * filled button, with its reason) and the companion's toggle.
+ * filled button, with its reason) and the companion's toggle. The app sidebar
+ * beside it holds the way back to the notebooks and Settings.
  */
 export function TopBar() {
   const { t } = useTranslation("workspace");
-  const { t: tSettings } = useTranslation("settings");
   const {
     notebook,
     settingsOpen,
@@ -44,24 +38,18 @@ export function TopBar() {
       data-window-bar
       className="flex min-h-14 shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b px-3 py-2 sm:px-4"
     >
+      {/* Settings opens from the sidebar; this sheet is the one the page's own links (Add a key…) open. */}
       <SettingsSheet
         open={settingsOpen}
         page={settingsPage}
         onOpenChange={setSettingsOpen}
-        trigger={
-          <Button variant="ghost" size="icon-sm" aria-label={tSettings("title")} title={tSettings("title")}>
-            <Icon icon={Settings01Icon} size={16} />
-          </Button>
-        }
+        trigger={<button type="button" hidden aria-hidden tabIndex={-1} />}
       />
-      <nav aria-label={t("header.breadcrumb")} className="flex min-w-0 flex-1 items-center gap-1 text-sm">
-        <Link
-          to={routes.home}
-          className="shrink-0 rounded-md px-1.5 py-1 text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40"
-        >
-          {t("header.notebooks")}
-        </Link>
-        <Icon icon={ArrowRight01Icon} size={14} className="shrink-0 text-muted-foreground rtl:rotate-180" />
+      <SidebarMenuButton className="-ms-2" />
+      <nav
+        aria-label={t("header.breadcrumb")}
+        className="flex min-w-0 flex-1 items-center gap-1 text-sm"
+      >
         <div className="min-w-0">
           <NotebookMenu />
         </div>
