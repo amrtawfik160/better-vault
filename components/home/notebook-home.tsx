@@ -61,6 +61,7 @@ import { useStudyBooks } from "@/lib/db/study";
 import { libraryNotebookIds } from "@/lib/study/library";
 import { isFocusedStudyReader, studyLocation, studySectionOf } from "@/lib/study/links";
 import { cn } from "@/lib/utils";
+import { FirstRun } from "@/components/onboarding/first-run";
 import { FolderDialog } from "./folder-dialogs";
 import {
   FOLDER_DRAG,
@@ -726,6 +727,7 @@ export function NotebookHome() {
         </div>
       ) : null}
 
+      <FirstRun />
       <NotebookDialog
         open={creating !== null}
         onOpenChange={(open) => !open && setCreating(null)}
