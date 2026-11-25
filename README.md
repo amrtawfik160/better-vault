@@ -71,7 +71,7 @@ bun install
 bun run dev
 ```
 
-Open <http://localhost:3000> and choose **Use without an account**. The welcome screens ask you to connect your AI: sign in with ChatGPT, Claude or another plan you already pay for. You can do this later in **Settings → AI subscriptions**, or add an API key or a local model in **Settings → AI providers**.
+Open <http://localhost:3000> and choose **Use without an account**. The welcome screens ask you to connect your AI: sign in with ChatGPT, Claude or another plan you already pay for. You can do this later in **Settings → AI → AI subscriptions**, or add an API key or a local model in **Settings → AI → AI providers**.
 
 ### Production build
 
@@ -83,7 +83,7 @@ bun run start
 ### Local models (Ollama, LM Studio)
 
 1. Install [Ollama](https://ollama.com) or [LM Studio](https://lmstudio.ai) and download a model (for example `ollama pull llama3.2`).
-2. In deepLe, open **Settings → AI providers**, enable Ollama or LM Studio and check the address (`http://localhost:11434` for Ollama, `http://localhost:1234` for LM Studio).
+2. In deepLe, open **Settings → AI → AI providers**, enable Ollama or LM Studio and check the address (`http://localhost:11434` for Ollama, `http://localhost:1234` for LM Studio).
 3. Pick the model in the prompt bar.
 
 Local models work when deepLe runs on the same machine as the model server. Web search is only available with providers that have it built in (OpenAI, Anthropic, Google).
@@ -110,7 +110,7 @@ deepLe builds on [Better Vault](https://github.com/better-vault/better-vault). T
 
 ### Connect an AI subscription
 
-Open **Settings → AI subscriptions**, choose a provider, and approve the sign-in in your browser. ChatGPT, Claude, Antigravity, Grok, both Kimi portals, Devin, and Muse Code are available. When a provider shows a one-time code, enter it in the provider's sign-in page. Connected models appear in the Chat, Bots, and Studio model pickers.
+Open **Settings → AI → AI subscriptions**, choose a provider, and approve the sign-in in your browser. ChatGPT, Claude, Antigravity, Grok, both Kimi portals, Devin, and Muse Code are available. When a provider shows a one-time code, enter it in the provider's sign-in page. Connected models appear in the Chat, Bots, and Studio model pickers.
 
 The desktop installer includes CLIProxyAPI. A web app started on loopback with `bun run dev` or `bun run start` installs the pinned, checksum-verified proxy on first use. The app starts and restarts it automatically. The proxy keeps credentials under `~/.better-vault/cliproxyapi` by default. The app sends relevant notebook context through the proxy to the provider you select.
 
@@ -118,7 +118,7 @@ Use **Reconnect** or **Disconnect** beside an account to manage it.
 
 ## 🔐 Where your data lives
 
-Notebooks, sources, chats, Studio outputs and API keys stay on your device: in your browser's IndexedDB in the web app, or in `better-vault.sqlite` in the app's data folder in the desktop app. **Settings → Data** exports and imports notebooks as a JSON file, which also moves them between the two.
+Notebooks, sources, chats, Studio outputs and API keys stay on your device: in your browser's IndexedDB in the web app, or in `better-vault.sqlite` in the app's data folder in the desktop app. **Settings → Storage and data** exports and imports notebooks as a JSON file, which also moves them between the two.
 
 Each request sends your key to the app's own API route, which passes it to the provider and never stores or logs it. If you host better-vault for other people, they use their own keys in their own browsers.
 
