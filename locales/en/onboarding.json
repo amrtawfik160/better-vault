@@ -1,0 +1,55 @@
+{
+  "step": "Step {{current}} of {{total}}",
+  "back": "Back",
+  "continue": "Continue",
+  "welcome": {
+    "title": "Welcome to Better Vault",
+    "lead": "Bring your material, understand it, practise it, and remember it.",
+    "body": "Books, PDFs, articles, YouTube lectures and your own notes. Everything stays on this device, and you choose the AI, or none.",
+    "steps": "Three short steps: your name, your AI, your first material. The AI is optional."
+  },
+  "name": {
+    "title": "What should we call you?",
+    "description": "Your name appears in the app, on this device only.",
+    "label": "Your name",
+    "hint": "Optional. You can change it in Settings."
+  },
+  "ai": {
+    "title": "Choose your AI",
+    "description": "Ask, Practice and Make use it. It is optional: reading, highlights, cards and review work without one, and you can add it later in Settings.",
+    "connected": "An AI is connected. You can change it any time in Settings.",
+    "open": "Connect an AI",
+    "key": "Your own key",
+    "keyBody": "OpenAI, Anthropic, Google, OpenCode. You pay the provider for what you use, and the key stays on this device.",
+    "local": "A local model",
+    "localBody": "Ollama, LM Studio. Free, and runs on your computer, so nothing leaves your device.",
+    "plan": "Better Vault AI",
+    "planBody": "From $4.99 a month. It needs an account; your notebooks stay on this device.",
+    "skip": "Skip for now"
+  },
+  "material": {
+    "title": "Add your first material",
+    "description": "One box takes anything. It opens in the reader, ready to ask about.",
+    "label": "Link or text to add",
+    "placeholder": "Paste a link or some text",
+    "file": "Choose a file",
+    "examples": "For example: a YouTube lecture, a PDF, an article, your notes.",
+    "goesTo": "Goes to {{notebook}}, where new material lands. You can move it later.",
+    "inbox": "Inbox",
+    "add": "Add to Inbox",
+    "skip": "Skip, I'll add later",
+    "failed": "Couldn't add that. {{error}}"
+  },
+  "upgrade": {
+    "eyebrow": "Better Vault has been updated",
+    "title": "A few things have moved",
+    "notebooks": "Your books now live in notebooks",
+    "notebooksBody": "Each one is in the sidebar under Notebooks, and all of them are in Library.",
+    "chats": "Your chats are in one history",
+    "chatsBody": "Notebook chats and reader questions are together now. Open History in Ask.",
+    "review": "All your flashcards are in Review",
+    "reviewBody": "One deck. Each card still belongs to its notebook.",
+    "footer": "Nothing else changes. Everything you had is still here, on this device.",
+    "done": "Got it"
+  }
+}

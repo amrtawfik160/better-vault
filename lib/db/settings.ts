@@ -40,6 +40,10 @@ export interface ChatGPTAccountLabel {
 }
 
 export interface AppSettings {
+  /** The first-run flow was finished or skipped; it never shows again. */
+  onboardingDone?: boolean;
+  /** The one-time "what changed" notice was dismissed. */
+  upgradeNoticeSeen?: boolean;
   providers: Record<ProviderId, ProviderSettings>;
   /** The model chosen in the prompt bar, and the default for features with no choice of their own. */
   model: ModelRef | null;
@@ -114,6 +118,8 @@ function withDefaults(saved: Partial<AppSettings> | undefined): AppSettings {
   base.modelChoices = saved.modelChoices;
   base.favoriteModels = saved.favoriteModels ?? [];
   base.study = saved.study;
+  if (saved.onboardingDone) base.onboardingDone = true;
+  if (saved.upgradeNoticeSeen) base.upgradeNoticeSeen = true;
   return base;
 }
 
