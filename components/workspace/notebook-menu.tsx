@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { RenameDialog } from "@/components/common/rename-dialog";
 import { Icon } from "@/components/icon";
+import { Button } from "@/components/panelui/button";
 import { Menu } from "@/components/panelui/menu";
 import { NotebookDialog } from "@/components/home/notebook-dialog";
 import { useFolders } from "@/lib/db/folders";
@@ -37,7 +38,13 @@ export function NotebookMenu() {
       <Menu>
         <Menu.Trigger
           aria-label={t("notebookMenu")}
-          className="flex max-w-full min-w-0 cursor-pointer items-center gap-1 rounded-lg px-2 py-1.5 text-start outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+          title={notebook.title}
+          render={
+            <Button
+              variant="ghost"
+              className="h-auto max-w-full min-w-0 shrink justify-start gap-1 rounded-lg px-2 py-1.5 text-start active:not-disabled:scale-100 max-sm:min-h-11"
+            />
+          }
         >
           <Icon
             icon={notebookIcon(notebook.icon)}
