@@ -517,7 +517,7 @@ export default function NotesWorkspace() {
   const noteCount = world.notes.filter((each) => each.vaultId === vaultId).length;
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-card">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-card md:rounded-xl md:border">
       {/* One header: the page, then the graph, the keys and the one filled button. */}
       <ToolHeader
         title={t("title")}

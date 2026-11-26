@@ -405,13 +405,12 @@ export function NotebookHome() {
     >
       {panelPage ? (
         <>
-          {/* Study's bar; Notes and the tools draw their own header, so phones only keep it for the menu. */}
+          {/* Study's bar. Notes and the tools draw their own header, with the phone's menu button in it. */}
           <header
             data-window-bar
             className={cn(
               "flex min-h-13 shrink-0 items-center gap-2 ps-5 pe-2 max-md:ps-1",
-              fullPage && "md:hidden",
-              focusedReader && "hidden",
+              (fullPage || focusedReader) && "hidden",
             )}
           >
             <SidebarMenuButton />
@@ -433,7 +432,8 @@ export function NotebookHome() {
           <main
             className={cn(
               "min-h-0 flex-1",
-              !focusedReader && section !== "bot" && section !== "calendar" && "max-md:px-2 max-md:pb-2",
+              // On phones Notes and Skills meet the screen's edges, like the desk.
+              studying && !focusedReader && "max-md:px-2 max-md:pb-2",
             )}
           >
             <Suspense
@@ -489,11 +489,12 @@ export function NotebookHome() {
                 <Icon icon={Add01Icon} size={16} strokeWidth={1.5} className="text-muted-foreground" />
                 <span className="max-sm:sr-only">{tShell("list.add")}</span>
               </AddButton>
+              {/* On phones New folder moves into More, so the page's name keeps its room. */}
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setCreatingFolder(true)}
-                className="max-md:h-11"
+                className="max-sm:hidden max-md:h-11"
               >
                 <Icon icon={FolderAddIcon} size={16} strokeWidth={1.5} className="text-muted-foreground" />
                 <span className="max-sm:sr-only">{tShell("list.newFolder")}</span>
@@ -513,6 +514,10 @@ export function NotebookHome() {
                   <Icon icon={MoreHorizontalIcon} size={16} strokeWidth={1.5} />
                 </Menu.Trigger>
                 <Menu.Content align="end">
+                  <Menu.Item onClick={() => setCreatingFolder(true)} className="sm:hidden">
+                    <Icon icon={FolderAddIcon} />
+                    {tShell("list.newFolder")}
+                  </Menu.Item>
                   <Menu.Item onClick={() => importInput.current?.click()}>
                     <Icon icon={FileImportIcon} />
                     {tShell("list.importFiles")}
@@ -771,7 +776,7 @@ export function NotebookHome() {
                               className="group/library"
                               open={!subjectNotebooks?.length && !shownFolders.length ? true : undefined}
                             >
-                              <summary className="flex w-fit cursor-pointer list-none items-center gap-2 rounded-md py-1 text-xs font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 [&::-webkit-details-marker]:hidden">
+                              <summary className="flex w-fit cursor-pointer list-none items-center gap-2 rounded-md py-1 text-xs max-md:min-h-11 font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 [&::-webkit-details-marker]:hidden">
                                 <Icon
                                   icon={ArrowRight01Icon}
                                   size={14}

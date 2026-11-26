@@ -76,7 +76,7 @@ export default function SkillsWorkspace() {
   if (!skills) return null;
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-card">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-card md:rounded-xl md:border">
       <ToolHeader title={t("skillsTitle")} detail={t("skills.scope", { vault: scope })}>
         {/* Import stays even in a vault with no skills yet: it is how existing SKILL.md files come in. */}
         {skills ? (
