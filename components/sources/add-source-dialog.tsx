@@ -26,7 +26,7 @@ import { Input } from "@/components/panelui/input";
 import { Select } from "@/components/panelui/select";
 import { Textarea } from "@/components/panelui/textarea";
 import { createNotebook, useNotebooks } from "@/lib/db/notebooks";
-import { vaultOf } from "@/lib/db/vaults";
+import { DEFAULT_VAULT, vaultOf } from "@/lib/db/vaults";
 import {
   ACCEPTED_FILES,
   IngestError,
@@ -59,13 +59,16 @@ type Mode = "main" | "cloud" | "media";
 const WEB_ADDRESS = /^https?:\/\/\S+$/i;
 
 interface AddSourceDialogProps {
-  notebookId: string;
+  /** The notebook offered first. Without one (a vault with no notebook yet), a new one is made on Add. */
+  notebookId?: string;
+  /** The vault a notebook made here goes to, when there is no `notebookId`. */
+  vaultId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
 /** One box for a link, files or pasted text, and the notebook it goes to. */
-export function AddSourceDialog({ notebookId, open, onOpenChange }: AddSourceDialogProps) {
+export function AddSourceDialog({ notebookId, vaultId, open, onOpenChange }: AddSourceDialogProps) {
   const { t } = useTranslation("sources");
   const { t: tCommon } = useTranslation();
   // Google's Picker opens over the dialog, outside it: a press or Escape there must not close it.
@@ -79,15 +82,24 @@ export function AddSourceDialog({ notebookId, open, onOpenChange }: AddSourceDia
     >
       <Dialog.Content size="lg" closeLabel={tCommon("actions.close")}>
         <Dialog.Header title={t("addDialog.title")} description={t("addDialog.description")} />
-        <AddSourceForm notebookId={notebookId} onDone={() => onOpenChange(false)} />
+        <AddSourceForm notebookId={notebookId} vaultId={vaultId} onDone={() => onOpenChange(false)} />
       </Dialog.Content>
     </Dialog>
   );
 }
 
-function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () => void }) {
+function AddSourceForm({
+  notebookId,
+  vaultId,
+  onDone,
+}: {
+  notebookId?: string;
+  vaultId?: string;
+  onDone: () => void;
+}) {
   const { t } = useTranslation("sources");
   const { t: tCommon } = useTranslation();
+  const { t: tHome } = useTranslation("home");
   const formId = useId();
   const sourceId = useId();
   const whereId = useId();
@@ -96,8 +108,10 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
   const field = useRef<HTMLTextAreaElement>(null);
   const [mode, setMode] = useState<Mode>("main");
   const [source, setSource] = useState("");
-  const [target, setTarget] = useState(notebookId);
-  const [creating, setCreating] = useState(false);
+  const [target, setTarget] = useState(notebookId ?? "");
+  // With no notebook yet, the name of the one Add makes is asked for at once (it may stay empty).
+  const [creating, setCreating] = useState(!notebookId);
+  const [focusName, setFocusName] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -125,14 +139,15 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
         : "text";
   const choices = useMemo(() => {
     const current = notebooks?.find((notebook) => notebook.id === notebookId);
+    const vault = current ? vaultOf(current) : vaultId;
     const sameVault = (notebooks ?? []).filter(
-      (notebook) => !current || vaultOf(notebook) === vaultOf(current),
+      (notebook) => !vault || vaultOf(notebook) === vault,
     );
     const others = sameVault.filter((notebook) => notebook.id !== notebookId);
     const picked = others.find((notebook) => notebook.id === target);
     const rest = others.filter((notebook) => notebook.id !== target);
     return [...(current ? [current] : []), ...(picked ? [picked] : []), ...rest];
-  }, [notebooks, notebookId, target]);
+  }, [notebooks, notebookId, vaultId, target]);
   const targetTitle = choices.find((notebook) => notebook.id === target)?.title ?? "";
   const locked = busy || geminiBusy;
 
@@ -146,10 +161,34 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
   }
 
   /** Runs the adds, reports what happened and closes when everything worked. */
-  async function run(tasks: (() => Promise<unknown>)[]) {
+  /** Where things go: the chosen notebook, or, in a vault with none, a new one named as typed. */
+  async function ensureTarget(): Promise<string> {
+    if (target) return target;
+    const id = await createNotebook(newTitle.trim() || tHome("untitled"), notebookVault());
+    setTarget(id);
+    setCreating(false);
+    setNewTitle("");
+    return id;
+  }
+
+  function notebookVault() {
+    const current = notebooks?.find((notebook) => notebook.id === notebookId);
+    if (current) return { vaultId: current.vaultId };
+    return vaultId && vaultId !== DEFAULT_VAULT ? { vaultId } : {};
+  }
+
+  async function run(tasks: ((notebook: string) => Promise<unknown>)[]) {
     setBusy(true);
     setErrors([]);
-    const results = await Promise.allSettled(tasks.map((task) => task()));
+    let notebook: string;
+    try {
+      notebook = await ensureTarget();
+    } catch (error) {
+      setBusy(false);
+      setErrors([describe(error)]);
+      return;
+    }
+    const results = await Promise.allSettled(tasks.map((task) => task(notebook)));
     setBusy(false);
     const added = results.filter((result) => result.status === "fulfilled").length;
     const failed = results.flatMap((result) =>
@@ -167,7 +206,7 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
     setLinkFailure(undefined);
     setUncaptioned(undefined);
     try {
-      await ingestUrl(target, address);
+      await ingestUrl(await ensureTarget(), address);
       toast.success(t("added", { count: 1 }));
       onDone();
     } catch (error) {
@@ -189,14 +228,13 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
 
   function addFiles(files: FileList | File[]) {
     const list = [...files];
-    if (list.length > 0) void run(list.map((file) => () => ingestFile(target, file)));
+    if (list.length > 0) void run(list.map((file) => (notebook) => ingestFile(notebook, file)));
   }
 
   async function makeNotebook() {
     const title = newTitle.trim();
     if (!title) return;
-    const current = notebooks?.find((notebook) => notebook.id === notebookId);
-    const id = await createNotebook(title, current ? { vaultId: current.vaultId } : {});
+    const id = await createNotebook(title, notebookVault());
     setTarget(id);
     setCreating(false);
     setNewTitle("");
@@ -212,9 +250,9 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
     if (!canSubmit) return;
     if (mode === "media") {
       void run([
-        () =>
+        (notebook) =>
           ingestText(
-            target,
+            notebook,
             transcript.title.trim(),
             transcriptDraftDocument(transcript),
             transcriptDraftLink(transcript),
@@ -223,7 +261,8 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
     } else if (kind === "text") {
       const firstLine = pastedTitle(trimmed);
       void run([
-        () => ingestText(target, firstLine || t("addDialog.textTitlePlaceholder"), source),
+        (notebook) =>
+          ingestText(notebook, firstLine || t("addDialog.textTitlePlaceholder"), source),
       ]);
     } else {
       void addLink(trimmed);
@@ -272,7 +311,9 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
             onChoose={(service, files) => {
               const client = storageClient(service, storage[service]);
               return run(
-                files.map((file) => async () => ingestFile(target, await client.download(file))),
+                files.map(
+                  (file) => async (notebook) => ingestFile(notebook, await client.download(file)),
+                ),
               );
             }}
           />
@@ -434,21 +475,22 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
           </span>
           {creating ? (
             <Input
-              autoFocus
+              autoFocus={focusName}
               size="sm"
               value={newTitle}
               aria-label={t("addDialog.newNotebookLabel")}
-              placeholder={t("addDialog.newNotebookPlaceholder")}
+              // With no notebook yet, Add makes this one: an empty name keeps the default.
+              placeholder={target ? t("addDialog.newNotebookPlaceholder") : tHome("untitled")}
               onChange={(event) => setNewTitle(event.target.value)}
               onBlur={() => {
-                if (!newTitle.trim()) setCreating(false);
+                if (!newTitle.trim() && target) setCreating(false);
               }}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
                   event.preventDefault();
                   event.stopPropagation();
                   void makeNotebook();
-                } else if (event.key === "Escape") {
+                } else if (event.key === "Escape" && target) {
                   event.stopPropagation();
                   setCreating(false);
                 }
@@ -483,7 +525,10 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
                 variant="ghost"
                 size="sm"
                 disabled={locked}
-                onClick={() => setCreating(true)}
+                onClick={() => {
+                  setFocusName(true);
+                  setCreating(true);
+                }}
               >
                 <Icon icon={Add01Icon} size={14} />
                 {t("addDialog.newNotebook")}
