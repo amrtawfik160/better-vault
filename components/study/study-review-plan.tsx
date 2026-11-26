@@ -98,7 +98,7 @@ export function StudyReviewPlan({
 
         {dueCount ? (
           <>
-            <fieldset className="space-y-0">
+            <fieldset className="min-w-0 space-y-0">
               <legend className="mb-1 text-sm font-medium">{t("study.reviewPlan.include")}</legend>
               {plan.map((group) => {
                 const on = included.has(group.notebookId);
