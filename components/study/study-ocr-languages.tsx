@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Select } from "@/components/panelui/select";
 import { getStudyOcrStatus, type StudyOcrStatus } from "@/lib/study/ocr-client";
 
 function languageName(code: string, names: Intl.DisplayNames) {
@@ -44,21 +45,53 @@ export function StudyOcrLanguageFields({ choice, disabled }: {
   disabled: boolean;
 }) {
   const { t } = useTranslation("home");
+  const primary = choice.options.map(({ code, name }) => ({ value: code, label: name }));
+  const additional = [
+    { value: "", label: t("study.scan.singleLanguage") },
+    ...primary.filter(({ value }) => value !== choice.chosen),
+  ];
   return (
     <>
-      <label className="grid min-w-0 flex-1 gap-1 text-sm">
-        {t("study.scan.language")}
-        <select value={choice.chosen} disabled={disabled} onChange={(event) => choice.setPrimary(event.target.value)} className="w-full rounded-lg border bg-background p-2">
-          {choice.options.map(({ code, name }) => <option key={code} value={code}>{name}</option>)}
-        </select>
-      </label>
-      <label className="grid min-w-0 flex-1 gap-1 text-sm">
-        {t("study.scan.additionalLanguage")}
-        <select value={choice.secondary} disabled={disabled} onChange={(event) => choice.setAdditional(event.target.value)} className="w-full rounded-lg border bg-background p-2">
-          <option value="">{t("study.scan.singleLanguage")}</option>
-          {choice.options.filter(({ code }) => code !== choice.chosen).map(({ code, name }) => <option key={code} value={code}>{name}</option>)}
-        </select>
-      </label>
+      <div className="grid min-w-0 flex-1 gap-1 text-sm">
+        <span>{t("study.scan.language")}</span>
+        <Select
+          items={primary}
+          value={choice.chosen}
+          disabled={disabled}
+          onValueChange={(value) => typeof value === "string" && choice.setPrimary(value)}
+        >
+          <Select.Trigger aria-label={t("study.scan.language")} className="w-full">
+            <Select.Value />
+          </Select.Trigger>
+          <Select.Content>
+            {primary.map(({ value, label }) => (
+              <Select.Item key={value} value={value}>
+                {label}
+              </Select.Item>
+            ))}
+          </Select.Content>
+        </Select>
+      </div>
+      <div className="grid min-w-0 flex-1 gap-1 text-sm">
+        <span>{t("study.scan.additionalLanguage")}</span>
+        <Select
+          items={additional}
+          value={choice.secondary}
+          disabled={disabled}
+          onValueChange={(value) => typeof value === "string" && choice.setAdditional(value)}
+        >
+          <Select.Trigger aria-label={t("study.scan.additionalLanguage")} className="w-full">
+            <Select.Value />
+          </Select.Trigger>
+          <Select.Content>
+            {additional.map(({ value, label }) => (
+              <Select.Item key={value} value={value}>
+                {label}
+              </Select.Item>
+            ))}
+          </Select.Content>
+        </Select>
+      </div>
     </>
   );
 }

@@ -225,7 +225,8 @@ function highlighted(
     const lineOffset = start;
     start = end;
     const block = (
-      <span key={lineOffset} dir={direction} className="block">
+      // A blank line between paragraphs is half a line high: a paragraph gap, not a full empty line.
+      <span key={lineOffset} dir={direction} className={cn("block", !line.trim() && "h-[0.5lh] overflow-hidden")}>
         {content}
       </span>
     );
@@ -1453,6 +1454,7 @@ export function StudyReader({
             <Button
               size="sm"
               variant="ghost"
+              className="max-sm:h-11"
               onClick={() => {
                 setStrip(false);
                 rememberFirstOpen(book.id, "done");

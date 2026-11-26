@@ -4,6 +4,7 @@ import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { Button } from "@/components/panelui/button";
 import { Dialog } from "@/components/panelui/dialog";
 import { Input } from "@/components/panelui/input";
+import { Select } from "@/components/panelui/select";
 import { Textarea } from "@/components/panelui/textarea";
 import { saveStudyOcrPages, studyId, StudyTextConflict, writeStudyOcrDraft } from "@/lib/db/study";
 import { recognizeStudyPdfPages, renderStudyOcrPreview, type StudyOcrBatchEvent } from "@/lib/study/ocr-client";
@@ -90,6 +91,13 @@ export function StudyBatchOcr({ book, fileId, page, draft, onClose, onSave }: {
   const reviewed = drafts.filter((page) => page.reviewed && page.text.trim());
   const active = selected !== undefined && results.has(selected) ? selected : ordered[0]?.[0];
   const result = active === undefined ? undefined : results.get(active);
+  const pageOptions = ordered.map(([index, item]) => ({
+    value: index,
+    label: t("study.scan.pageOption", {
+      title: book.sections[index].title,
+      status: t(item.kind === "error" ? "study.scan.unreadable" : item.page.reviewed ? "study.scan.approved" : "study.scan.pendingReview"),
+    }),
+  }));
 
   function replaceResults(next: Map<number, Result>) {
     resultsRef.current = next;
@@ -241,15 +249,25 @@ export function StudyBatchOcr({ book, fileId, page, draft, onClose, onSave }: {
             </p>
             {active !== undefined ? (
               <section className="space-y-3 border-t pt-3">
-                <label className="grid gap-1 text-sm">
-                  {t("study.scan.reviewPage")}
-                  <select value={active} onChange={(event) => setSelected(Number(event.target.value))} className="rounded-lg border bg-background p-2">
-                    {ordered.map(([index, item]) => <option key={index} value={index}>{t("study.scan.pageOption", {
-                      title: book.sections[index].title,
-                      status: t(item.kind === "error" ? "study.scan.unreadable" : item.page.reviewed ? "study.scan.approved" : "study.scan.pendingReview"),
-                    })}</option>)}
-                  </select>
-                </label>
+                <div className="grid gap-1 text-sm">
+                  <span>{t("study.scan.reviewPage")}</span>
+                  <Select
+                    items={pageOptions}
+                    value={active}
+                    onValueChange={(value) => typeof value === "number" && setSelected(value)}
+                  >
+                    <Select.Trigger aria-label={t("study.scan.reviewPage")} className="w-full">
+                      <Select.Value />
+                    </Select.Trigger>
+                    <Select.Content>
+                      {pageOptions.map(({ value, label }) => (
+                        <Select.Item key={value} value={value}>
+                          {label}
+                        </Select.Item>
+                      ))}
+                    </Select.Content>
+                  </Select>
+                </div>
                 {result?.kind === "draft" ? (
                   <>
                     <div className="grid items-start gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">

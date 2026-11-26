@@ -275,7 +275,15 @@ function SessionSetup({
         <p className="text-sm text-muted-foreground">{t(`study.goals.simulation.${simulation}.hint`)}</p>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" size={embedded ? "md" : "sm"} disabled={!ready || openingPractice} loading={starting}>
+        {/* Outside an exercise row (a new conversation) Start is tonal: the chosen exercise keeps the filled button. */}
+        <Button
+          type="submit"
+          size={embedded ? "md" : "sm"}
+          variant={embedded ? "default" : "secondary"}
+          className={embedded ? undefined : "border border-input"}
+          disabled={!ready || openingPractice}
+          loading={starting}
+        >
           {t(embedded ? "study.practicePage.start" : "study.practice.start")}
         </Button>
         {cancel ? (
@@ -296,9 +304,12 @@ function Preferences() {
     ...studyCorrections.map((value) => ({ value, label: t(`study.practice.correctionOptions.${value}`) })),
   ];
   return (
-    <details className="rounded-2xl border p-3 text-sm">
-      <summary className="cursor-pointer font-medium">{t("study.practice.preferences")}</summary>
-      <div className="mt-3 grid gap-3">
+    <details className="group rounded-2xl border text-sm">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-2xl px-4 font-medium outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 [&::-webkit-details-marker]:hidden">
+        <Icon icon={ArrowDown01Icon} size={16} className="text-muted-foreground transition-transform group-open:rotate-180" />
+        {t("study.practice.preferences")}
+      </summary>
+      <div className="grid gap-3 px-4 pt-1 pb-4">
         <div className="flex flex-wrap items-center gap-3">
           <span>{t("study.practice.corrections")}</span>
           <Select
@@ -836,7 +847,10 @@ function Suggestion({
         <span className="font-medium">{title}</span>
         <span className="text-muted-foreground"> · {detail}</span>
       </p>
+      {/* Tonal: the chosen exercise's Start practice below is the page's one filled button. */}
       <Button
+        variant="secondary"
+        className="border border-input"
         disabled={disabled}
         onClick={() =>
           suggestion.kind === "resume"

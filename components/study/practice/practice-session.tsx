@@ -83,7 +83,7 @@ export function PracticeQuestionsSession({
                   aria-label={t("study.writingPractice.goToQuestion", { number: index + 1 })}
                   onClick={() => go(index)}
                   className={
-                    "size-7 cursor-pointer rounded-full border text-xs tabular-nums outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 " +
+                    "size-8 cursor-pointer rounded-full border text-xs tabular-nums outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 " +
                     (index === position ? "border-ring font-semibold " : "") +
                     (verdict === "correct"
                       ? "bg-success/15 text-success"

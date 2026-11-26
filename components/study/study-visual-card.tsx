@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/panelui/button";
 import { Dialog } from "@/components/panelui/dialog";
 import { Input } from "@/components/panelui/input";
+import { Select } from "@/components/panelui/select";
 import { Textarea } from "@/components/panelui/textarea";
 import { textDirection } from "@/lib/text/direction";
 import { fullStudyImage, studyCardImage, studyImageAnchor, type StudyImageCapture } from "@/lib/study/visual-card";
@@ -81,20 +82,26 @@ export function StudyVisualCard({
               onReady={() => setReady(true)}
               busy={saving}
             />
-            <label className="grid gap-1.5 text-sm font-medium">
-              {t("study.visualCard.imageSide")}
-              <select
+            <div className="grid gap-1.5 text-sm font-medium">
+              <span>{t("study.visualCard.imageSide")}</span>
+              <Select
+                items={[
+                  { value: "question", label: t("study.visualCard.question") },
+                  { value: "answer", label: t("study.visualCard.answer") },
+                ]}
                 value={side}
-                onChange={(event) =>
-                  setSide(event.target.value === "answer" ? "answer" : "question")
-                }
                 disabled={saving}
-                className="w-fit rounded-xl border bg-background px-3 py-2 text-sm"
+                onValueChange={(value) => setSide(value === "answer" ? "answer" : "question")}
               >
-                <option value="question">{t("study.visualCard.question")}</option>
-                <option value="answer">{t("study.visualCard.answer")}</option>
-              </select>
-            </label>
+                <Select.Trigger aria-label={t("study.visualCard.imageSide")} className="w-fit">
+                  <Select.Value />
+                </Select.Trigger>
+                <Select.Content>
+                  <Select.Item value="question">{t("study.visualCard.question")}</Select.Item>
+                  <Select.Item value="answer">{t("study.visualCard.answer")}</Select.Item>
+                </Select.Content>
+              </Select>
+            </div>
             <label className="grid gap-1.5 text-sm font-medium">
               {t("study.visualCard.question")}
               <Input

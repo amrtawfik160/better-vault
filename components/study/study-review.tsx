@@ -101,7 +101,10 @@ export function StudyReview({
   sessionId,
   continueReading,
   ordered = false,
+  back,
 }: {
+  /** Where the session's back link goes: the Review plan when it started there; Today otherwise. */
+  back?: { href: string; label: string };
   /** The items come in the order given (a plan, a notebook at a time), not by due time. */
   ordered?: boolean;
   items: (Card | Highlight)[];
@@ -328,7 +331,7 @@ export function StudyReview({
   const sourceBook = highlightBook ?? books.find(({ id }) => id === sourceBookId);
   const source =
     item?.kind === "highlight"
-      ? [sourceBook?.title, sourceBook?.sections[item.section]?.title].filter(Boolean).join(" · ")
+      ? [...new Set([sourceBook?.title, sourceBook?.sections[item.section]?.title].filter(Boolean))].join(" · ")
       : (sourceBook?.title ?? (word ? word.language : item?.tags[0]));
   const counts = Object.fromEntries(
     studyRatings.map((rating) => [rating, grades.filter((review) => review.rating === rating).length]),
@@ -351,11 +354,11 @@ export function StudyReview({
     <section className="mx-auto max-w-2xl space-y-4" aria-labelledby="study-review-title" onKeyDown={keydown}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link
-          to={studyHref("today", { vault: vaultId })}
+          to={back?.href ?? studyHref("today", { vault: vaultId })}
           className={buttonVariants({ variant: "ghost", size: "sm", className: "-ms-2" })}
         >
           <Icon icon={ArrowLeft01Icon} className="rtl:rotate-180" />
-          {t("study.tabs.today")}
+          {back?.label ?? t("study.tabs.today")}
         </Link>
         <p className="text-sm text-muted-foreground tabular-nums">
           {practiced

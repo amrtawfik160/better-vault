@@ -476,7 +476,8 @@ export function StudySelectionMenu({
       data-study-selection-menu=""
       style={{ visibility: "hidden" }}
       className={cn(
-        "pointer-events-auto absolute top-0 left-0 z-30 w-max max-w-[min(46rem,calc(100%-1rem))] rounded-2xl border bg-popover p-1.5 text-popover-foreground shadow-lg",
+        // Above the Contents panel (z-30), which can sit over the start of the text.
+        "pointer-events-auto absolute top-0 left-0 z-40 w-max max-w-[min(46rem,calc(100%-1rem))] rounded-2xl border bg-popover p-1.5 text-popover-foreground shadow-lg",
         "animate-in fade-in-0 zoom-in-95 duration-150 motion-reduce:animate-none",
         view !== "actions" && "w-[min(30rem,calc(100%-1rem))]",
       )}

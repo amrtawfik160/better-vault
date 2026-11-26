@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  ArrowLeft01Icon,
   BulbIcon,
   Cards01Icon,
   Flowchart01Icon,
@@ -39,6 +40,9 @@ import { visualText } from "@/lib/chat/visual-text";
 import { notebookChatHref, originHref, studyCitationOrigin, studyHref, tutorCardsScope } from "@/lib/study/links";
 import { Button, buttonVariants } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
+import { Select } from "@/components/panelui/select";
+import { Switch } from "@/components/panelui/switch";
+import { Textarea } from "@/components/panelui/textarea";
 import { AIModelPicker } from "@/components/ai/ai-model-picker";
 import { modelFor, useSettings, type ModelUse } from "@/lib/db/settings";
 import { isPracticeThread } from "@/lib/study/practice";
@@ -95,15 +99,6 @@ import { SelectableText } from "@/components/selection/selectable-text";
 export function simulationGoal(goal: StudyThread["goal"]) {
   if (goal === "technical-interview" || goal === "meeting-simulation") return goal;
 }
-const scopeLabels = {
-  passage: "Selection",
-  chapter: "Current section",
-  book: "Whole book",
-  notes: "Selected notes",
-  general: "General",
-};
-const correctionLabels = { live: "During the conversation", report: "At the end", off: "Off" };
-const optionClass = "rounded-lg border bg-background p-2 text-sm";
 type VoiceCapture = {
   abort: AbortController;
   stop?: () => void;
@@ -312,6 +307,42 @@ export function StudyTutor({
     dateStyle: "medium",
     timeStyle: "medium",
   });
+  const reportOptions = reports.map((entry, index) => ({
+    value: studyReportKey(entry),
+    label:
+      index === 0
+        ? t("study.followUps.latest")
+        : entry.generatedAt === undefined
+          ? t("study.followUps.earlier")
+          : reportDate.format(entry.generatedAt),
+  }));
+  const contextOptions = studyScopes
+    .filter((scope) =>
+      scope === "image"
+        ? !!thread.imageContext
+        : scope === "general" ||
+          scope === "notes" ||
+          scope === "materials" ||
+          scope === "cards" ||
+          (book && (scope !== "passage" || thread.quote)),
+    )
+    .map((scope) => ({
+      value: scope,
+      label:
+        scope === "materials"
+          ? t("study.materials.scope")
+          : scope === "cards"
+            ? t("study.materials.cards")
+            : scope === "image"
+              ? t("study.reader.imageContext")
+              : scope === "passage"
+                ? t("study.tutor.scopePassage")
+                : t(`study.practice.scopes.${scope}`),
+    }));
+  const correctionOptions = studyCorrections.map((value) => ({
+    value,
+    label: t(`study.practice.correctionOptions.${value}`),
+  }));
   const conversation = [
     ...thread.messages.map((entry, index) => ({ entry, index })),
     ...temporaryTurns.map((entry) => ({ entry, index: undefined })),
@@ -463,8 +494,8 @@ export function StudyTutor({
             : current.scope === "materials"
             ? t("study.materials.noReadableSelection")
             : current.scope === "notes"
-              ? "Choose a note with text first."
-              : "This scope has no readable text. Choose another context.",
+              ? t("study.tutor.noNoteText")
+              : t("study.tutor.noScopeText"),
         );
       const cardOrigin = passages[0]?.origin;
       const practiceCardId = cardOrigin?.kind === "card" ? cardOrigin.cardId : undefined;
@@ -824,9 +855,9 @@ export function StudyTutor({
       imageReferences,
     })
       .then((note) =>
-        toast.success("Saved to Notes", {
+        toast.success(t("study.tutor.savedToNotes"), {
           action: {
-            label: "Open note",
+            label: t("study.tutor.openNote"),
             onClick: () => navigate(originHref({ kind: "note", noteId: note.id })),
           },
         }),
@@ -859,9 +890,9 @@ export function StudyTutor({
       id,
     )
       .then((card) =>
-        toast.success("Flashcard saved", {
+        toast.success(t("study.tutor.flashcardSaved"), {
           action: {
-            label: "View flashcard",
+            label: t("study.tutor.viewFlashcard"),
             onClick: () => navigate(studyHref("cards", { card: card.id })),
           },
         }),
@@ -870,8 +901,13 @@ export function StudyTutor({
   }
 
   return (
-    <section className="max-w-4xl space-y-4">
-      {back ? <Button variant="ghost" size="sm" onClick={back}>← {t("study.practice.title")}</Button> : null}
+    <section className="mx-auto w-full max-w-4xl space-y-4">
+      {back ? (
+        <Button variant="ghost" size="sm" className="-ms-2" onClick={back}>
+          <Icon icon={ArrowLeft01Icon} size={16} className="rtl:rotate-180" />
+          {t("study.practice.title")}
+        </Button>
+      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-3">
         {renaming ? (
           <form
@@ -885,12 +921,12 @@ export function StudyTutor({
             }}
           >
             <Input
-              aria-label="Conversation title"
+              aria-label={t("study.tutor.titleLabel")}
               value={title}
               onChange={(event) => setTitle(event.target.value)}
             />
             <Button type="submit" size="sm">
-              Save
+              {t("study.tutor.save")}
             </Button>
           </form>
         ) : (
@@ -921,10 +957,10 @@ export function StudyTutor({
             </Button>
           ) : null}
           <Button variant="ghost" size="sm" disabled={busy} onClick={() => setRenaming(!renaming)}>
-            Rename
+            {t("study.tutor.rename")}
           </Button>
           <Button variant="outline" size="sm" onClick={setup} disabled={workPending}>
-            AI providers
+            {t("study.tutor.aiProviders")}
           </Button>
         </div>
       </div>
@@ -981,15 +1017,14 @@ export function StudyTutor({
           <span aria-hidden>{tChat("model")}</span>
           <AIModelPicker use={modelUse} appearance="outline" side="bottom" />
         </div>
-        <label className="grid gap-1">
-          {t("study.materials.context")}
-          <select
-            aria-label={t("study.materials.context")}
-            className={optionClass}
-            disabled={workPending}
+        <div className="grid gap-1">
+          <span aria-hidden>{t("study.materials.context")}</span>
+          <Select
+            items={contextOptions}
             value={thread.scope}
-            onChange={(event) => {
-              const scope = studyScopes.find((value) => value === event.target.value);
+            disabled={workPending}
+            onValueChange={(value) => {
+              const scope = studyScopes.find((option) => option === value);
               if (scope)
                 void save({
                   scope,
@@ -999,42 +1034,41 @@ export function StudyTutor({
                 });
             }}
           >
-            {studyScopes
-              .filter(
-                (scope) => scope === "image" ? !!thread.imageContext :
-                  scope === "general" ||
-                  scope === "notes" ||
-                  scope === "materials" ||
-                  scope === "cards" ||
-                  (book && (scope !== "passage" || thread.quote)),
-              )
-              .map((scope) => (
-                <option value={scope} key={scope}>
-                  {scope === "materials" ? t("study.materials.scope")
-                    : scope === "cards" ? t("study.materials.cards")
-                    : scope === "image" ? t("study.reader.imageContext") : scopeLabels[scope]}
-                </option>
+            <Select.Trigger size="sm" aria-label={t("study.materials.context")} className="w-auto min-w-40">
+              <Select.Value />
+            </Select.Trigger>
+            <Select.Content>
+              {contextOptions.map(({ value, label }) => (
+                <Select.Item key={value} value={value}>
+                  {label}
+                </Select.Item>
               ))}
-          </select>
-        </label>
-        <label className="grid gap-1">
-          Corrections
-          <select
-            aria-label="Corrections"
-            className={optionClass}
-            disabled={workPending}
+            </Select.Content>
+          </Select>
+        </div>
+        <div className="grid gap-1">
+          <span aria-hidden>{t("study.tutor.corrections")}</span>
+          <Select
+            items={correctionOptions}
             value={thread.corrections ?? "off"}
-            onChange={(event) =>
-              void save({ corrections: event.target.value as StudyThread["corrections"] })
-            }
+            disabled={workPending}
+            onValueChange={(value) => {
+              const corrections = studyCorrections.find((option) => option === value);
+              if (corrections) void save({ corrections });
+            }}
           >
-            {studyCorrections.map((value) => (
-              <option value={value} key={value}>
-                {correctionLabels[value]}
-              </option>
-            ))}
-          </select>
-        </label>
+            <Select.Trigger size="sm" aria-label={t("study.tutor.corrections")} className="w-auto min-w-40">
+              <Select.Value />
+            </Select.Trigger>
+            <Select.Content>
+              {correctionOptions.map(({ value, label }) => (
+                <Select.Item key={value} value={value}>
+                  {label}
+                </Select.Item>
+              ))}
+            </Select.Content>
+          </Select>
+        </div>
         {curated ? (
           <div className="flex basis-full flex-wrap items-center gap-2">
             <TutorMaterialPicker
@@ -1089,20 +1123,26 @@ export function StudyTutor({
       ) : null}
       {practiceCard ? (
         <div className="flex flex-wrap items-end gap-2 rounded-xl border p-3">
-          <label className="grid min-w-0 flex-[1_1_15rem] gap-1 text-sm">
-            {t("study.recall.tutorCard")}
-            <select
-              aria-label={t("study.recall.tutorCard")}
-              className={`${optionClass} w-full`}
+          <div className="grid min-w-0 flex-[1_1_15rem] gap-1 text-sm">
+            <span aria-hidden>{t("study.recall.tutorCard")}</span>
+            <Select
+              items={practiceCards.map(({ id, front }) => ({ value: id, label: front }))}
               value={practiceCard.id}
               disabled={workPending}
-              onChange={(event) => void choosePracticeCard(event.target.value)}
+              onValueChange={(value) => typeof value === "string" && void choosePracticeCard(value)}
             >
-              {practiceCards.map(({ id, front }) => (
-                <option key={id} value={id}>{front}</option>
-              ))}
-            </select>
-          </label>
+              <Select.Trigger aria-label={t("study.recall.tutorCard")} className="w-full">
+                <Select.Value />
+              </Select.Trigger>
+              <Select.Content>
+                {practiceCards.map(({ id, front }) => (
+                  <Select.Item key={id} value={id}>
+                    {front}
+                  </Select.Item>
+                ))}
+              </Select.Content>
+            </Select>
+          </div>
           {!conversation.some(({ entry }) => entry.practiceCardId === practiceCard.id) ? (
             <Button
               size="sm"
@@ -1293,10 +1333,10 @@ export function StudyTutor({
             </Button>
           ) : null}
           {(thread.goal === "teach-back"
-            ? ["Ask me to explain the main idea.", "Quiz me on the hardest part."]
+            ? [t("study.tutor.starters.teachExplain"), t("study.tutor.starters.teachQuiz")]
             : thread.goal === "language"
-              ? ["Help me practice a conversation.", "Correct my phrasing."]
-              : ["Explain the main idea.", "Give me a practice question."]
+              ? [t("study.tutor.starters.languageConversation"), t("study.tutor.starters.languagePhrasing")]
+              : [t("study.tutor.starters.explain"), t("study.tutor.starters.question")]
           ).map((prompt) => (
             <Button
               variant="outline"
@@ -1341,11 +1381,12 @@ export function StudyTutor({
         }}
         className="grid gap-2 rounded-2xl border bg-card p-3"
       >
-        <textarea
+        <Textarea
           ref={composerField}
-          className="min-h-24 w-full rounded-xl border bg-background p-3"
-          aria-label="Study message"
-          placeholder="Ask a question or explain what you learned"
+          minRows={3}
+          maxRows={12}
+          aria-label={t("study.tutor.messageLabel")}
+          placeholder={t("study.tutor.messagePlaceholder")}
           dir={textDirection(input)}
           value={input}
           onChange={(event) => composer.edit(event.target.value)}
@@ -1353,17 +1394,17 @@ export function StudyTutor({
         />
         <div className="flex flex-wrap items-center gap-2">
           <Button type="submit" disabled={!input.trim() || workPending || !model || !contextReady}>
-            {operation === "answer" ? "Working…" : "Send"}
+            {t(operation === "answer" ? "study.tutor.working" : "study.tutor.send")}
           </Button>
           {busy && !livePhase ? (
             <Button type="button" variant="ghost" onClick={() => controller.current?.abort(stoppedTutorRequest)}>
-              Stop
+              {t("study.tutor.stop")}
             </Button>
           ) : null}
           {voiceState === "recording" ? (
             <>
               <Button type="button" variant="outline" onClick={() => voice.current?.stop?.()}>
-                Stop recording
+                {t("study.tutor.stopRecording")}
               </Button>
               <Button
                 type="button"
@@ -1374,13 +1415,13 @@ export function StudyTutor({
                   setMicMuted(!micMuted);
                 }}
               >
-                {micMuted ? "Unmute microphone" : "Mute microphone"}
+                {t(micMuted ? "study.tutor.unmute" : "study.tutor.mute")}
               </Button>
             </>
           ) : null}
           {voiceState && !busy ? (
             <Button type="button" variant="ghost" onClick={() => voice.current?.abort.abort()}>
-              Cancel recording
+              {t("study.tutor.cancelRecording")}
             </Button>
           ) : null}
           {!voiceState && !livePhase ? (
@@ -1391,7 +1432,7 @@ export function StudyTutor({
                 onClick={() => void dictate(false, Date.now())}
                 disabled={workPending}
               >
-                Dictate
+                {t("study.tutor.dictate")}
               </Button>
               <Button
                 type="button"
@@ -1399,7 +1440,7 @@ export function StudyTutor({
                 onClick={() => void dictate(true, Date.now())}
                 disabled={workPending || !model || !contextReady}
               >
-                {voicePractice ? "Record next turn" : "Speak your answer"}
+                {t(voicePractice ? "study.tutor.recordNext" : "study.tutor.speakAnswer")}
               </Button>
               <Button
                 type="button"
@@ -1447,24 +1488,23 @@ export function StudyTutor({
           ) : null}
           <Input
             className="w-32"
-            aria-label="Speech language code"
-            placeholder="Auto language"
+            aria-label={t("study.tutor.languageLabel")}
+            placeholder={t("study.tutor.languagePlaceholder")}
             value={language}
             maxLength={35}
             disabled={workPending}
             onChange={(event) => setLanguage(event.target.value)}
           />
           {!livePhase ? (
-            <label className="flex items-center gap-1.5 text-sm">
-              <input
-                type="checkbox"
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
+              <Switch
                 checked={readAloud}
-                onChange={(event) => {
-                  setReadAloud(event.target.checked);
-                  if (!event.target.checked) stopSpeaking();
+                onCheckedChange={(checked) => {
+                  setReadAloud(checked);
+                  if (!checked) stopSpeaking();
                 }}
               />
-              Read replies aloud
+              {t("study.tutor.readAloud")}
             </label>
           ) : null}
         </div>
@@ -1520,19 +1560,18 @@ export function StudyTutor({
           <p className="text-sm text-muted-foreground">{t("study.capture.chooseModel")}</p>
         ) : null}
         {voiceAvailable ? (
-          <label className="flex items-center gap-1.5 text-sm">
-            <input
-              type="checkbox"
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <Switch
               checked={thread.keepVoiceTranscripts ?? false}
               disabled={workPending}
-              onChange={(event) => void save({ keepVoiceTranscripts: event.target.checked })}
+              onCheckedChange={(keepVoiceTranscripts) => void save({ keepVoiceTranscripts })}
             />
-            Keep new voice turns in this conversation
+            {t("study.tutor.keepVoice")}
           </label>
         ) : null}
         {temporaryTurns.length ? (
           <p className="text-sm text-muted-foreground">
-            Temporary voice turns clear after the report or when you leave this conversation.
+            {t("study.tutor.temporaryVoice")}
           </p>
         ) : null}
         {livePhase ? (
@@ -1550,17 +1589,19 @@ export function StudyTutor({
           </div>
         ) : voiceState ? (
           <p role="status" className="text-sm text-muted-foreground">
-            {voiceState === "opening"
-              ? "Opening microphone…"
-              : voiceState === "recording"
-                ? micMuted
-                  ? "Microphone muted"
-                  : "Recording on this device"
-                : "Transcribing on this device…"}
+            {t(
+              voiceState === "opening"
+                ? "study.tutor.openingMic"
+                : voiceState === "recording"
+                  ? micMuted
+                    ? "study.tutor.micMuted"
+                    : "study.tutor.recordingLocal"
+                  : "study.tutor.transcribingLocal",
+            )}
           </p>
         ) : voiceAvailable === false ? (
           <p className="text-sm text-muted-foreground">
-            Local voice needs whisper-cli and a Whisper model. You can still type a message.
+            {t("study.tutor.needsWhisper")}
           </p>
         ) : null}
       </form>
@@ -1575,7 +1616,7 @@ export function StudyTutor({
                   setShowReport(!showReport);
                 }}
               >
-                {showReport ? "Hide report" : "Show report"}
+                {t(showReport ? "study.tutor.hideReport" : "study.tutor.showReport")}
               </Button>
             ) : null}
             <Button
@@ -1591,36 +1632,32 @@ export function StudyTutor({
               {livePhase
                 ? t("study.voice.endAndReport")
                 : voicePractice
-                  ? "Finish voice practice and generate report"
+                  ? t("study.tutor.finishVoiceReport")
                   : reports.length
-                    ? "Regenerate report"
-                    : "Generate session report"}
+                    ? t("study.tutor.regenerateReport")
+                    : t("study.tutor.generateReport")}
             </Button>
           </div>
           {showReport && reports.length > 1 ? (
-            <label className="flex flex-wrap items-center gap-2 text-sm">
-              {t("study.followUps.reportHistory")}
-              <select
-                className={optionClass}
-                value={reportId ?? ""}
-                onChange={(event) => setSelectedReportId(event.target.value)}
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span aria-hidden>{t("study.followUps.reportHistory")}</span>
+              <Select
+                items={reportOptions}
+                value={reportId ?? null}
+                onValueChange={(value) => typeof value === "string" && setSelectedReportId(value)}
               >
-                {reportId ? null : (
-                  <option value="" disabled>
-                    {t("study.followUps.unavailable")}
-                  </option>
-                )}
-                {reports.map((entry, index) => (
-                  <option value={studyReportKey(entry)} key={studyReportKey(entry)}>
-                    {index === 0
-                      ? t("study.followUps.latest")
-                      : entry.generatedAt === undefined
-                        ? t("study.followUps.earlier")
-                        : reportDate.format(entry.generatedAt)}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <Select.Trigger size="sm" aria-label={t("study.followUps.reportHistory")} className="w-auto">
+                  <Select.Value placeholder={t("study.followUps.unavailable")} />
+                </Select.Trigger>
+                <Select.Content>
+                  {reportOptions.map(({ value, label }) => (
+                    <Select.Item key={value} value={value}>
+                      {label}
+                    </Select.Item>
+                  ))}
+                </Select.Content>
+              </Select>
+            </div>
           ) : null}
           {showReport && !visibleReport ? (
             <p role="status" className="text-sm text-muted-foreground">
@@ -1701,9 +1738,9 @@ export function StudyTutor({
                   reportSuggestionId("word", thread.id, visibleReport, key),
                 )
                   .then((saved) =>
-                    toast.success("Saved to vocabulary", {
+                    toast.success(t("study.tutor.savedToVocabulary"), {
                       action: {
-                        label: "View word",
+                        label: t("study.tutor.viewWord"),
                         onClick: () => navigate(originHref({ kind: "word", wordId: saved.id })),
                       },
                     }),

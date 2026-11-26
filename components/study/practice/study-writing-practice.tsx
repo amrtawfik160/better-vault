@@ -107,7 +107,12 @@ export function WritingPracticeSession({
     }
   }, [session.id]);
   return (
-    <section ref={top} aria-label={session.title} className="space-y-4">
+    <section
+      ref={top}
+      aria-label={session.title}
+      // Questions keep the Practice page's measure; a teach-back round has a side column for the last round.
+      className={cn("mx-auto w-full space-y-4", sessionMode(session) === "teach" ? "max-w-5xl" : "max-w-3xl")}
+    >
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="ghost" size="sm" onClick={() => open(undefined)}>
           <Icon icon={ArrowLeft01Icon} size={16} className="rtl:rotate-180" />
@@ -117,7 +122,8 @@ export function WritingPracticeSession({
           <DirectionalText as="p" text={session.title} className="truncate font-semibold" />
           <p className="text-xs text-muted-foreground">
             {t(`study.writingPractice.modes.${sessionMode(session)}.short`)} · {t(`study.writingPractice.audiences.${session.audience}.label`)}
-            {session.material.label ? ` · ${session.material.label}` : ""}
+            {/* The title usually names the material already. */}
+            {session.material.label && !session.title.includes(session.material.label) ? ` · ${session.material.label}` : ""}
           </p>
         </div>
         {/* Questions, feedback and explaining it back remember their own model. */}

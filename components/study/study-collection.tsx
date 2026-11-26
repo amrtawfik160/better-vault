@@ -19,6 +19,7 @@ import { Button } from "@/components/panelui/button";
 import { Dialog } from "@/components/panelui/dialog";
 import { Input } from "@/components/panelui/input";
 import { Menu } from "@/components/panelui/menu";
+import { Select } from "@/components/panelui/select";
 import { Textarea } from "@/components/panelui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -727,21 +728,25 @@ function HighlightItem({
             onChange={(event) => setEditing({ ...editing, note: event.target.value })}
           />
           <div className="flex flex-wrap items-center gap-2">
-            <select
-              aria-label={t("study.highlights.colorLabel")}
-              className="h-8 rounded-lg border bg-background px-2 text-sm"
+            <Select
+              items={studyHighlightColor.options.map((name) => ({ value: name, label: t(`study.highlights.colors.${name}`) }))}
               value={editing.color}
-              onChange={(event) => {
-                const choice = studyHighlightColor.safeParse(event.target.value);
+              onValueChange={(value) => {
+                const choice = studyHighlightColor.safeParse(value);
                 if (choice.success) setEditing({ ...editing, color: choice.data });
               }}
             >
-              {studyHighlightColor.options.map((name) => (
-                <option key={name} value={name}>
-                  {t(`study.highlights.colors.${name}`)}
-                </option>
-              ))}
-            </select>
+              <Select.Trigger size="sm" aria-label={t("study.highlights.colorLabel")} className="w-auto">
+                <Select.Value />
+              </Select.Trigger>
+              <Select.Content>
+                {studyHighlightColor.options.map((name) => (
+                  <Select.Item key={name} value={name}>
+                    {t(`study.highlights.colors.${name}`)}
+                  </Select.Item>
+                ))}
+              </Select.Content>
+            </Select>
             <Button type="submit" size="sm" loading={saving}>
               {t("study.collection.saveHighlight")}
             </Button>

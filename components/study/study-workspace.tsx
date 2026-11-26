@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Link, useLocation, useSearchParams } from "react-router";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
@@ -194,6 +194,9 @@ export default function StudyWorkspace({
   const unavailableBook = Boolean(ready && bookId && !book);
   const readingBook = ready && tab === "library" && Boolean(book);
   const outsideReader = useRef<string | null>(null);
+  /** The history index the reader was opened at, when it was opened from another page (a notebook). */
+  const readerEntry = useRef<number | null>(null);
+  const navigate = useNavigate();
   const thread = threads.find((entry) => entry.id === params.get("thread"));
   const fromAnswer = params.get("fromAnswer");
   const answerIndex = queryIndex(fromAnswer);
@@ -318,7 +321,13 @@ export default function StudyWorkspace({
 
   // The reader's back button returns to the Study view the book was opened from.
   useEffect(() => {
-    if (!bookId) outsideReader.current = location.search;
+    if (!bookId) {
+      outsideReader.current = location.search;
+      readerEntry.current = null;
+    } else if (outsideReader.current === null && readerEntry.current === null) {
+      const index: unknown = window.history.state?.idx;
+      readerEntry.current = typeof index === "number" ? index : null;
+    }
   }, [bookId, location.search]);
 
   useEffect(() => {
@@ -361,7 +370,11 @@ export default function StudyWorkspace({
   function leaveReader() {
     const previous = outsideReader.current;
     if (previous) setParams(new URLSearchParams(previous), { state: studyReturnState(location.state) });
-    else go("library", libraryScope);
+    // Opened from another page (a notebook's Continue reading): go back to it, past the sections read since.
+    else if (readerEntry.current) {
+      const current: unknown = window.history.state?.idx;
+      void navigate(readerEntry.current - 1 - (typeof current === "number" ? current : readerEntry.current));
+    } else go("library", libraryScope);
   }
   function read(what: StudyBook) {
     go("library", { ...libraryScope, book: what.id });
@@ -776,6 +789,11 @@ export default function StudyWorkspace({
       {ready && !unavailableBook && tab === "review" && !planning ? (
         <StudyReview
           ordered={Boolean(selection?.studyReviewOrdered)}
+          back={
+            selection?.studyReviewOrdered
+              ? { href: studyHref("review", { vault: studyVaultId }), label: t("study.tabs.review") }
+              : undefined
+          }
           key={`${location.key}:${studyVaultId}`}
           vaultId={studyVaultId}
           items={reviewCollection(views.review, params, requestedReview)}
@@ -816,7 +834,9 @@ export default function StudyWorkspace({
               ? t(reviewingHighlights ? "study.recall.weakHighlights" : reviewKind === "cards" ? "study.recall.weakSet" : "study.review.weakItems")
               : reviewingVocabulary
                 ? t("study.collection.filters.words")
-                : (answerCollection ?? reportCollection ?? noteCollection ?? book?.title ??
+                : selection?.studyReviewOrdered
+                  ? t("study.reviewPlan.sessionTitle")
+                  : (answerCollection ?? reportCollection ?? noteCollection ?? book?.title ??
                   (notebookId ? notebookTitles.get(notebookId) : undefined) ??
                   (requestedReview
                     ? t(

@@ -138,15 +138,23 @@ export function StudyReaderCompanion({
         }}
         className="min-h-0 flex-1 gap-0"
       >
-        <div className="flex h-13 shrink-0 items-center gap-2 border-b px-3">
+        {/* On a phone the tabs and Close are 44px targets. */}
+        <div className={cn("flex h-13 shrink-0 items-center gap-2 border-b px-3", layout === "sheet" && "h-15")}>
           <Tabs.List aria-label={label} className="min-w-0 flex-1">
-            <Tabs.Trigger value="ask" className="flex-1">{t("study.readerCompanion.tabs.ask")}</Tabs.Trigger>
-            <Tabs.Trigger value="practise" className="flex-1">{t("study.readerCompanion.tabs.practise")}</Tabs.Trigger>
-            <Tabs.Trigger value="make" className="flex-1">{t("study.readerCompanion.tabs.make")}</Tabs.Trigger>
+            <Tabs.Trigger value="ask" className={cn("flex-1", layout === "sheet" && "h-11")}>
+              {t("study.readerCompanion.tabs.ask")}
+            </Tabs.Trigger>
+            <Tabs.Trigger value="practise" className={cn("flex-1", layout === "sheet" && "h-11")}>
+              {t("study.readerCompanion.tabs.practise")}
+            </Tabs.Trigger>
+            <Tabs.Trigger value="make" className={cn("flex-1", layout === "sheet" && "h-11")}>
+              {t("study.readerCompanion.tabs.make")}
+            </Tabs.Trigger>
           </Tabs.List>
           <Button
             size="icon-sm"
             variant="ghost"
+            className={layout === "sheet" ? "size-11" : undefined}
             aria-label={t("study.readerCompanion.close")}
             title={t("study.readerCompanion.close")}
             onClick={close}
