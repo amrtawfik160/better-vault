@@ -489,16 +489,18 @@ export function NotebookHome() {
                 <Icon icon={Add01Icon} size={16} strokeWidth={1.5} className="text-muted-foreground" />
                 <span className="max-sm:sr-only">{tShell("list.add")}</span>
               </AddButton>
-              {/* On phones New folder moves into More, so the page's name keeps its room. */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setCreatingFolder(true)}
-                className="max-sm:hidden max-md:h-11"
-              >
-                <Icon icon={FolderAddIcon} size={16} strokeWidth={1.5} className="text-muted-foreground" />
-                <span className="max-sm:sr-only">{tShell("list.newFolder")}</span>
-              </Button>
+              {/* On phones New folder moves into More, so the page's name keeps its room. Recent shows no folders. */}
+              {section === "recents" ? null : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setCreatingFolder(true)}
+                  className="max-sm:hidden max-md:h-11"
+                >
+                  <Icon icon={FolderAddIcon} size={16} strokeWidth={1.5} className="text-muted-foreground" />
+                  <span className="max-sm:sr-only">{tShell("list.newFolder")}</span>
+                </Button>
+              )}
               <Menu>
                 <Menu.Trigger
                   render={
@@ -514,10 +516,12 @@ export function NotebookHome() {
                   <Icon icon={MoreHorizontalIcon} size={16} strokeWidth={1.5} />
                 </Menu.Trigger>
                 <Menu.Content align="end">
-                  <Menu.Item onClick={() => setCreatingFolder(true)} className="sm:hidden">
-                    <Icon icon={FolderAddIcon} />
-                    {tShell("list.newFolder")}
-                  </Menu.Item>
+                  {section === "recents" ? null : (
+                    <Menu.Item onClick={() => setCreatingFolder(true)} className="sm:hidden">
+                      <Icon icon={FolderAddIcon} />
+                      {tShell("list.newFolder")}
+                    </Menu.Item>
+                  )}
                   <Menu.Item onClick={() => importInput.current?.click()}>
                     <Icon icon={FileImportIcon} />
                     {tShell("list.importFiles")}
