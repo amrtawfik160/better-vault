@@ -68,7 +68,7 @@ export function ProvidersPanel({ onChatGPTSignIn }: ProvidersPanelProps) {
   return (
     <>
       <SettingsSection title={t("providers.title")} description={t("providers.description")}>
-        {/* Better Vault AI is set up by subscribing (Settings → Account and plan), not with a key. */}
+        {/* Better Vault AI is managed by the account service. */}
         <ProviderList
           ids={[
             "cliproxyapi",

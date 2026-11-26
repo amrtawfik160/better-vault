@@ -5,7 +5,7 @@ description: "deepLe is local-first. Notebooks, sources, chats and keys stay in 
 
 deepLe keeps everything on your device, and nothing is stored on a server.
 
-In the web app, notebooks, sources, chats, Studio outputs and API keys live in your browser's IndexedDB. In the [desktop app](/docs/desktop) they live in one SQLite file in the app's data folder on your computer. Either way no account is needed and no server database holds them. With an optional [subscription](/docs/subscription), only your questions to Better Vault AI, the files you put in Better Vault Cloud and, while sync is on, your skills and plugins reach deepLe's backend; notebooks, notes and keys never do.
+In the web app, notebooks, sources, chats, Studio outputs and API keys live in your browser's IndexedDB. In the [desktop app](/docs/desktop) they live in one SQLite file in the app's data folder on your computer. Either way no account is needed and no server database holds them. An optional [account](/docs/subscription) holds only your email, name and username; notebooks, notes and keys never reach it.
 
 When you [connect an AI subscription](/docs/providers#connect-an-ai-subscription), the local proxy keeps sign-in tokens in its private directory on your computer. Provider tokens stay out of the renderer and notebook backups. The selected provider receives your prompts and any passages included for the answer. Use **Disconnect** to remove the local account credential. The original desktop ChatGPT connection stores its own tokens in the desktop data folder.
 

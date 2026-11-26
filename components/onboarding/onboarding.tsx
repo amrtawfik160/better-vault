@@ -38,23 +38,15 @@ import { useSettings } from "@/lib/db/settings";
 import { Icon } from "@/components/icon";
 import { Button } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
-import {
-  setUsername,
-  signIn,
-  startCheckout,
-  useAccount,
-  usernameAvailable,
-} from "@/lib/account/account";
+import { setUsername, signIn, useAccount, usernameAvailable } from "@/lib/account/account";
 import { useStoreQuery } from "@/lib/db/live";
 import { updateProfile, useProfile } from "@/lib/db/profile";
 import { store } from "@/lib/db/store";
 import { avatarFromFile } from "@/lib/profile/avatar";
-import { onRadioKeys } from "@/components/common/roving";
 import { cn } from "@/lib/utils";
 
 const KEY = "onboarding";
-type Step = "profile" | "ai" | "account" | "username" | "plan";
-type Plan = "free" | "pro" | "max";
+type Step = "profile" | "ai" | "account" | "username";
 
 /**
  * The first screens of the app, two columns like a setup wizard: the step's
@@ -80,12 +72,11 @@ function Onboarding() {
   const [step, setStep] = useState<Step>("profile");
   const [name, setName] = useState<string | null>(null);
   const [username, setUsernameDraft] = useState("");
-  const [plan, setPlan] = useState<Plan>("free");
   const [busy, setBusy] = useState(false);
   const settings = useSettings();
   const shownName = name ?? profile?.name ?? "";
 
-  // Connecting AI comes first: nothing in better-vault that thinks works without it.
+  // Connecting AI comes first: nothing in deepLe that thinks works without it.
   const connectAI = subscriptionConnectionsAllowed();
   const needsUsername = account != null && !account.user.username;
   const steps: Step[] = [
@@ -93,8 +84,6 @@ function Onboarding() {
     ...(connectAI ? (["ai"] as const) : []),
     "account",
     ...(step === "username" || needsUsername ? (["username"] as const) : []),
-    // A plan (Better Vault AI and Cloud) needs an account, so it is offered once signed in.
-    ...(account ? (["plan"] as const) : []),
   ];
   const at = steps.indexOf(step);
   const back = () => setStep(steps[Math.max(0, at - 1)]);
@@ -106,7 +95,6 @@ function Onboarding() {
 
   const complete = async () => {
     await saveName();
-    if (plan !== "free" && account && account.account.plan !== plan) await startCheckout(plan);
     await finish();
   };
 
@@ -125,7 +113,8 @@ function Onboarding() {
     setBusy(true);
     try {
       const state = await signIn(mode);
-      setStep(state.user.username ? "plan" : "username");
+      if (state.user.username) await complete();
+      else setStep("username");
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message !== "cancelled")
@@ -206,14 +195,8 @@ function Onboarding() {
                 </div>
                 <p className="text-xs text-muted-foreground">{t("onboarding.account.keys")}</p>
               </>
-            ) : step === "username" ? (
-              <UsernameStep
-                value={username}
-                onChange={setUsernameDraft}
-                onDone={async () => setStep("plan")}
-              />
             ) : (
-              <PlanStep plan={plan} onPlan={setPlan} />
+              <UsernameStep value={username} onChange={setUsernameDraft} onDone={complete} />
             )}
           </div>
 
@@ -248,48 +231,22 @@ function Onboarding() {
               <Button className="ms-auto" disabled={busy} onClick={() => setStep("account")}>
                 {t("onboarding.next")}
               </Button>
-            ) : step === "plan" ? (
-              <>
-                {plan !== "free" && account?.account.plan !== plan ? (
-                  <Button
-                    variant="ghost"
-                    disabled={busy}
-                    onClick={() => {
-                      setPlan("free");
-                      void saveName()
-                        .then(finish)
-                        .catch((error: unknown) =>
-                          toast.error(error instanceof Error ? error.message : String(error)),
-                        );
-                    }}
-                  >
-                    {t("onboarding.plan.later")}
-                  </Button>
-                ) : null}
-                <Button className="ms-auto" disabled={busy} onClick={() => void finishSetup()}>
-                  {plan === "free" || account?.account.plan === plan
-                    ? t("onboarding.finish")
-                    : t("onboarding.plan.subscribe", { plan: t(`onboarding.plan.${plan}.name`) })}
-                </Button>
-              </>
             ) : (
               <Button
                 className="ms-auto"
                 variant={step === "username" ? "ghost" : "default"}
                 disabled={busy}
                 onClick={() =>
-                  step === "account" && needsUsername
-                    ? setStep("username")
-                    : account
-                      ? setStep("plan")
-                      : void finishSetup()
+                  step === "account" && needsUsername ? setStep("username") : void finishSetup()
                 }
               >
                 {step === "username"
                   ? t("onboarding.skip")
                   : !account
                     ? t("onboarding.withoutAccount")
-                    : t("onboarding.next")}
+                    : needsUsername
+                      ? t("onboarding.next")
+                      : t("onboarding.finish")}
               </Button>
             )}
           </footer>
@@ -304,51 +261,6 @@ function Onboarding() {
         />
       </div>
     </div>
-  );
-}
-
-/** Better Vault AI and Cloud: Free, Pro or Max, bought through Dodo Payments when finishing. */
-function PlanStep({ plan, onPlan }: { plan: Plan; onPlan: (plan: Plan) => void }) {
-  const { t } = useTranslation("common");
-  const plans = ["free", "pro", "max"] as const;
-  return (
-    <>
-      <Heading title={t("onboarding.plan.title")} body={t("onboarding.plan.body")} />
-      <div
-        role="radiogroup"
-        aria-label={t("onboarding.plan.title")}
-        className="flex flex-wrap gap-2"
-      >
-        {plans.map((each) => (
-          <button
-            key={each}
-            type="button"
-            role="radio"
-            aria-checked={plan === each}
-            tabIndex={plan === each ? 0 : -1}
-            onKeyDown={(event) => onRadioKeys(event, plans, plan, onPlan)}
-            onClick={() => onPlan(each)}
-            className={cn(
-              "flex cursor-pointer items-center gap-2 rounded-full px-4 py-2 text-sm ring-1 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              plan === each
-                ? "bg-foreground text-background ring-foreground"
-                : "ring-border hover:bg-accent",
-            )}
-          >
-            <span className="font-medium">{t(`onboarding.plan.${each}.name`)}</span>
-            <span
-              className={cn(
-                "tabular-nums",
-                plan === each ? "text-background/70" : "text-muted-foreground",
-              )}
-            >
-              {t(`onboarding.plan.${each}.price`)}
-            </span>
-          </button>
-        ))}
-      </div>
-      <p className="text-sm text-muted-foreground">{t(`onboarding.plan.${plan}.detail`)}</p>
-    </>
   );
 }
 
@@ -647,11 +559,7 @@ function Preview({
                 className={step === "ai" ? highlight : undefined}
                 icon={<Icon icon={AiBrain01Icon} />}
                 label={tSettings("groups.ai.label")}
-                hint={
-                  subscriptions.length > 0
-                    ? subscriptions.join(", ")
-                    : tSettings("groups.ai.detail")
-                }
+                hint={subscriptions.length > 0 ? subscriptions.join(", ") : tSettings("groups.ai.detail")}
               />
               <SheetRow
                 icon={<Icon icon={AiVoiceIcon} />}

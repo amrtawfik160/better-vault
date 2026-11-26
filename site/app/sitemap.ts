@@ -10,8 +10,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const download = "app/(home)/download/page.tsx";
   const privacy = "app/(home)/privacy/page.tsx";
   const terms = "app/(home)/terms/page.tsx";
-  const pricing = "app/(home)/pricing/page.tsx";
-  const dates = lastModifiedByFile(["content/docs", home, download, privacy, terms, pricing]);
+  const dates = lastModifiedByFile(["content/docs", home, download, privacy, terms]);
   const entry = (url: string, file: string) => {
     const lastModified = dates.get(file);
     return lastModified ? { url: absoluteUrl(url), lastModified } : { url: absoluteUrl(url) };
@@ -25,7 +24,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       url: absoluteUrl(`/plugins/${plugin.id}`),
       ...(plugin.updatedAt ? { lastModified: new Date(plugin.updatedAt) } : {}),
     })),
-    entry("/pricing", pricing),
     entry("/privacy", privacy),
     entry("/terms", terms),
     ...source.getPages().map((page) => entry(page.url, `content/docs/${page.path}`)),

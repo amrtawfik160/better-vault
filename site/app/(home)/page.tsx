@@ -181,7 +181,6 @@ const FOOTER: { title: string; links: { label: string; href: string }[] }[] = [
     title: "Product",
     links: [
       { label: "Download", href: "/download" },
-      { label: "Pricing", href: "/pricing" },
       { label: "Plugins", href: "/plugins" },
       { label: "Roadmap", href: "/docs/roadmap" },
       { label: "Changelog", href: `${site.repo}/blob/main/CHANGELOG.md` },

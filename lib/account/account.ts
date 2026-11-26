@@ -36,13 +36,9 @@ export interface AccountState {
   account: AccountPlan;
   /** When it was last read from the backend. */
   checkedAt: number;
-  /** The plan the welcome dialog last thanked the user for. */
-  welcomed: string | null;
-  /** What the backend says about buying plans; kept for older backends, not shown. */
-  subscriptions?: "open" | "soon";
 }
 
-type Me = { user: AccountUser; account: AccountPlan; subscriptions?: "open" | "soon" };
+type Me = { user: AccountUser; account: AccountPlan };
 
 const KEY = "account";
 
@@ -92,8 +88,8 @@ export async function refreshAccount(): Promise<AccountState | null> {
   const saved = await getAccount();
   if (!saved) return null;
   try {
-    const { user, account, subscriptions } = await api<Me>("/v1/me", saved.token);
-    const next: AccountState = { ...saved, user, account, subscriptions, checkedAt: Date.now() };
+    const { user, account } = await api<Me>("/v1/me", saved.token);
+    const next: AccountState = { ...saved, user, account, checkedAt: Date.now() };
     await store().putSetting(KEY, next);
     await syncProvider(next);
     return next;
@@ -162,15 +158,12 @@ async function obtainToken(mode: "signin" | "signup"): Promise<string> {
 
 export async function signIn(mode: "signin" | "signup" = "signin"): Promise<AccountState> {
   const token = await obtainToken(mode);
-  const { user, account, subscriptions } = await api<Me>("/v1/me", token);
-  const previous = await getAccount();
+  const { user, account } = await api<Me>("/v1/me", token);
   const state: AccountState = {
     token,
     user,
     account,
     checkedAt: Date.now(),
-    welcomed: previous?.user.id === user.id ? previous.welcomed : account.plan,
-    subscriptions,
   };
   await store().putSetting(KEY, state);
   await syncProvider(state);
@@ -182,50 +175,6 @@ export async function signOut(): Promise<void> {
   if (saved)
     await api("/api/auth/sign-out", saved.token, { method: "POST", body: "{}" }).catch(() => {});
   await forget();
-  // What was synced belongs to that account; another one starts clean.
-  await (await import("./cloud-sync")).resetCloudSync();
-}
-
-/** Opens Dodo Payments' checkout for a plan, in the browser. */
-export async function startCheckout(plan: "pro" | "max"): Promise<void> {
-  const saved = await getAccount();
-  if (!saved) throw new Error("Sign in first.");
-  const returnUrl = desktopBridge()
-    ? "https://better-vault.dev/subscribed"
-    : `${window.location.origin}/?subscribed=1`;
-  const { url } = await api<{ url: string }>("/v1/billing/checkout", saved.token, {
-    method: "POST",
-    body: JSON.stringify({ plan, returnUrl }),
-  });
-  window.open(url, "_blank", "noopener");
-}
-
-/** Dodo Payments' customer portal: change plan, invoices, cancel. */
-export async function openPortal(): Promise<void> {
-  const saved = await getAccount();
-  if (!saved) throw new Error("Sign in first.");
-  const returnUrl = desktopBridge() ? "https://better-vault.dev" : window.location.origin;
-  const { url } = await api<{ url: string }>("/v1/billing/portal", saved.token, {
-    method: "POST",
-    body: JSON.stringify({ returnUrl }),
-  });
-  window.open(url, "_blank", "noopener");
-}
-
-export async function setOverage(enabled: boolean, capCents: number): Promise<void> {
-  const saved = await getAccount();
-  if (!saved) return;
-  const { account } = await api<{ account: AccountPlan }>("/v1/billing/overage", saved.token, {
-    method: "POST",
-    body: JSON.stringify({ enabled, capCents }),
-  });
-  await store().putSetting(KEY, { ...saved, account, checkedAt: Date.now() });
-}
-
-/** Marks the current plan as thanked for, so the welcome dialog shows once per new plan. */
-export async function markWelcomed(): Promise<void> {
-  const saved = await getAccount();
-  if (saved) await store().putSetting(KEY, { ...saved, welcomed: saved.account.plan });
 }
 
 export async function usernameAvailable(username: string): Promise<boolean> {

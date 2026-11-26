@@ -576,69 +576,6 @@
       "lead": "An open-source, bring-your-own-model place to learn from what you bring."
     }
   },
-  "subscription": {
-    "title": "Subscription",
-    "description": "Optional plans for Better Vault AI and Cloud. The app stays free with your own keys.",
-    "plans": {
-      "pro": "Pro",
-      "max": "Max"
-    },
-    "signIn": "Sign in",
-    "createAccount": "Create account",
-    "popupBlocked": "Allow pop-ups for this page to sign in.",
-    "keysStay": "Your own API keys stay on this device and are never sent to deepLe.",
-    "renews": "Renews on {{date}}",
-    "cancels": "Ends on {{date}}; it won't renew",
-    "credits": "AI credits",
-    "creditsLeft": "{{left}} of {{total}} left until {{date}}",
-    "storage": "Cloud storage",
-    "storageUsed": "{{used}} GB of {{total}} GB used",
-    "overage": "Extra usage",
-    "overageHint": "Keep using AI after your credits run out, at $2 per 1,000 credits, up to a limit you choose.",
-    "cap": "Up to ${{amount}} a month",
-    "capLabel": "Extra usage limit",
-    "manage": "Manage or cancel",
-    "manageHint": "Change plan, see invoices or cancel in the billing portal (Dodo Payments).",
-    "refresh": "Refresh",
-    "welcome": {
-      "title": "Welcome to {{plan}}",
-      "body": "Thank you for supporting deepLe, {{name}}.",
-      "credits_one": "{{formatted}} AI credit a month",
-      "credits_other": "{{formatted}} AI credits a month",
-      "storage": "{{size}} GB of Better Vault Cloud",
-      "keys": "Your own keys keep working",
-      "use": "Use Better Vault AI",
-      "later": "Not now",
-      "sync": "Skills and plugins on every device"
-    },
-    "choosePlan": "Get {{plan}}",
-    "perMonth": "/month",
-    "amount": {
-      "pro": "$4.99",
-      "max": "$9.99"
-    },
-    "tagline": {
-      "pro": "For everyday studying and research",
-      "max": "For heavy use and big libraries"
-    },
-    "features": {
-      "credits_one": "{{formatted}} AI credit every month",
-      "credits_other": "{{formatted}} AI credits every month",
-      "storage": "{{size}} GB of Better Vault Cloud",
-      "haiku": "Better Vault AI, no API key needed",
-      "keys": "Your own API keys keep working",
-      "sync": "Your skills and plugins on every device"
-    },
-    "heroTitle": "Better Vault AI and Cloud",
-    "heroBody": "Ask without an API key, keep backups in the cloud, and have your skills and plugins on every device.",
-    "choose": "Choose a plan",
-    "planName": "{{plan}} plan",
-    "sync": "Sync skills and plugins",
-    "syncedAt": "Synced {{when}}. Signing in on another device brings them back.",
-    "syncNever": "Not synced yet. It starts in a moment.",
-    "syncOff": "Off: they stay on this device only.",
-    "syncError": "Couldn't sync: {{error}}"
-  },
   "plugins": {
     "title": "Plugins",
     "description": "Studio tools, panels, themes and mods that extend deepLe. Find them in the directory, build one with an agent, or install a file.",

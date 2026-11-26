@@ -19,7 +19,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- The app is called deepLe, and it uses bun to install and run its scripts.
 - A new layout: an app sidebar with a vault switcher, a notebook overview with a companion (Ask, Practise, Make), one Add box with a notebook picker, and Settings in seven groups (AI, Reading and voice, Account and plan, Storage and data, Appearance and language, Tools, About and updates).
+
+### Removed
+
+- The paid-plan screens: the plans in Settings and onboarding, the welcome dialog after checkout, the Pricing page, and the sync of subscribers' skills and plugins.
+- Automatic desktop updates: the desktop app no longer updates itself.
 
 ### Fixed
 

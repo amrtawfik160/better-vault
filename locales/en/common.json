@@ -126,28 +126,6 @@
       "free": "It's yours.",
       "checking": "Checking…"
     },
-    "plan": {
-      "title": "Choose a plan",
-      "body": "Better Vault AI answers your questions without an API key. Change or cancel any time.",
-      "free": {
-        "name": "Free",
-        "detail": "Everything, with your own API keys",
-        "price": "$0"
-      },
-      "pro": {
-        "name": "Pro",
-        "detail": "Better Vault AI with 1,250 AI credits a month, and 20 GB of cloud storage",
-        "price": "$4.99/mo"
-      },
-      "max": {
-        "name": "Max",
-        "detail": "Better Vault AI with 3,500 AI credits a month, and 50 GB of cloud storage",
-        "price": "$9.99/mo"
-      },
-      "later": "Maybe later",
-      "subscribe": "Continue to {{plan}}",
-      "needsAccount": "Go back a step and create an account to subscribe. You can also subscribe later in Settings → Subscription."
-    },
     "stepOf": "Step {{step}} of {{total}}",
     "back": "Back",
     "finish": "Start using deepLe",
@@ -169,8 +147,7 @@
         "profile": "Your name and picture appear in the app.",
         "ai": "Connected subscriptions appear in Settings.",
         "account": "You can use deepLe with a local profile.",
-        "username": "Your username, for your account.",
-        "plan": "Pro and Max add Better Vault AI to the model picker."
+        "username": "Your username, for your account."
       }
     }
   },

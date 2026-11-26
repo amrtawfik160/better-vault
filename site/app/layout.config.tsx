@@ -51,11 +51,11 @@ const pluginsLink: LinkItemType = {
   active: "nested-url",
 };
 
-/** Plans: free with your own keys, Pro and Max with Better Vault AI. */
-const pricingLink: LinkItemType = {
+/** Instructions for connecting provider accounts. */
+const subscriptionsLink: LinkItemType = {
   type: "main",
-  text: "Pricing",
-  url: "/pricing",
+  text: "AI subscriptions",
+  url: "/docs/providers#connect-an-ai-subscription",
   active: "url",
 };
 
@@ -109,14 +109,14 @@ const githubMenuLink: LinkItemType = {
 export const baseOptions: BaseLayoutProps = {
   nav: { title: navTitle, url: "/" },
   githubUrl: undefined,
-  links: [docsLink, pricingLink, roadmapLink, downloadLink, pluginsLink, githubDocsLink, startLink],
+  links: [docsLink, subscriptionsLink, roadmapLink, downloadLink, pluginsLink, githubDocsLink, startLink],
 };
 
 export const homeOptions: BaseLayoutProps = {
   ...baseOptions,
   links: [
     docsLink,
-    pricingLink,
+    subscriptionsLink,
     roadmapLink,
     downloadLink,
     pluginsLink,

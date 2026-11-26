@@ -30,7 +30,6 @@ import { StoragePanel } from "./storage-panel";
 import { StudioPanel } from "./studio-panel";
 import { McpPanel, useMcpRunning } from "./mcp-panel";
 import { PluginsPanel } from "./plugins-panel";
-import { SubscriptionPanel } from "./subscription-panel";
 import { usePlugins } from "@/lib/db/plugins";
 import { useAccount } from "@/lib/account/account";
 import { storageIds } from "@/lib/storage/catalog";
@@ -62,7 +61,6 @@ interface SettingsSheetProps {
 
 export const settingsPages = [
   "account",
-  "subscription",
   "providers",
   "subscriptions",
   "storage",
@@ -87,7 +85,6 @@ export const groupOf: Record<SettingsPage, SettingsGroup> = {
   studio: "ai",
   voice: "reading",
   account: "account",
-  subscription: "account",
   storage: "storage",
   data: "storage",
   appearance: "appearance",
@@ -289,7 +286,6 @@ export function SettingsSheet({ open: openProp, onOpenChange, trigger, page }: S
           <Sheet.Next name="group-account" closeLabel={tCommon("actions.close")}>
             <GroupPage id="account">
               <AccountPanel />
-              <SubscriptionPanel />
             </GroupPage>
           </Sheet.Next>
           <Sheet.Next name="group-storage" closeLabel={tCommon("actions.close")}>

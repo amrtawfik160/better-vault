@@ -1,6 +1,4 @@
 import { useEffect, type ReactNode } from "react";
-import { AccountWatcher } from "@/components/account/welcome-dialog";
-import { CloudSyncRunner } from "@/components/account/cloud-sync-runner";
 import { CommandPalette } from "@/components/command/command-palette";
 import { OnboardingGate } from "@/components/onboarding/onboarding";
 import { PluginDialogs } from "@/components/plugins/plugin-dialog";
@@ -11,6 +9,7 @@ import { ReadingVoiceToasts } from "@/components/speech/reading-voice-toasts";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { UpdatesHost } from "@/components/updates/updates-host";
+import { refreshAccount } from "@/lib/account/account";
 import { monitorSubscriptionConnections } from "@/lib/ai/cliproxyapi-client";
 import { I18nProvider } from "./i18n-provider";
 import { AppFont } from "./app-font";
@@ -19,6 +18,12 @@ import { ThemeProvider } from "./theme-provider";
 /** Everything the app needs around every page. */
 export function AppProviders({ children }: { children: ReactNode }) {
   useEffect(monitorSubscriptionConnections, []);
+  useEffect(() => {
+    const refresh = () => void refreshAccount().catch(() => {});
+    refresh();
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, []);
 
   return (
     <ThemeProvider>
@@ -30,9 +35,6 @@ export function AppProviders({ children }: { children: ReactNode }) {
           <Toaster />
           <ReadingVoiceToasts />
           <UpdatesHost />
-          {/* Keeps the account fresh and thanks the user once for each new plan. */}
-          <AccountWatcher />
-          <CloudSyncRunner />
           <PluginThemes />
           <PluginMods />
           <PluginDialogs />

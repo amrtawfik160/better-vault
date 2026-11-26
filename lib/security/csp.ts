@@ -57,7 +57,7 @@ export function contentSecurityPolicy(scriptHashes: readonly string[]): string {
       "https://huggingface.co",
       "https://*.huggingface.co",
       "https://*.hf.co",
-      // better-vault's own backend: account, subscription and Better Vault Cloud.
+      // better-vault's own backend: the optional account and Better Vault AI.
       new URL(BACKEND_URL).origin,
     ],
     // YouTube sources play in YouTube's privacy-enhanced player.

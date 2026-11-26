@@ -36,7 +36,7 @@ const KEY_FACTS = [
   "Chat answers cite numbered passages from the user's sources; Web mode uses the provider's built-in web search.",
   "Studio tools: Audio Overview, Report, Flashcards, Quiz, Data table, Mind map (plus 11 diagram kinds), Slide deck, Infographic, Anatomy, Whiteboard, Canvas and Notes.",
   "Notes: Obsidian-style Markdown notes with [[links]], backlinks and a graph; bots that read notebooks, notes and the calendar and ask before changing anything; sandboxed plugins (Studio tools, mods, themes) from a reviewed gallery.",
-  "Local-first: notebooks are stored on the device (IndexedDB in the browser, SQLite in the desktop app); no account needed. An optional plan (Dodo Payments) adds Better Vault AI, cloud storage and skill and plugin sync.",
+  "Local-first: notebooks are stored on the device (IndexedDB in the browser, SQLite in the desktop app); no account needed. AI subscriptions such as ChatGPT or Claude connect through a local proxy.",
   "Audio Overviews: two hosts discuss the sources, spoken with ElevenLabs voices. No video overviews.",
   `Runs on your own machine (bun run dev) or your own server; there is no hosted service. Source code: ${site.repo}.`,
   "The app is built with Vite, React, Hono and the Vercel AI SDK; the desktop app with Electron; this website with Next.js.",

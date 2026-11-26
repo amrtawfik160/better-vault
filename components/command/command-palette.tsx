@@ -253,7 +253,7 @@ export function CommandPalette() {
         ],
       },
       { group: "reading", page: "voice", icon: VoiceIcon, keywords: ["voice", "speech", "listen"] },
-      { group: "account", page: "account", icon: UserIcon, keywords: ["profile", "name", "plan", "subscription", "sync", "billing"] },
+      { group: "account", page: "account", icon: UserIcon, keywords: ["profile", "name", "plan"] },
       {
         group: "storage",
         page: "storage",

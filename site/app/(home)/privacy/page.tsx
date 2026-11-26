@@ -42,19 +42,10 @@ export default function PrivacyPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="The optional account and plans">
+      <LegalSection title="The optional account">
         <p>
-          An account is only needed for a Pro or Max plan. If you create one, we keep your email
-          address, name and username, your plan, and how many AI credits you used. Payments are
-          handled by Dodo Payments, which receives your payment details under its own privacy
-          policy; we never see your card.
-        </p>
-        <p>
-          With a plan, we also receive the questions you send to Better Vault AI (to answer them,
-          through Anthropic), the files you choose to put in Better Vault Cloud, and, while sync is
-          on, your skills and plugins, so another device can get them back. Your notebooks, notes
-          and API keys never reach us. You can turn sync off in{" "}
-          <strong>Settings → Account and plan</strong>.
+          An account is optional, for your profile. If you create one, we keep your email address,
+          name and username. Your notebooks, notes and API keys never reach us.
         </p>
       </LegalSection>
 
