@@ -75,6 +75,11 @@
       "chapter": "Chapter",
       "section": "Section"
     },
+    "nounsInline": {
+      "page": "page",
+      "chapter": "chapter",
+      "section": "section"
+    },
     "reading": "Reading {{noun}} {{section}}…",
     "searching": "Searching the book for “{{query}}”…",
     "contents": "Looking at the contents…",
@@ -84,7 +89,7 @@
   "reader": {
     "title": "Ask about this book",
     "body": "I can see {{noun}} {{section}}, and I can read or search the rest of the book when your question needs it.",
-    "placeholder": "Ask about this {{noun}} or the book…",
+    "placeholder": "Ask about this {{noun}} or the whole document…",
     "placeholderQuote": "Ask about this passage…",
     "onScreen": "{{noun}} {{section}}",
     "removeQuote": "Remove passage",
@@ -96,7 +101,7 @@
       "summary": "Summarize this {{noun}}",
       "explain": "Explain the hardest idea here simply",
       "quiz": "Quiz me on this {{noun}}",
-      "connect": "How does this connect to the rest of the book?"
+      "connect": "How does this connect to the rest of the document?"
     }
   },
   "history": {

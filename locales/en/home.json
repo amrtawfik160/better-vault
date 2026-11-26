@@ -148,10 +148,10 @@
     "sections": "Study sections",
     "make": {
       "title": "Make from {{title}}",
-      "hint": "Opens Studio with this book as the source.",
-      "notesTitle": "Notes about this book",
+      "hint": "Opens Studio with this document as the source.",
+      "notesTitle": "Notes about this document",
       "noNotes": "No notes yet. Notes you save while reading, or that link [[src:{{source}}]], appear here.",
-      "newNote": "New note about this book",
+      "newNote": "New note about this document",
       "noteTitle": "{{title}} · notes",
       "noteCreated": "Note created",
       "openNote": "Open note"
@@ -276,8 +276,8 @@
       "openBook": "Open {{title}}",
       "askChapter": "Ask about this chapter",
       "teachBack": "Teach it back",
-      "bookProgress": "{{percent}} of the book",
-      "fromBook": "From this book: {{highlights}} · {{words}} · {{cards}}",
+      "bookProgress": "{{percent}} of the document",
+      "fromBook": "From this document: {{highlights}} · {{words}} · {{cards}}",
       "counts": {
         "highlights_one": "{{count}} highlight",
         "highlights_other": "{{count}} highlights",
@@ -582,7 +582,7 @@
       "discuss": {
         "page": "Discuss this page",
         "chapter": "Discuss this chapter",
-        "book": "Discuss the book"
+        "book": "Discuss the document"
       },
       "teachBack": "Teach it back",
       "downloadOriginal": "Download original",
@@ -591,10 +591,10 @@
       "flashcards": "Flashcards",
       "allHighlights": "All highlights",
       "visiting": "You opened a linked passage.",
-      "highlightsCount_one": "{{count}} highlight in this book",
-      "highlightsCount_other": "{{count}} highlights in this book",
-      "wordsCount_one": "{{count}} word saved from this book",
-      "wordsCount_other": "{{count}} words saved from this book",
+      "highlightsCount_one": "{{count}} highlight in this document",
+      "highlightsCount_other": "{{count}} highlights in this document",
+      "wordsCount_one": "{{count}} word saved from this document",
+      "wordsCount_other": "{{count}} words saved from this document",
       "sectionNumber": "Section {{number}}",
       "sectionOf": "Section {{current}} of {{count}}",
       "pageOf": "Page {{current}} of {{count}}",
@@ -627,7 +627,7 @@
         "dueNow": "Due for review",
         "nextReview": "Next review {{date}}",
         "noHighlights": "Select text and pick a color to keep a highlight. Each one comes back in your review.",
-        "reviewHighlights": "Review highlights from this book",
+        "reviewHighlights": "Review highlights from this document",
         "noWords": "Select a word and choose Save word. It is translated and kept here for practice.",
         "noTranslation": "No translation yet",
         "listenTo": "Listen to {{term}}",

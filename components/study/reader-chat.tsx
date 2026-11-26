@@ -309,6 +309,8 @@ function ReaderConversation({
   const status: PromptState = chat.status === "ready" ? "idle" : chat.status;
   const context = readerContext(book, index);
   const noun = t(`book.nouns.${context.noun}`);
+  // The same noun inside a sentence ("Summarize this chapter"), where English doesn't capitalise it.
+  const nounInline = t(`book.nounsInline.${context.noun}`);
   const links = useMemo<BookLinks>(() => ({ noun: context.noun, open: openSection }), [context.noun, openSection]);
   const title = conversations?.find(({ id }) => id === instance.id)?.title;
   const lastAnswer = chat.messages.findLast((message) => message.role === "assistant");
@@ -489,10 +491,10 @@ function ReaderConversation({
                     key={key}
                     type="button"
                     disabled={busy}
-                    onClick={() => send(t(`reader.suggestions.${key}`, { noun }))}
+                    onClick={() => send(t(`reader.suggestions.${key}`, { noun: nounInline }))}
                     className="min-h-9 cursor-pointer rounded-lg border px-3 py-1.5 text-start text-[0.8125rem] transition-colors outline-none hover:bg-foreground/[0.03] focus-visible:ring-[3px] focus-visible:ring-ring/40 disabled:opacity-50"
                   >
-                    {t(`reader.suggestions.${key}`, { noun })}
+                    {t(`reader.suggestions.${key}`, { noun: nounInline })}
                   </button>
                 ))}
               </div>
@@ -619,8 +621,8 @@ function ReaderConversation({
             <Prompt.Field>
               {quote ? <PromptQuote quote={quote} clear={clearQuote} /> : null}
               <Prompt.Textarea
-                placeholder={t(quote ? "reader.placeholderQuote" : "reader.placeholder", { noun })}
-                aria-label={t("reader.placeholder", { noun })}
+                placeholder={t(quote ? "reader.placeholderQuote" : "reader.placeholder", { noun: nounInline })}
+                aria-label={t("reader.placeholder", { noun: nounInline })}
               />
               <Prompt.Footer>
                 <Prompt.Tools>
