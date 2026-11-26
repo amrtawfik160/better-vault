@@ -32,6 +32,10 @@ let closeDatabase: (() => void) | undefined;
 
 registerScheme();
 
+// Keep the existing profile and SQLite data when upgrading from Better Vault.
+if (!process.argv.some((arg) => arg === "--user-data-dir" || arg.startsWith("--user-data-dir="))) {
+  app.setPath("userData", path.join(app.getPath("appData"), "better-vault"));
+}
 const firstInstance = app.requestSingleInstanceLock();
 if (!firstInstance) app.quit();
 
