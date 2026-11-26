@@ -776,6 +776,11 @@ export default function StudyWorkspace({
       {ready && !unavailableBook && tab === "review" && !planning ? (
         <StudyReview
           ordered={Boolean(selection?.studyReviewOrdered)}
+          back={
+            selection?.studyReviewOrdered
+              ? { href: studyHref("review", { vault: studyVaultId }), label: t("study.tabs.review") }
+              : undefined
+          }
           key={`${location.key}:${studyVaultId}`}
           vaultId={studyVaultId}
           items={reviewCollection(views.review, params, requestedReview)}
@@ -816,7 +821,9 @@ export default function StudyWorkspace({
               ? t(reviewingHighlights ? "study.recall.weakHighlights" : reviewKind === "cards" ? "study.recall.weakSet" : "study.review.weakItems")
               : reviewingVocabulary
                 ? t("study.collection.filters.words")
-                : (answerCollection ?? reportCollection ?? noteCollection ?? book?.title ??
+                : selection?.studyReviewOrdered
+                  ? t("study.reviewPlan.sessionTitle")
+                  : (answerCollection ?? reportCollection ?? noteCollection ?? book?.title ??
                   (notebookId ? notebookTitles.get(notebookId) : undefined) ??
                   (requestedReview
                     ? t(

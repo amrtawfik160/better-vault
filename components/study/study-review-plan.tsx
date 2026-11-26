@@ -104,6 +104,9 @@ export function StudyReviewPlan({
                 const on = included.has(group.notebookId);
                 const off = group.due.length === 0;
                 const id = `review-plan-${group.notebookId || "none"}`;
+                // The document most items come from, unless it only repeats the notebook's name.
+                const from = group.from && group.from !== notebookName(group.notebookId) ? group.from : undefined;
+                const detail = off ? t("study.reviewPlan.notDue") : from;
                 return (
                   <label
                     key={group.notebookId || "none"}
@@ -128,9 +131,9 @@ export function StudyReviewPlan({
                     />
                     <span className="min-w-0 flex-1">
                       <DirectionalText as="span" text={notebookName(group.notebookId)} className="block truncate font-medium" />
-                      <span className="block truncate text-xs text-muted-foreground">
-                        {off ? t("study.reviewPlan.notDue") : (group.from ?? "")}
-                      </span>
+                      {detail ? (
+                        <DirectionalText as="span" text={detail} className="block truncate text-xs text-muted-foreground" />
+                      ) : null}
                     </span>
                     <span className="shrink-0 text-end text-xs tabular-nums">
                       <span className={cn("block", off ? "text-muted-foreground" : "text-foreground")}>
