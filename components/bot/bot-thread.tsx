@@ -263,19 +263,20 @@ function ThreadBody({
           ))}
           {typing ? <TypingIndicator bot={bot} /> : null}
           {errorText ? (
-            <p className="text-sm text-destructive">
-              {t("thread.error", { error: errorText })}{" "}
-              <button
-                type="button"
-                className="cursor-pointer underline underline-offset-4"
+            <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-destructive">
+              <span className="min-w-0">{t("thread.error", { error: errorText })}</span>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="border border-input text-foreground"
                 onClick={() => {
                   clearError();
                   void regenerate();
                 }}
               >
                 {t("thread.retry")}
-              </button>
-            </p>
+              </Button>
+            </div>
           ) : null}
           <div ref={end} />
         </div>

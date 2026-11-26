@@ -1,5 +1,6 @@
 import {
   Add01Icon,
+  ArrowLeft01Icon,
   Delete02Icon,
   Download04Icon,
   FileImportIcon,
@@ -75,7 +76,7 @@ export default function SkillsWorkspace() {
   if (!skills) return null;
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-card">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-card md:rounded-xl md:border">
       <ToolHeader title={t("skillsTitle")} detail={t("skills.scope", { vault: scope })}>
         {/* Import stays even in a vault with no skills yet: it is how existing SKILL.md files come in. */}
         {skills ? (
@@ -90,14 +91,23 @@ export default function SkillsWorkspace() {
             <span className="max-sm:sr-only">{t("skills.import")}</span>
           </Button>
         ) : null}
-        <Button type="button" size="sm" onClick={() => void create()}>
-          <Icon icon={Add01Icon} size={16} />
-          <span className="max-sm:sr-only">{t("skills.new")}</span>
-        </Button>
+        {/* In a vault with no skills, the empty state's New skill is the one filled button. */}
+        {mine.length ? (
+          <Button type="button" size="sm" onClick={() => void create()}>
+            <Icon icon={Add01Icon} size={16} />
+            <span className="max-sm:sr-only">{t("skills.new")}</span>
+          </Button>
+        ) : null}
       </ToolHeader>
       <div className="flex min-h-0 flex-1">
         {/* The vault's skills, and the one open. */}
-        <div className="hidden w-72 shrink-0 flex-col overflow-hidden border-e md:flex">
+        {/* On phones the list and the open skill take turns; wider, they sit side by side. */}
+        <div
+          className={cn(
+            "w-full shrink-0 flex-col overflow-hidden md:flex md:w-72 md:border-e",
+            active || !mine.length ? "hidden" : "flex",
+          )}
+        >
           <div className="px-3 pt-3 pb-2">
             <Input.Group size="sm">
               <Input.Addon>
@@ -154,9 +164,19 @@ export default function SkillsWorkspace() {
           </ScrollArea>
         </div>
 
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div
+          className={cn(
+            "min-w-0 flex-1 flex-col overflow-hidden md:flex",
+            active || !mine.length ? "flex" : "hidden",
+          )}
+        >
           {active ? (
-            <SkillEditor key={active.id} skill={active} onDeleted={() => setActiveId(null)} />
+            <SkillEditor
+              key={active.id}
+              skill={active}
+              onBack={() => setActiveId(null)}
+              onDeleted={() => setActiveId(null)}
+            />
           ) : (
             <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto px-5 py-12">
               <section aria-labelledby="skills-empty" className="w-full max-w-[27.5rem]">
@@ -181,7 +201,16 @@ export default function SkillsWorkspace() {
   );
 }
 
-function SkillEditor({ skill, onDeleted }: { skill: Skill; onDeleted: () => void }) {
+function SkillEditor({
+  skill,
+  onBack,
+  onDeleted,
+}: {
+  skill: Skill;
+  /** Back to the list, on phones where the two take turns. */
+  onBack: () => void;
+  onDeleted: () => void;
+}) {
   const { t, i18n } = useTranslation("notes");
   const nameId = useId();
   const descriptionId = useId();
@@ -207,7 +236,16 @@ function SkillEditor({ skill, onDeleted }: { skill: Skill; onDeleted: () => void
 
   return (
     <ScrollArea className="min-h-0 flex-1">
-      <div className="mx-auto flex max-w-[46rem] flex-col gap-4 px-6 pt-6 pb-24">
+      <div className="mx-auto flex max-w-[46rem] flex-col gap-4 px-6 pt-6 pb-24 max-md:px-4 max-md:pt-3">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onBack}
+          className="-ms-2 self-start text-muted-foreground max-md:h-11 md:hidden"
+        >
+          <Icon icon={ArrowLeft01Icon} size={16} className="rtl:rotate-180" />
+          {t("skillsTitle")}
+        </Button>
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
             <Field label={t("skills.name")} htmlFor={nameId} hint={t("skills.nameHint")}>
@@ -221,8 +259,9 @@ function SkillEditor({ skill, onDeleted }: { skill: Skill; onDeleted: () => void
               />
             </Field>
           </div>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() =>
               downloadText(
                 toSkillFile({ ...skill, name, description }),
@@ -232,19 +271,20 @@ function SkillEditor({ skill, onDeleted }: { skill: Skill; onDeleted: () => void
             }
             aria-label={t("skills.export")}
             title={t("skills.export")}
-            className="mt-6 flex size-9 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            className="mt-7 text-muted-foreground"
           >
-            <Icon icon={Download04Icon} size={18} />
-          </button>
-          <button
-            type="button"
+            <Icon icon={Download04Icon} size={16} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => setDeleting(true)}
             aria-label={t("skills.delete.confirm")}
             title={t("skills.delete.confirm")}
-            className="mt-6 flex size-9 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-destructive focus-visible:ring-2 focus-visible:ring-ring"
+            className="mt-7 text-muted-foreground hover:not-disabled:text-destructive"
           >
-            <Icon icon={Delete02Icon} size={18} />
-          </button>
+            <Icon icon={Delete02Icon} size={16} />
+          </Button>
         </div>
         <Field
           label={t("skills.description")}

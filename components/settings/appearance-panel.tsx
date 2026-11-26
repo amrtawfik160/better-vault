@@ -3,6 +3,7 @@ import { ComputerIcon, Moon02Icon, Sun03Icon, Tick02Icon } from "@hugeicons/core
 import { useTranslation } from "react-i18next";
 import { Field } from "@/components/common/field";
 import { Segmented } from "@/components/common/segmented";
+import { onRadioKeys } from "@/components/common/roving";
 import { Icon } from "@/components/icon";
 import { useTheme, type Theme } from "@/components/providers/theme-provider";
 import { accents } from "@/lib/theme/script";
@@ -55,6 +56,8 @@ export function AppearancePanel() {
                     type="button"
                     role="radio"
                     aria-checked={chosen}
+                    tabIndex={chosen ? 0 : -1}
+                    onKeyDown={(event) => onRadioKeys(event, accents, accent, setAccent)}
                     aria-label={t(`appearance.accents.${value}`)}
                     title={t(`appearance.accents.${value}`)}
                     onClick={() => setAccent(value)}

@@ -1,21 +1,25 @@
 import {
   Add01Icon,
   AiBrain01Icon,
+  AiVoiceIcon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
+  BotIcon,
+  Books01Icon,
   CloudServerIcon,
-  FolderAddIcon,
   PaintBoardIcon,
-  Search01Icon,
   Calendar03Icon,
   Camera01Icon,
   Clock01Icon,
   GoogleIcon,
-  GridViewIcon,
+  InformationCircleIcon,
   Mail01Icon,
   MagicWand01Icon,
   Note01Icon,
-  Key01Icon,
+  PlugSocketIcon,
+  RepeatIcon,
+  Sun03Icon,
+  Target02Icon,
   Tick02Icon,
 } from "@hugeicons/core-free-icons";
 import { useEffect, useId, useRef, useState } from "react";
@@ -125,11 +129,12 @@ function Onboarding() {
       role="dialog"
       aria-modal
       aria-label={t("onboarding.label")}
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-background p-4 sm:p-8"
+      className="fixed inset-0 z-50 flex overflow-y-auto bg-background p-4 sm:p-8"
     >
-      <div className="grid w-full max-w-5xl overflow-hidden rounded-3xl bg-card ring-1 ring-border lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+      {/* `m-auto` centres it while it fits and lets it scroll from the top when the window is short. */}
+      <div className="m-auto grid w-full max-w-5xl overflow-hidden rounded-3xl bg-card ring-1 ring-border lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         {/* The step. */}
-        <div className="flex min-h-[34rem] flex-col p-6 sm:p-10">
+        <div className="flex min-h-[min(34rem,calc(100dvh-4rem))] flex-col p-6 sm:p-10">
           <header className="flex items-center gap-3">
             <Logo size={28} />
             <span className="text-sm font-semibold">deepLe</span>
@@ -412,8 +417,9 @@ const PAGE_H = 600;
 
 /**
  * The real notebooks page, drawn small, with the Settings sheet open as it
- * really is. Its Account row shows the name, picture and username typed.
- * It uses the live components' styles, scaled to fit.
+ * really is: its seven groups, the Account row showing the name, picture and
+ * username typed, and the AI row the subscriptions connected. It uses the
+ * live components' styles, scaled to fit.
  */
 function Preview({
   name,
@@ -428,7 +434,7 @@ function Preview({
 }) {
   const { t } = useTranslation("common");
   const { t: tHome } = useTranslation("home");
-  const { t: tNotes } = useTranslation("notes");
+  const { t: tShell } = useTranslation("shell");
   const { t: tSettings } = useTranslation("settings");
   const profile = useProfile();
   const { accounts } = useSubscriptionConnections();
@@ -444,12 +450,9 @@ function Preview({
   }, []);
 
   const row =
-    "relative flex h-8 w-full min-w-0 items-center gap-2.5 rounded-xl px-2.5 text-start text-sm";
-  const tiles = [
-    { title: tHome("untitled"), tint: "bg-chart-2/15 text-chart-2" },
-    { title: tNotes("title"), tint: "bg-chart-3/15 text-chart-3" },
-    { title: tHome("folders.untitled"), tint: "bg-chart-4/15 text-chart-4" },
-  ];
+    "flex h-8 w-full min-w-0 items-center gap-3 rounded-md px-2 text-start text-[0.8125rem] leading-5 text-muted-foreground";
+  const heading = "px-2 pt-4 pb-1 text-xs font-medium text-muted-foreground";
+  const highlight = "ring-2 ring-primary/70";
   return (
     <div
       className="relative hidden flex-col justify-center gap-4 border-s bg-muted/40 p-6 lg:flex"
@@ -464,92 +467,84 @@ function Preview({
           className="pointer-events-none absolute start-0 top-0 flex origin-top-left bg-background select-none rtl:origin-top-right"
           style={{ width: PAGE_W, height: PAGE_H, transform: `scale(${scale})` }}
         >
-          {/* The sidebar, as in components/home/vault-sidebar.tsx. */}
-          <aside className="m-2 me-0 flex w-60 shrink-0 flex-col rounded-3xl bg-muted/60 ring-1 ring-border/60">
-            <div className="flex h-14 shrink-0 items-center gap-2.5 px-4">
-              <Logo size={24} />
-              <span className="truncate text-sm font-semibold">{tHome("vaults.appTitle")}</span>
+          {/* The sidebar, as in components/shell/app-sidebar.tsx. */}
+          <aside className="flex w-56 shrink-0 flex-col ps-3 pe-2 pb-2">
+            <div className="flex h-13 shrink-0 items-center gap-3 px-2 text-[0.8125rem] font-medium">
+              <span className="flex size-5 items-center justify-center rounded-md bg-muted text-xs inset-ring inset-ring-border">
+                {tHome("vaults.default").slice(0, 1)}
+              </span>
+              {tHome("vaults.default")}
             </div>
-            <nav className="flex flex-col gap-5 px-2 pb-3">
-              <section className="flex flex-col gap-0.5">
-                <h2 className="px-2.5 pb-1 text-xs font-medium text-muted-foreground">
-                  {tHome("vaults.library")}
-                </h2>
-                {(
-                  [
-                    [Clock01Icon, tHome("vaults.recent")],
-                    [GridViewIcon, tHome("vaults.all")],
-                    [Note01Icon, tNotes("title")],
-                    [MagicWand01Icon, tNotes("skillsTitle")],
-                    [Calendar03Icon, tHome("calendar.title")],
-                  ] as const
-                ).map(([icon, label], index) => (
-                  <span
-                    key={label}
-                    className={cn(row, index === 1 && "bg-foreground/10 font-medium")}
-                  >
-                    <Icon icon={icon} size={18} className="text-muted-foreground" />
-                    {label}
-                  </span>
-                ))}
-              </section>
-              <section className="flex flex-col gap-0.5">
-                <h2 className="px-2.5 pb-1 text-xs font-medium text-muted-foreground">
-                  {tHome("vaults.label")}
-                </h2>
-                <span className={cn(row, "font-medium")}>
-                  <span className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-muted">
-                    <Icon icon={Note01Icon} size={14} />
-                  </span>
-                  {tHome("vaults.default")}
-                </span>
-              </section>
-            </nav>
+            <span className={cn(row, "mt-1 border border-input font-medium text-foreground")}>
+              <Icon icon={Add01Icon} size={16} strokeWidth={1.5} />
+              <span className="flex-1">{tShell("nav.add")}</span>
+              <span className="text-xs font-normal text-muted-foreground">
+                {tShell("nav.addHint")}
+              </span>
+            </span>
+            <p className={heading}>{tShell("nav.study")}</p>
+            {(
+              [
+                [Sun03Icon, tShell("nav.today")],
+                [Target02Icon, tShell("nav.practice")],
+                [RepeatIcon, tShell("nav.review")],
+                [Books01Icon, tShell("nav.library")],
+              ] as const
+            ).map(([icon, label]) => (
+              <span key={label} className={row}>
+                <Icon icon={icon} size={16} strokeWidth={1.5} />
+                {label}
+              </span>
+            ))}
+            <p className={heading}>{tShell("nav.notebooks")}</p>
+            {(
+              [
+                [Clock01Icon, tShell("nav.recent")],
+                [Note01Icon, tShell("nav.notes")],
+              ] as const
+            ).map(([icon, label]) => (
+              <span key={label} className={row}>
+                <Icon icon={icon} size={16} strokeWidth={1.5} />
+                {label}
+              </span>
+            ))}
+            <p className={heading}>{tShell("nav.tools")}</p>
+            {(
+              [
+                [Calendar03Icon, tShell("nav.calendar")],
+                [BotIcon, tShell("nav.bot")],
+                [MagicWand01Icon, tShell("nav.skills")],
+              ] as const
+            ).map(([icon, label]) => (
+              <span key={label} className={row}>
+                <Icon icon={icon} size={16} strokeWidth={1.5} />
+                {label}
+              </span>
+            ))}
           </aside>
 
-          {/* The page, as in components/home/notebook-home.tsx. */}
-          <div className="flex min-w-0 flex-1 flex-col">
-            <header className="flex h-16 shrink-0 items-center gap-3 px-6">
-              <div className="flex h-10 items-center gap-0.5 rounded-full bg-card px-1 ring-1 ring-border">
-                <span className="flex size-8 items-center justify-center text-muted-foreground">
-                  <Icon icon={ArrowLeft01Icon} size={18} />
-                </span>
-                <span className="flex size-8 items-center justify-center text-muted-foreground">
-                  <Icon icon={ArrowRight01Icon} size={18} />
-                </span>
-              </div>
-              <h1 className="min-w-0 flex-1 truncate text-lg font-semibold tracking-tight">
-                {tHome("vaults.default")}
+          {/* The notebooks list, as in components/home/notebook-home.tsx. */}
+          <div className="my-2 me-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card">
+            <header className="flex h-13 shrink-0 items-center gap-3 border-b ps-5 pe-2">
+              <h1 className="min-w-0 flex-1 truncate text-[0.8125rem] font-medium">
+                {tShell("list.title")}
               </h1>
-              <div className="flex h-10 items-center gap-0.5 rounded-full bg-card px-1 ring-1 ring-border">
-                {[GridViewIcon, Add01Icon, FolderAddIcon].map((icon, index) => (
-                  <span
-                    key={index}
-                    className="flex size-8 items-center justify-center text-muted-foreground"
-                  >
-                    <Icon icon={icon} size={18} />
-                  </span>
-                ))}
-              </div>
-              <span className="flex size-10 items-center justify-center rounded-full bg-card text-muted-foreground ring-1 ring-border">
-                <Icon icon={Search01Icon} size={18} />
+              <span className="flex h-8 items-center gap-2 rounded-md px-3 text-[0.8125rem] font-medium">
+                <Icon icon={Add01Icon} size={16} className="text-muted-foreground" />
+                {tShell("list.add")}
+              </span>
+              <span className="flex h-8 items-center rounded-md bg-primary px-3 text-[0.8125rem] font-medium text-primary-foreground">
+                {tShell("list.newNotebook")}
               </span>
             </header>
-            <main className="grid grid-cols-5 gap-2 px-6 pt-2">
-              {tiles.map((tile) => (
-                <div
-                  key={tile.title}
-                  className="flex flex-col items-center gap-2 rounded-2xl px-2 pt-4 pb-3 text-center"
-                >
-                  <span
-                    className={cn(
-                      "flex size-20 items-center justify-center rounded-[1.375rem]",
-                      tile.tint,
-                    )}
-                  >
-                    <Icon icon={Note01Icon} size={34} />
+            <main className="flex flex-col px-6 pt-8">
+              {[0, 1, 2].map((index) => (
+                <div key={index} className="flex items-center gap-4 border-b py-4">
+                  <span className="h-12 w-9 shrink-0 rounded-md bg-muted" />
+                  <span className="flex min-w-0 flex-1 flex-col gap-2">
+                    <span className="h-3 w-2/5 rounded-full bg-muted" />
+                    <span className="h-2.5 w-3/5 rounded-full bg-muted/70" />
                   </span>
-                  <span className="w-full truncate text-sm font-medium">{tile.title}</span>
                 </div>
               ))}
             </main>
@@ -561,39 +556,46 @@ function Preview({
             <p className="pb-4 text-sm text-muted-foreground">{tSettings("description")}</p>
             <div className="-mx-2 flex flex-col gap-0.5">
               <SheetRow
-                className={step === "ai" ? undefined : "ring-2 ring-primary/70"}
+                className={step === "ai" ? highlight : undefined}
+                icon={<Icon icon={AiBrain01Icon} />}
+                label={tSettings("groups.ai.label")}
+                hint={subscriptions.length > 0 ? subscriptions.join(", ") : tSettings("groups.ai.detail")}
+              />
+              <SheetRow
+                icon={<Icon icon={AiVoiceIcon} />}
+                label={tSettings("groups.reading.label")}
+                hint={tSettings("groups.reading.detail")}
+              />
+              <SheetRow
+                className={step === "ai" ? undefined : highlight}
                 icon={<Avatar profile={profile ? { ...profile, name } : undefined} size={36} />}
-                label={name || tSettings("rows.account")}
+                label={name || tSettings("groups.account.label")}
                 hint={
                   username
                     ? `@${username}`
                     : (email ??
-                      (name ? tSettings("rows.accountHint") : tSettings("rows.accountSetUp")))
+                      (name ? tSettings("rows.accountHint") : tSettings("groups.account.detail")))
                 }
-              />
-              <SheetRow
-                className={step === "ai" ? "ring-2 ring-primary/70" : undefined}
-                icon={<Icon icon={AiBrain01Icon} />}
-                label={tSettings("rows.subscriptions")}
-                hint={
-                  subscriptions.length > 0
-                    ? subscriptions.join(", ")
-                    : tSettings("rows.subscriptionsNone")
-                }
-              />
-              <SheetRow
-                icon={<Icon icon={Key01Icon} />}
-                label={tSettings("rows.providers")}
-                hint={tSettings("rows.providersNone")}
               />
               <SheetRow
                 icon={<Icon icon={CloudServerIcon} />}
-                label={tSettings("rows.storage")}
-                hint={tSettings("rows.storageNone")}
+                label={tSettings("groups.storage.label")}
+                hint={tSettings("groups.storage.detail")}
               />
               <SheetRow
                 icon={<Icon icon={PaintBoardIcon} />}
-                label={tSettings("rows.appearance")}
+                label={tSettings("groups.appearance.label")}
+                hint={tSettings("groups.appearance.detail")}
+              />
+              <SheetRow
+                icon={<Icon icon={PlugSocketIcon} />}
+                label={tSettings("groups.tools.label")}
+                hint={tSettings("groups.tools.detail")}
+              />
+              <SheetRow
+                icon={<Icon icon={InformationCircleIcon} />}
+                label={tSettings("groups.about.label")}
+                hint={tSettings("groups.about.detail")}
               />
             </div>
           </div>

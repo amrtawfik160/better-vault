@@ -30,6 +30,7 @@ import { MenuActions, type MenuAction } from "@/components/common/action-menu";
 import { ContextMenu, ContextMenuTrigger } from "@/components/common/context-menu";
 import { Icon } from "@/components/icon";
 import { Button } from "@/components/panelui/button";
+import { Input } from "@/components/panelui/input";
 import { Menu } from "@/components/panelui/menu";
 import { Desk, useBareFrame } from "@/components/shell/app-frame";
 import { SidebarMenuButton, useSidebar } from "@/components/shell/sidebar-state";
@@ -404,13 +405,12 @@ export function NotebookHome() {
     >
       {panelPage ? (
         <>
-          {/* Study's bar; Notes and the tools draw their own header, so phones only keep it for the menu. */}
+          {/* Study's bar. Notes and the tools draw their own header, with the phone's menu button in it. */}
           <header
             data-window-bar
             className={cn(
               "flex min-h-13 shrink-0 items-center gap-2 ps-5 pe-2 max-md:ps-1",
-              fullPage && "md:hidden",
-              focusedReader && "hidden",
+              (fullPage || focusedReader) && "hidden",
             )}
           >
             <SidebarMenuButton />
@@ -432,14 +432,15 @@ export function NotebookHome() {
           <main
             className={cn(
               "min-h-0 flex-1",
-              !focusedReader && section !== "bot" && section !== "calendar" && "max-md:px-2 max-md:pb-2",
+              // On phones Notes and Skills meet the screen's edges, like the desk.
+              studying && !focusedReader && "max-md:px-2 max-md:pb-2",
             )}
           >
             <Suspense
               fallback={
-                <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                <Desk className="h-full items-center justify-center text-sm text-muted-foreground">
                   {tCommon("status.loading")}
-                </div>
+                </Desk>
               }
             >
               {/* Notes, skills and Study draw their own cards; the bot and the calendar sit on the desk. */}
@@ -488,15 +489,18 @@ export function NotebookHome() {
                 <Icon icon={Add01Icon} size={16} strokeWidth={1.5} className="text-muted-foreground" />
                 <span className="max-sm:sr-only">{tShell("list.add")}</span>
               </AddButton>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setCreatingFolder(true)}
-                className="max-md:h-11"
-              >
-                <Icon icon={FolderAddIcon} size={16} strokeWidth={1.5} className="text-muted-foreground" />
-                <span className="max-sm:sr-only">{tShell("list.newFolder")}</span>
-              </Button>
+              {/* On phones New folder moves into More, so the page's name keeps its room. Recent shows no folders. */}
+              {section === "recents" ? null : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setCreatingFolder(true)}
+                  className="max-sm:hidden max-md:h-11"
+                >
+                  <Icon icon={FolderAddIcon} size={16} strokeWidth={1.5} className="text-muted-foreground" />
+                  <span className="max-sm:sr-only">{tShell("list.newFolder")}</span>
+                </Button>
+              )}
               <Menu>
                 <Menu.Trigger
                   render={
@@ -512,6 +516,12 @@ export function NotebookHome() {
                   <Icon icon={MoreHorizontalIcon} size={16} strokeWidth={1.5} />
                 </Menu.Trigger>
                 <Menu.Content align="end">
+                  {section === "recents" ? null : (
+                    <Menu.Item onClick={() => setCreatingFolder(true)} className="sm:hidden">
+                      <Icon icon={FolderAddIcon} />
+                      {tShell("list.newFolder")}
+                    </Menu.Item>
+                  )}
                   <Menu.Item onClick={() => importInput.current?.click()}>
                     <Icon icon={FileImportIcon} />
                     {tShell("list.importFiles")}
@@ -555,9 +565,11 @@ export function NotebookHome() {
                   ) : (
                     <>
                       <div className="flex flex-wrap items-center gap-2">
-                        <div className="flex h-8 min-w-0 flex-[1_1_15rem] items-center gap-2 rounded-md border border-input bg-background ps-2.5 pe-1 text-muted-foreground transition-colors duration-150 focus-within:border-muted-foreground max-md:h-11">
-                          <Icon icon={Search01Icon} size={16} strokeWidth={1.5} />
-                          <input
+                        <Input.Group size="sm" className="min-w-0 flex-[1_1_15rem] max-md:h-11">
+                          <Input.Addon>
+                            <Icon icon={Search01Icon} size={16} strokeWidth={1.5} />
+                          </Input.Addon>
+                          <Input
                             ref={searchInput}
                             type="search"
                             value={query}
@@ -570,23 +582,26 @@ export function NotebookHome() {
                             }}
                             aria-label={tShell("list.search")}
                             placeholder={tShell("list.search")}
-                            className="h-full min-w-0 flex-1 bg-transparent text-[0.8125rem] leading-5 text-foreground outline-none placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden"
+                            className="[&::-webkit-search-cancel-button]:hidden"
                           />
                           {searching ? (
-                            <Button
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label={tShell("list.clearSearch")}
-                              onClick={() => {
-                                setQuery("");
-                                searchInput.current?.focus();
-                              }}
-                              className="size-6 rounded-sm text-muted-foreground"
-                            >
-                              <Icon icon={Cancel01Icon} size={14} strokeWidth={1.5} />
-                            </Button>
+                            <Input.Addon align="end" className="pe-1">
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={tShell("list.clearSearch")}
+                                title={tShell("list.clearSearch")}
+                                onClick={() => {
+                                  setQuery("");
+                                  searchInput.current?.focus();
+                                }}
+                                className="size-6 rounded-sm text-muted-foreground"
+                              >
+                                <Icon icon={Cancel01Icon} size={14} strokeWidth={1.5} />
+                              </Button>
+                            </Input.Addon>
                           ) : null}
-                        </div>
+                        </Input.Group>
                         {section === "recents" ? null : (
                           <Menu>
                             <Menu.Trigger
@@ -760,8 +775,12 @@ export function NotebookHome() {
                             </section>
                           ) : null}
                           {bookNotebooks.length ? (
-                            <details className="group/library">
-                              <summary className="flex w-fit cursor-pointer list-none items-center gap-2 rounded-md py-1 text-xs font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 [&::-webkit-details-marker]:hidden">
+                            // Open by itself when the vault holds nothing else, so the list never looks empty.
+                            <details
+                              className="group/library"
+                              open={!subjectNotebooks?.length && !shownFolders.length ? true : undefined}
+                            >
+                              <summary className="flex w-fit cursor-pointer list-none items-center gap-2 rounded-md py-1 text-xs max-md:min-h-11 font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 [&::-webkit-details-marker]:hidden">
                                 <Icon
                                   icon={ArrowRight01Icon}
                                   size={14}
@@ -906,18 +925,19 @@ function PathStep({
 }) {
   const drop = useDropTarget(onDropCards);
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
+      size="sm"
       onClick={onOpen}
       aria-current={active ? "page" : undefined}
       {...drop.props}
       className={cn(
-        "flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-1 outline-none transition-colors duration-150 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40",
+        "h-7 px-1.5 font-normal text-muted-foreground hover:text-foreground max-md:h-11",
         active && "font-medium text-foreground",
         drop.over && "bg-muted ring-1 ring-muted-foreground",
       )}
     >
       {children}
-    </button>
+    </Button>
   );
 }

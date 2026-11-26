@@ -420,19 +420,21 @@ export default function NotesWorkspace() {
               <span className="min-w-0 flex-1 truncate">
                 {t("fromNotebook", { title: filterNotebook.title })}
               </span>
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="icon-sm"
                 aria-label={t("thisVault")}
+                title={t("thisVault")}
                 onClick={() =>
                   setParams(
                     { view: "notes", ...(activeId ? { note: activeId } : {}) },
                     { state: studyReturnState(state) },
                   )
                 }
-                className="flex size-5 cursor-pointer items-center justify-center rounded-full outline-none hover:bg-background focus-visible:ring-2 focus-visible:ring-ring"
+                className="-me-1 size-6 rounded-full hover:bg-background"
               >
                 <Icon icon={Cancel01Icon} size={12} />
-              </button>
+              </Button>
             </div>
           ) : null
         }
@@ -515,7 +517,7 @@ export default function NotesWorkspace() {
   const noteCount = world.notes.filter((each) => each.vaultId === vaultId).length;
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-card">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-card md:rounded-xl md:border">
       {/* One header: the page, then the graph, the keys and the one filled button. */}
       <ToolHeader
         title={t("title")}
@@ -595,24 +597,26 @@ export default function NotesWorkspace() {
               </Sheet.Content>
             </Sheet>
           ) : null}
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="icon-sm"
             onClick={() => go("back")}
             aria-label={t("actions.back")}
             title={`${t("actions.back")} (${keyLabel("Mod+Alt+←")})`}
-            className="flex size-7 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            className="text-muted-foreground max-md:size-11"
           >
             <Icon icon={ArrowLeft01Icon} size={16} className="rtl:rotate-180" />
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
             onClick={() => go("forward")}
             aria-label={t("actions.forward")}
             title={`${t("actions.forward")} (${keyLabel("Mod+Alt+→")})`}
-            className="flex size-7 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            className="text-muted-foreground max-md:size-11"
           >
             <Icon icon={ArrowRight01Icon} size={16} className="rtl:rotate-180" />
-          </button>
+          </Button>
           <div
             role="tablist"
             aria-label={t("title")}
@@ -661,15 +665,16 @@ export default function NotesWorkspace() {
             })}
           </div>
           {note && !graphOpen ? (
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="icon-sm"
               onClick={toggleMode}
               aria-label={t("modes.toggle")}
               title={`${displayedMode === "edit" ? t("modes.edit") : t("modes.read")} · ${t("modes.toggle")} (${keyLabel("Mod+E")})`}
-              className="flex size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              className="text-muted-foreground max-md:size-11"
             >
               <Icon icon={displayedMode === "edit" ? Edit02Icon : BookOpen01Icon} size={16} />
-            </button>
+            </Button>
           ) : null}
           {note && !graphOpen && layout !== "wide" ? (
             <Sheet
@@ -693,19 +698,17 @@ export default function NotesWorkspace() {
             </Sheet>
           ) : null}
           {note && !graphOpen && layout === "wide" ? (
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="icon-sm"
               onClick={() => setDetails((current) => !current)}
               aria-label={details ? t("panes.hide") : t("panes.show")}
               aria-pressed={details}
               title={details ? t("panes.hide") : t("panes.show")}
-              className={cn(
-                "hidden size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring lg:flex",
-                details && "text-foreground",
-              )}
+              className={cn("hidden text-muted-foreground lg:inline-flex", details && "text-foreground")}
             >
               <Icon icon={SidebarRightIcon} size={16} className="rtl:-scale-x-100" />
-            </button>
+            </Button>
           ) : null}
         </div>
 
@@ -744,6 +747,11 @@ export default function NotesWorkspace() {
                 key={`${note.id}:${note.title}`}
                 note={note}
                 autoFocus={freshNote === note.id}
+                onDone={() => {
+                  // Enter goes on into the text, as in Obsidian; the renamed title must not take focus back.
+                  setFreshNote(null);
+                  if (displayedMode === "edit") requestAnimationFrame(() => editor.current?.focus());
+                }}
               />
               <p className="mx-auto w-full max-w-[46rem] px-6 text-xs text-muted-foreground">
                 {t("updated", { time: formatRelativeTime(note.updatedAt, i18n.language) })} ·{" "}
@@ -847,7 +855,16 @@ export default function NotesWorkspace() {
 }
 
 /** Obsidian's inline title: rename the note where you read its name. */
-function NoteTitle({ note, autoFocus }: { note: Note; autoFocus: boolean }) {
+function NoteTitle({
+  note,
+  autoFocus,
+  onDone,
+}: {
+  note: Note;
+  autoFocus: boolean;
+  /** Enter was pressed: the name is kept and the text is next. */
+  onDone: () => void;
+}) {
   const { t } = useTranslation("notes");
   // Keyed by id and title, so a rename elsewhere starts it afresh.
   const [title, setTitle] = useState(note.title);
@@ -867,15 +884,17 @@ function NoteTitle({ note, autoFocus }: { note: Note; autoFocus: boolean }) {
       onChange={(event) => setTitle(event.target.value)}
       onBlur={() => void commit()}
       onKeyDown={(event) => {
-        if (event.key === "Enter") {
+        if (event.key === "Enter" && !event.nativeEvent.isComposing) {
           event.preventDefault();
           event.currentTarget.blur();
+          onDone();
         } else if (event.key === "Escape") {
           setTitle(note.title);
           event.currentTarget.blur();
         }
       }}
-      className="mx-auto w-full max-w-[46rem] bg-transparent px-6 pt-6 text-3xl font-bold tracking-tight outline-none placeholder:text-muted-foreground"
+      dir="auto"
+      className="mx-auto w-full max-w-[46rem] truncate bg-transparent px-6 pt-6 text-3xl font-bold tracking-tight outline-none placeholder:text-muted-foreground max-sm:text-2xl"
       placeholder={t("untitled")}
     />
   );

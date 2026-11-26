@@ -2,6 +2,7 @@ import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { useId, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Field } from "@/components/common/field";
+import { onRadioKeys } from "@/components/common/roving";
 import { Segmented } from "@/components/common/segmented";
 import { useVaultName } from "@/components/home/vault-name";
 import { Icon } from "@/components/icon";
@@ -182,6 +183,12 @@ function BotForm({
                       type="button"
                       role="radio"
                       aria-checked={details.avatar.shape === shape}
+                      tabIndex={details.avatar.shape === shape ? 0 : -1}
+                      onKeyDown={(event) =>
+                        onRadioKeys(event, botShapeIds, details.avatar.shape, (next) =>
+                          set({ avatar: { ...details.avatar, shape: next } }),
+                        )
+                      }
                       aria-label={t(`shapes.${shape}`)}
                       title={t(`shapes.${shape}`)}
                       onClick={() => set({ avatar: { ...details.avatar, shape } })}
@@ -209,6 +216,12 @@ function BotForm({
                       type="button"
                       role="radio"
                       aria-checked={details.avatar.color === color}
+                      tabIndex={details.avatar.color === color ? 0 : -1}
+                      onKeyDown={(event) =>
+                        onRadioKeys(event, botColorKeys, details.avatar.color, (next) =>
+                          set({ avatar: { ...details.avatar, color: next } }),
+                        )
+                      }
                       aria-label={t(`colors.${color}`)}
                       title={t(`colors.${color}`)}
                       onClick={() => set({ avatar: { ...details.avatar, color } })}

@@ -1,6 +1,7 @@
 import { SettingsSection } from "./settings-section";
 import { ArrowUpRight01Icon, Tick02Icon } from "@hugeicons/core-free-icons";
 import { useTranslation } from "react-i18next";
+import { onRadioKeys } from "@/components/common/roving";
 import { Icon } from "@/components/icon";
 import { saveLanguage } from "@/components/providers/i18n-provider";
 import { languages } from "@/lib/i18n/config";
@@ -26,6 +27,18 @@ export function LanguagePanel() {
                 type="button"
                 role="radio"
                 aria-checked={selected}
+                tabIndex={selected ? 0 : -1}
+                onKeyDown={(event) =>
+                  onRadioKeys(
+                    event,
+                    languages.map(({ code }) => code),
+                    i18n.language,
+                    (code) => {
+                      saveLanguage(code);
+                      void i18n.changeLanguage(code);
+                    },
+                  )
+                }
                 lang={language.code}
                 dir={language.dir}
                 onClick={() => {

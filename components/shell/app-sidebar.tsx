@@ -214,6 +214,10 @@ export function AppSidebar({ notebookId }: AppSidebarProps) {
           id="app-sidebar-drawer"
           detached={false}
           showClose={false}
+          // Opened from the header's menu button, not a trigger of its own: focus goes back there.
+          finalFocus={() =>
+            document.querySelector<HTMLElement>('[aria-controls="app-sidebar-drawer"]') ?? true
+          }
           className="w-[min(304px,86vw)] bg-card"
         >
           <nav aria-label={t("nav.label")} className="flex h-full min-h-0 flex-col px-2 pb-2">
@@ -366,13 +370,14 @@ function SidebarBody({
       </div>
 
       <RailTip rail={rail} label={t("nav.add")}>
-        <button
-          type="button"
+        <Button
+          variant="outline"
+          size="sm"
           onClick={onAdd}
           aria-label={t("nav.addLabel")}
           className={cn(
             rowClass,
-            "mt-1 shrink-0 border border-input pe-3 font-medium text-foreground hover:bg-foreground/5",
+            "mt-1 justify-start border-input bg-transparent pe-3 font-medium text-foreground shadow-none dark:bg-transparent",
             rail && railRow,
           )}
         >
@@ -383,7 +388,7 @@ function SidebarBody({
               <span className="text-xs font-normal text-muted-foreground">{t("nav.addHint")}</span>
             </>
           )}
-        </button>
+        </Button>
       </RailTip>
 
       <ScrollArea className="-mx-1 mt-2 min-h-0 flex-1">
@@ -454,33 +459,37 @@ function SidebarBody({
       >
         {rail && wide && collapsed ? (
           <RailTip rail label={t("nav.expand")}>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="icon-sm"
               aria-label={t("nav.expand")}
               onClick={() => setCollapsed(false)}
               className={cn(rowClass, idleRow, railRow)}
             >
               <Icon icon={SidebarLeftIcon} size={16} strokeWidth={1.5} className="rtl:-scale-x-100" />
-            </button>
+            </Button>
           </RailTip>
         ) : null}
         <RailTip rail={rail} label={accountName}>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => onSettings("account")}
             aria-label={rail ? accountName : undefined}
-            className={cn(rowClass, idleRow, "flex-1", rail && railRow)}
+            // In the rail the foot is a column: the row keeps its 40px instead of sharing the height.
+            className={cn(rowClass, idleRow, "justify-start font-normal", rail ? railRow : "flex-1")}
           >
             <Avatar
               profile={profile && { ...profile, avatar: profile.avatar ?? account?.user.image ?? null }}
               size={20}
             />
-            {rail ? null : <span className="min-w-0 flex-1 truncate">{accountName}</span>}
-          </button>
+            {rail ? null : <span className="min-w-0 flex-1 truncate text-start">{accountName}</span>}
+          </Button>
         </RailTip>
         <RailTip rail={rail} label={t("nav.settings")}>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="icon-sm"
             onClick={() => onSettings(null)}
             aria-label={t("nav.settings")}
             title={rail ? undefined : t("nav.settings")}
@@ -491,7 +500,7 @@ function SidebarBody({
             )}
           >
             <Icon icon={Settings01Icon} size={16} strokeWidth={1.5} />
-          </button>
+          </Button>
         </RailTip>
       </div>
     </>
@@ -541,7 +550,7 @@ function NotebooksHeading({ rail, current, folders }: { rail: boolean; current: 
       {...drop.props}
       className={cn(
         headingClass,
-        "mt-3 flex items-center rounded-md pt-1 outline-none transition-colors duration-150 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40",
+        "mt-3 flex items-center rounded-md pt-1 outline-none transition-colors duration-150 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40 max-md:min-h-11 max-md:py-0",
         current && "text-foreground",
         drop.over && "bg-muted ring-1 ring-ring",
       )}
@@ -554,14 +563,14 @@ function NotebooksHeading({ rail, current, folders }: { rail: boolean; current: 
 function ToolsHeading({ shown, onToggle }: { shown: boolean; onToggle: () => void }) {
   const { t } = useTranslation("shell");
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
       aria-expanded={shown}
       title={shown ? t("nav.hideTools") : t("nav.showTools")}
       onClick={onToggle}
       className={cn(
         headingClass,
-        "group/tools mt-3 flex items-center gap-1 rounded-md pt-1 text-start outline-none transition-colors duration-150 hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/40",
+        "group/tools mt-3 h-auto justify-start gap-1 rounded-md pt-1 text-start hover:not-disabled:bg-transparent hover:not-disabled:text-foreground active:not-disabled:scale-100 max-md:min-h-11 max-md:py-0",
       )}
     >
       {t("nav.tools")}
@@ -575,7 +584,7 @@ function ToolsHeading({ shown, onToggle }: { shown: boolean; onToggle: () => voi
           !shown && "opacity-100",
         )}
       />
-    </button>
+    </Button>
   );
 }
 
@@ -707,8 +716,9 @@ function FolderRow({
   return (
     <>
       <RailTip rail={rail} label={folder.name}>
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           aria-expanded={expanded}
           aria-label={rail ? folder.name : undefined}
           title={rail ? undefined : expanded ? t("nav.foldFolder") : t("nav.unfoldFolder")}
@@ -720,7 +730,13 @@ function FolderRow({
           }}
           {...drop.props}
           style={rail ? undefined : { paddingInlineStart: `${0.5 + depth * 0.75}rem` }}
-          className={cn(rowClass, idleRow, rail && railRow, "gap-2", drop.over && "bg-muted ring-1 ring-ring")}
+          className={cn(
+            rowClass,
+            idleRow,
+            "justify-start gap-2 font-normal",
+            rail && railRow,
+            drop.over && "bg-muted ring-1 ring-ring",
+          )}
         >
           {rail ? null : (
             <Icon
@@ -731,8 +747,8 @@ function FolderRow({
             />
           )}
           <Icon icon={Folder01Icon} size={16} strokeWidth={1.5} />
-          <span className={cn("min-w-0 flex-1 truncate", rail && "sr-only")}>{folder.name}</span>
-        </button>
+          <span className={cn("min-w-0 flex-1 truncate text-start", rail && "sr-only")}>{folder.name}</span>
+        </Button>
       </RailTip>
       {expanded ? children : null}
     </>

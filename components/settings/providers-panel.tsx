@@ -290,15 +290,18 @@ function ProviderForm({
                     });
                   }}
                 />
-                <Input.Addon align="end">
-                  <button
-                    type="button"
+                <Input.Addon align="end" className="pe-1">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
                     onClick={() => setShowKey((shown) => !shown)}
                     aria-label={showKey ? t("providers.hideKey") : t("providers.showKey")}
-                    className="cursor-pointer rounded p-0.5 hover:text-foreground"
+                    aria-pressed={showKey}
+                    title={showKey ? t("providers.hideKey") : t("providers.showKey")}
+                    className="size-7 text-muted-foreground"
                   >
                     <Icon icon={showKey ? ViewOffIcon : ViewIcon} size={16} />
-                  </button>
+                  </Button>
                 </Input.Addon>
               </Input.Group>
             </Field>
@@ -332,18 +335,16 @@ function ProviderForm({
               <Field
                 label={t("providers.models")}
                 action={
-                  <button
-                    type="button"
-                    aria-label={loading ? t("providers.refreshing") : t("providers.refresh")}
-                    disabled={!canLoad || loading}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={!canLoad}
+                    loading={loading}
                     onClick={loadModels}
-                    className="inline-flex cursor-pointer items-center gap-1 text-foreground underline-offset-4 hover:underline disabled:cursor-default disabled:no-underline disabled:opacity-50"
+                    className="-me-2 h-7 px-2"
                   >
-                    {loading ? (
-                      <Icon icon={Loading03Icon} size={14} className="animate-spin" />
-                    ) : null}
-                    {loading ? t("providers.refreshing") : t("providers.refresh")}
-                  </button>
+                    {t("providers.refresh")}
+                  </Button>
                 }
                 hint={
                   loadError
@@ -365,16 +366,19 @@ function ProviderForm({
                         >
                           {model}
                           {saved.models.length > 0 ? (
-                            <button
-                              type="button"
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              shape="pill"
                               aria-label={t("providers.removeModel", { model })}
+                              title={t("providers.removeModel", { model })}
                               onClick={() =>
                                 save({ models: saved.models.filter((m) => m !== model) })
                               }
-                              className="cursor-pointer rounded-full p-0.5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
+                              className="size-5 text-muted-foreground"
                             >
                               <Icon icon={Cancel01Icon} size={12} />
-                            </button>
+                            </Button>
                           ) : null}
                         </li>
                       ))}

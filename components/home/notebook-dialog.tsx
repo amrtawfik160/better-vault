@@ -1,7 +1,8 @@
-import { Cancel01Icon, File02Icon, Folder01Icon, Loading03Icon } from "@hugeicons/core-free-icons";
+import { Cancel01Icon, File02Icon, Folder01Icon } from "@hugeicons/core-free-icons";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Field } from "@/components/common/field";
+import { onRadioKeys } from "@/components/common/roving";
 import { Icon } from "@/components/icon";
 import { Button } from "@/components/panelui/button";
 import { Dialog } from "@/components/panelui/dialog";
@@ -54,7 +55,8 @@ export function NotebookDialog({ open, onOpenChange, mode, ...props }: NotebookD
             labels
               ? labels.description
               : mode === "create"
-                ? t("dialog.createDescription")
+                ? // The folder field shows only once the vault has folders.
+                  t(props.folders.length > 0 ? "dialog.createDescriptionFolder" : "dialog.createDescription")
                 : undefined
           }
         />
@@ -89,6 +91,7 @@ function NotebookForm({
   const placeholder = labels?.placeholder ?? t("untitled");
   const trimmed = title.trim() || (mode === "create" ? placeholder : "");
   const look = itemColor(color);
+  const colorChoices = [undefined, ...itemColorKeys];
 
   const top = "";
   const folderItems = [
@@ -165,6 +168,8 @@ function NotebookForm({
                   type="button"
                   role="radio"
                   aria-checked={icon === key}
+                  tabIndex={icon === key ? 0 : -1}
+                  onKeyDown={(event) => onRadioKeys(event, notebookIconKeys, icon as NotebookIconKey, setIcon)}
                   aria-label={t(`icons.${key}`)}
                   title={t(`icons.${key}`)}
                   onClick={() => setIcon(key)}
@@ -184,6 +189,7 @@ function NotebookForm({
             <div className="flex flex-wrap gap-2" role="radiogroup" aria-label={t("dialog.color")}>
               <ColorButton
                 selected={!color}
+                onKeyDown={(event) => onRadioKeys(event, colorChoices, color, setColor)}
                 label={t("colors.none")}
                 onClick={() => setColor(undefined)}
                 swatch={itemColor(undefined).swatch}
@@ -192,6 +198,7 @@ function NotebookForm({
                 <ColorButton
                   key={key}
                   selected={color === key}
+                  onKeyDown={(event) => onRadioKeys(event, colorChoices, color, setColor)}
                   label={t(`colors.${key}`)}
                   onClick={() => setColor(key)}
                   swatch={itemColor(key).swatch}
@@ -237,14 +244,16 @@ function NotebookForm({
                     <Icon icon={File02Icon} size={16} className="shrink-0 text-muted-foreground" />
                     <span className="min-w-0 flex-1 truncate">{file.name}</span>
                     {onRemoveFile && files.length > 1 ? (
-                      <button
-                        type="button"
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
                         aria-label={t("dialog.removeFile", { name: file.name })}
+                        title={t("dialog.removeFile", { name: file.name })}
                         onClick={() => onRemoveFile(file)}
-                        className="flex size-6 cursor-pointer items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+                        className="-me-1.5 size-7 text-muted-foreground"
                       >
                         <Icon icon={Cancel01Icon} size={14} />
-                      </button>
+                      </Button>
                     ) : null}
                   </li>
                 ))}
@@ -259,8 +268,7 @@ function NotebookForm({
         <Dialog.Close render={<Button variant="secondary" />}>
           {tCommon("actions.cancel")}
         </Dialog.Close>
-        <Button type="submit" form={formId} disabled={!trimmed || busy} aria-busy={busy}>
-          {busy ? <Icon icon={Loading03Icon} size={16} className="animate-spin" /> : null}
+        <Button type="submit" form={formId} disabled={!trimmed} loading={busy}>
           {mode === "create" ? (labels?.submit ?? t("dialog.create")) : tCommon("actions.save")}
         </Button>
       </Dialog.Footer>
@@ -273,17 +281,21 @@ function ColorButton({
   label,
   swatch,
   onClick,
+  onKeyDown,
 }: {
   selected: boolean;
   label: string;
   swatch: string;
   onClick: () => void;
+  onKeyDown: (event: React.KeyboardEvent<HTMLButtonElement>) => void;
 }) {
   return (
     <button
       type="button"
       role="radio"
       aria-checked={selected}
+      tabIndex={selected ? 0 : -1}
+      onKeyDown={onKeyDown}
       aria-label={label}
       title={label}
       onClick={onClick}
