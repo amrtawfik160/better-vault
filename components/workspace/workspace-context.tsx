@@ -49,6 +49,8 @@ interface WorkspaceState {
   settingsOpen: boolean;
   settingsPage: "subscriptions" | "providers" | null;
   openModelSetup: () => void;
+  /** Opens Settings on one page, e.g. the API keys an image model needs. */
+  openSettings: (page: "subscriptions" | "providers") => void;
   setSettingsOpen: (open: boolean) => void;
   addSourceOpen: boolean;
   setAddSourceOpen: (open: boolean) => void;
@@ -169,6 +171,10 @@ export function WorkspaceProvider({
       },
       openModelSetup: () => {
         setSettingsPage(subscriptionConnectionsAllowed() ? "subscriptions" : "providers");
+        showSettings(true);
+      },
+      openSettings: (page) => {
+        setSettingsPage(page);
         showSettings(true);
       },
       addSourceOpen,

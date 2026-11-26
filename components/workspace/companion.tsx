@@ -28,6 +28,10 @@ import { studioToolIds, studioTools } from "@/studio/tools";
 import { ChatView } from "./chat-view";
 import { companionDockQuery, useWorkspace, type CompanionTab } from "./workspace-context";
 
+/** A flat 44px row in a bordered list (Studio tools, outputs): Panel's ghost button laid out as a row. */
+const rowButton =
+  "h-auto min-h-11 w-full justify-start gap-3 rounded-none px-4 py-2 text-start font-normal whitespace-normal active:not-disabled:scale-100";
+
 function subscribeDock(change: () => void) {
   const query = window.matchMedia(companionDockQuery);
   query.addEventListener("change", change);
@@ -65,49 +69,61 @@ export function Companion() {
   }, [open, docked, setCompanion]);
 
   return (
-    <aside
-      id="companion"
-      aria-label={t("companion.label")}
-      hidden={!open}
-      className={cn(
-        "flex min-h-0 flex-col bg-card",
-        docked
-          ? "w-[26rem] shrink-0 border-s"
-          : "fixed inset-y-0 end-0 z-40 w-full max-w-md border-s shadow-2xl",
-      )}
-    >
-      <Tabs
-        value={companion ?? "ask"}
-        onValueChange={(value) => setCompanion(value as CompanionTab)}
-        className="flex h-full min-h-0 flex-col gap-0"
+    <>
+      {/* Below 1280px the companion lies over the page: a scrim behind it closes it, as Escape does. */}
+      {open && !docked ? (
+        <div
+          aria-hidden
+          className="fixed inset-0 z-40 bg-black/50 max-sm:hidden"
+          onClick={() => setCompanion(null)}
+        />
+      ) : null}
+      <aside
+        id="companion"
+        aria-label={t("companion.label")}
+        hidden={!open}
+        className={cn(
+          "flex min-h-0 flex-col bg-card",
+          docked
+            ? "w-[26rem] shrink-0 border-s"
+            : "fixed inset-y-0 end-0 z-40 w-[min(25rem,calc(100vw-3rem))] border-s shadow-2xl max-sm:w-full",
+        )}
       >
-        <div className="flex h-13 shrink-0 items-center gap-2 border-b px-3">
-          <Tabs.List aria-label={t("companion.label")} className="flex-1">
-            <Tabs.Trigger value="ask">{t("companion.ask")}</Tabs.Trigger>
-            <Tabs.Trigger value="practise">{t("companion.practise")}</Tabs.Trigger>
-            <Tabs.Trigger value="make">{t("companion.make")}</Tabs.Trigger>
-          </Tabs.List>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={t("companion.close")}
-            onClick={() => setCompanion(null)}
-          >
-            <Icon icon={Cancel01Icon} size={16} />
-          </Button>
-        </div>
-        {/* Ask stays mounted, so its draft and scroll survive a switch to Practise or Make. */}
-        <Tabs.Content value="ask" keepMounted className="flex min-h-0 flex-1 flex-col">
-          <AskPanel />
-        </Tabs.Content>
-        <Tabs.Content value="practise" className="min-h-0 flex-1">
-          <PractisePanel />
-        </Tabs.Content>
-        <Tabs.Content value="make" className="min-h-0 flex-1">
-          <MakePanel />
-        </Tabs.Content>
-      </Tabs>
-    </aside>
+        <Tabs
+          value={companion ?? "ask"}
+          onValueChange={(value) => setCompanion(value as CompanionTab)}
+          className="flex h-full min-h-0 flex-col gap-0"
+        >
+          {/* Three equal tabs (design-system §6); on phones they and the close button grow to 44px. */}
+          <div className="flex h-13 shrink-0 items-center gap-2 border-b px-3 max-sm:h-15">
+            <Tabs.List aria-label={t("companion.label")} className="flex-1">
+              <Tabs.Trigger value="ask" className="flex-1 max-sm:h-11">{t("companion.ask")}</Tabs.Trigger>
+              <Tabs.Trigger value="practise" className="flex-1 max-sm:h-11">{t("companion.practise")}</Tabs.Trigger>
+              <Tabs.Trigger value="make" className="flex-1 max-sm:h-11">{t("companion.make")}</Tabs.Trigger>
+            </Tabs.List>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="max-sm:size-11"
+              aria-label={t("companion.close")}
+              onClick={() => setCompanion(null)}
+            >
+              <Icon icon={Cancel01Icon} size={16} />
+            </Button>
+          </div>
+          {/* Ask stays mounted, so its draft and scroll survive a switch to Practise or Make. */}
+          <Tabs.Content value="ask" keepMounted className="flex min-h-0 flex-1 flex-col">
+            <AskPanel />
+          </Tabs.Content>
+          <Tabs.Content value="practise" className="min-h-0 flex-1">
+            <PractisePanel />
+          </Tabs.Content>
+          <Tabs.Content value="make" className="min-h-0 flex-1">
+            <MakePanel />
+          </Tabs.Content>
+        </Tabs>
+      </aside>
+    </>
   );
 }
 
@@ -130,22 +146,32 @@ function AskPanel() {
     <>
       <div className="flex shrink-0 items-center gap-2 px-3 py-2">
         <span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground">{t("companion.answersFrom")}</span>
-        <button
-          type="button"
+        {/* The scope chip: Panel's button drawn as the violet pill of design-system §7. */}
+        <Button
+          variant="ghost"
+          size="sm"
+          shape="pill"
           onClick={() => {
             setTab("sources");
             stepAside();
           }}
           aria-label={t("companion.scopeLabel", { notebook: notebook.title })}
-          className="inline-flex h-7 min-w-0 cursor-pointer items-center gap-2 rounded-full border border-chart-5/50 bg-chart-5/15 px-3 text-[0.8125rem] font-medium outline-none hover:bg-chart-5/25 focus-visible:ring-[3px] focus-visible:ring-ring/40"
+          title={notebook.title}
+          className="h-7 min-w-0 shrink justify-start border border-chart-5/50 bg-chart-5/15 px-3 hover:not-disabled:bg-chart-5/25 max-sm:after:absolute max-sm:after:-inset-y-2 max-sm:after:inset-x-0 max-sm:after:content-['']"
         >
           <span aria-hidden className="h-3 w-0.5 shrink-0 rounded-full bg-chart-5" />
           <span className="truncate">{notebook.title}</span>
-        </button>
+        </Button>
         <span className="ms-auto flex items-center gap-1">
           <HistorySheet
             trigger={
-              <Button variant="ghost" size="icon-sm" aria-label={tChat("history.open")} title={tChat("history.title")}>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="max-sm:size-11"
+                aria-label={tChat("history.open")}
+                title={tChat("history.title")}
+              >
                 <Icon icon={BubbleChatIcon} size={16} />
               </Button>
             }
@@ -153,6 +179,7 @@ function AskPanel() {
           <Button
             variant="ghost"
             size="icon-sm"
+            className="max-sm:size-11"
             aria-label={t("companion.newQuestion")}
             title={t("companion.newQuestion")}
             disabled={chat.messages.length === 0}
@@ -175,7 +202,7 @@ function AskPanel() {
 function PractisePanel() {
   const { t } = useTranslation("workspace");
   const { t: tHome } = useTranslation("home");
-  const { notebook } = useWorkspace();
+  const { notebook, setAddSourceOpen } = useWorkspace();
   const sources = useSources(notebook.id);
   const count = sources?.filter(selectedTextSource).length ?? 0;
   const scope = { notebook: notebook.id, vault: vaultOf(notebook) };
@@ -189,22 +216,35 @@ function PractisePanel() {
             <span className="font-normal text-muted-foreground"> · {t("overview.documents", { count })}</span>
           </p>
         </div>
-        <ul className="space-y-2">
+        {/* What Practice offers, as a plain list: the exercise is chosen on the Practice page, so these are not choices. */}
+        <ul className="space-y-3">
           {(["teach", "questions", "roleplay"] as const).map((exercise) => (
-            <li key={exercise} className="rounded-xl border px-4 py-3">
-              <p className="text-sm font-medium">{tHome(`study.practicePage.exercises.${exercise}.name`)}</p>
-              <p className="text-[0.8125rem] text-muted-foreground">
-                {tHome(`study.practicePage.exercises.${exercise}.short`)}
-              </p>
+            <li key={exercise} className="flex gap-3">
+              <span aria-hidden className="mt-2 size-1.5 shrink-0 rounded-full bg-muted-foreground" />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium">{tHome(`study.practicePage.exercises.${exercise}.name`)}</span>
+                <span className="block text-[0.8125rem] text-muted-foreground">
+                  {tHome(`study.practicePage.exercises.${exercise}.short`)}
+                </span>
+              </span>
             </li>
           ))}
         </ul>
         {count ? (
-          <Link to={studyHref("practice", scope)} className={buttonVariants({ className: "w-full" })}>
+          <Link
+            to={studyHref("practice", scope)}
+            className={buttonVariants({ size: "lg", className: "h-10 w-full text-sm" })}
+          >
             {tHome("study.practicePage.start")}
           </Link>
         ) : (
-          <p className="text-sm text-muted-foreground">{t("companion.needsMaterial")}</p>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">{t("companion.needsMaterial")}</p>
+            <Button variant="secondary" className="w-full border border-input" onClick={() => setAddSourceOpen(true)}>
+              <Icon icon={Add01Icon} size={16} />
+              {t("header.add")}
+            </Button>
+          </div>
         )}
         <p className="text-xs text-muted-foreground">{t("companion.practiseHint")}</p>
       </div>
@@ -233,17 +273,20 @@ function MakePanel() {
         <div className="space-y-2">
           <Button
             variant="secondary"
-            className="w-full"
+            className="h-10 w-full rounded-xl border border-input"
             disabled={!hasMaterial || busy}
+            aria-describedby="make-cards-detail"
             onClick={() => {
               setCompanion("ask");
               chat.runCommand("/cards");
             }}
           >
             <Icon icon={Cards01Icon} size={16} />
-            {t("companion.makeCards", { notebook: notebook.title })}
+            {t("companion.makeCards")}
           </Button>
-          <p className="text-xs text-muted-foreground">{t("companion.cardsGo", { notebook: notebook.title })}</p>
+          <p id="make-cards-detail" className="text-xs text-pretty text-muted-foreground">
+            {t(hasMaterial ? "companion.cardsGo" : "companion.cardsNeedMaterial", { notebook: notebook.title })}
+          </p>
         </div>
 
         <section aria-labelledby="make-tools" className="space-y-2">
@@ -262,22 +305,23 @@ function MakePanel() {
               }
             />
           </div>
-          <ul className="divide-y rounded-xl border">
+          <ul className="divide-y overflow-hidden rounded-xl border">
             {tools.map((id) => (
               <li key={id}>
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
                   onClick={() => openTool(id)}
-                  className="flex min-h-11 w-full cursor-pointer items-center gap-3 px-4 py-2 text-start outline-none hover:bg-muted/40 focus-visible:ring-[3px] focus-visible:ring-ring/40"
+                  title={tStudio(`tools.${id}.description`)}
+                  className={rowButton}
                 >
                   <Icon icon={studioTools[id].icon} size={16} className={studioTools[id].tint} />
                   <span className="min-w-0 flex-1">
-                    <span className="block text-sm">{tStudio(`tools.${id}.name`)}</span>
-                    <span className="block truncate text-xs text-muted-foreground">
+                    <span className="block truncate text-sm">{tStudio(`tools.${id}.name`)}</span>
+                    <span className="block truncate text-xs font-normal text-muted-foreground">
                       {tStudio(`tools.${id}.description`)}
                     </span>
                   </span>
-                </button>
+                </Button>
               </li>
             ))}
           </ul>
@@ -288,27 +332,32 @@ function MakePanel() {
             <h3 id="make-outputs" className="text-xs font-medium text-muted-foreground">
               {t("companion.made", { count: outputs.length })}
             </h3>
-            <ul className="divide-y rounded-xl border">
+            <ul className="divide-y overflow-hidden rounded-xl border">
               {outputs.map((output) => {
                 const meta = studioTools[output.toolId as keyof typeof studioTools];
                 return (
                   <li key={output.id}>
-                    <button
-                      type="button"
+                    <Button
+                      variant="ghost"
                       onClick={() => {
                         openOutput(output.id);
                         stepAside();
                       }}
-                      className="flex min-h-11 w-full cursor-pointer items-center gap-3 px-4 py-2 text-start outline-none hover:bg-muted/40 focus-visible:ring-[3px] focus-visible:ring-ring/40"
+                      className={rowButton}
                     >
                       {meta ? <Icon icon={meta.icon} size={16} className={meta.tint} /> : null}
                       <span className="min-w-0 flex-1 truncate text-sm">{output.title}</span>
                       {output.status !== "ready" ? (
-                        <span className="text-xs text-muted-foreground">
+                        <span
+                          className={cn(
+                            "text-xs font-normal",
+                            output.status === "error" ? "text-destructive" : "text-muted-foreground",
+                          )}
+                        >
                           {tStudio(output.status === "error" ? "status.failed" : "status.generating")}
                         </span>
                       ) : null}
-                    </button>
+                    </Button>
                   </li>
                 );
               })}

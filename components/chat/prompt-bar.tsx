@@ -3,7 +3,6 @@ import {
   Book02Icon,
   PencilEdit02Icon,
   FileAddIcon,
-  Globe02Icon,
   Cancel01Icon,
   Cards01Icon,
   MagicWand01Icon,
@@ -13,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Segmented } from "@/components/common/segmented";
 import { Icon } from "@/components/icon";
+import { Button } from "@/components/panelui/button";
 import { Menu } from "@/components/panelui/menu";
 import { AIModelPicker } from "@/components/ai/ai-model-picker";
 import { Prompt, type PromptState } from "@/components/panelui/prompt";
@@ -191,17 +191,21 @@ export function PromptBar() {
                   </Menu.Sub>
                 </Prompt.Menu>
                 {attachedSkills > 0 ? (
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    shape="pill"
                     onClick={() => chat.setSkills([])}
                     title={t("skills.clear")}
-                    className="flex h-7 cursor-pointer items-center gap-1 rounded-full bg-primary/10 px-2 text-xs text-primary outline-none hover:bg-primary/20 focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label={`${t("skills.attached", { count: attachedSkills })}. ${t("skills.clear")}`}
+                    className="h-7 gap-1 bg-primary/10 px-2 text-xs text-primary hover:not-disabled:bg-primary/20 hover:not-disabled:text-primary"
                   >
                     <Icon icon={MagicWand01Icon} size={12} />
                     {t("skills.attached", { count: attachedSkills })}
                     <Icon icon={Cancel01Icon} size={11} />
-                  </button>
+                  </Button>
                 ) : null}
+                {/* Labels without icons, so More, the mode and the model share one row in the companion. */}
                 <Segmented<ChatMode>
                   size="sm"
                   aria-label={t("mode.label")}
@@ -211,13 +215,11 @@ export function PromptBar() {
                     {
                       value: "sources",
                       label: t("mode.sources"),
-                      icon: <Icon icon={Book02Icon} size={14} />,
                       title: t("mode.sourcesHint"),
                     },
                     {
                       value: "web",
                       label: t("mode.web"),
-                      icon: <Icon icon={Globe02Icon} size={14} />,
                       disabled: !webAvailable,
                       title:
                         !webAvailable && model
@@ -226,7 +228,7 @@ export function PromptBar() {
                     },
                   ]}
                 />
-                <AIModelPicker use="chat" className="max-w-48" />
+                <AIModelPicker use="chat" className="max-w-36" />
               </Prompt.Tools>
               <Prompt.Submit sendLabel={t("send")} stopLabel={t("stop")} />
             </Prompt.Footer>

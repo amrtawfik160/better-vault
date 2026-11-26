@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import { Icon } from "@/components/icon";
 import { Button } from "@/components/panelui/button";
+import { Card } from "@/components/panelui/card";
 import { useStudioRunner } from "@/components/studio/studio-runner";
 import { useWorkspace } from "@/components/workspace/workspace-context";
 import {
@@ -98,7 +99,7 @@ function Row({
       className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border bg-foreground/[0.02] py-1.5 ps-3 pe-1.5 text-[0.8125rem] leading-5"
     >
       {mark}
-      <p className="line-clamp-2 min-w-0 flex-1 text-muted-foreground">{children}</p>
+      <p className="line-clamp-2 min-w-0 flex-1 basis-48 text-muted-foreground">{children}</p>
       {actions ? <div className="flex items-center gap-1">{actions}</div> : null}
     </div>
   );
@@ -293,7 +294,7 @@ function ConfirmCard({
 }) {
   const { t } = useTranslation("chat");
   const chat = useChatSession();
-  const { notebook } = useWorkspace();
+  const { notebook, openSettings } = useWorkspace();
   const settings = useSettings();
   const sources = useSources(notebook.id)?.filter(selectedTextSource).length ?? 0;
   const toolName = t(`make.commands.${tool}.name`);
@@ -305,31 +306,41 @@ function ConfirmCard({
         ? t("make.confirm.imageCost", { provider: providers[imageModel.provider].name })
         : t("make.errors.noImageModel");
   return (
-    <section
+    // design-system §7, confirm card: Panel Card, what and from what, the cost, then Make it (tonal).
+    <Card
+      as="section"
+      size="sm"
       aria-labelledby={`${toolCallId}-title`}
-      className="flex flex-col gap-3 rounded-xl border bg-card p-5"
+      className="gap-3 rounded-xl p-5 shadow-none"
     >
       <div className="flex flex-col gap-1">
-        <h3 id={`${toolCallId}-title`} className="text-sm font-medium">
+        <Card.Title id={`${toolCallId}-title`} className="text-sm font-medium tracking-normal">
           {t("make.confirm.title", { tool: toolName })}
-        </h3>
-        <p className="text-[0.8125rem] leading-5 text-muted-foreground tabular-nums">
+        </Card.Title>
+        <Card.Description className="text-[0.8125rem] leading-5 tabular-nums">
           {t("make.confirm.from", { count: sources })} · {cost}
-        </p>
+        </Card.Description>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <Button
           variant="secondary"
           size="sm"
+          className="border border-input"
           disabled={sources === 0 || (tool === "infographic" && !imageModel)}
           onClick={() => chat.runAction(toolCallId)}
         >
           {t(tool === "audio-overview" ? "make.confirm.chooseVoices" : "make.confirm.make")}
         </Button>
+        {/* Without an image model, the fix sits beside the action it unblocks. */}
+        {tool === "infographic" && !imageModel ? (
+          <Button variant="ghost" size="sm" onClick={() => openSettings("providers")}>
+            {t("make.confirm.addKey")}
+          </Button>
+        ) : null}
         <Button variant="ghost" size="sm" onClick={() => chat.cancelAction(toolCallId)}>
           {t("make.confirm.cancel")}
         </Button>
       </div>
-    </section>
+    </Card>
   );
 }

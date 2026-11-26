@@ -42,6 +42,8 @@ export function Citation({ passage, numbers, onOpen, className }: CitationProps)
               "bg-muted font-mono text-[0.68em] leading-none font-medium text-muted-foreground tabular-nums",
               "transition-colors outline-none hover:bg-info hover:text-info-foreground focus-visible:bg-info focus-visible:text-info-foreground",
               "data-[popup-open]:bg-info data-[popup-open]:text-info-foreground",
+              // The mark stays small in the text; its hit area grows to about 32px, and 44px on phones.
+              "after:absolute after:-inset-2 after:content-[''] max-sm:after:-inset-3.5",
               className,
             )}
           />

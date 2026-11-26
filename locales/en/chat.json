@@ -30,6 +30,7 @@
   },
   "empty": {
     "title": "Ask your sources",
+    "titleScope": "Ask about {{scope}}",
     "body_one": "Answers come from your selected source, with citations.",
     "body_other": "Answers come from your {{count}} selected sources, with citations.",
     "noSources": "Add a source to begin, or switch to Web to ask anything.",
@@ -67,6 +68,8 @@
     "retry": "Try again"
   },
   "error": "The answer could not be completed: {{error}}",
+  "errorTitle": "Ask couldn't answer",
+  "errorLine": "{{error}} Your question is kept above; try again or choose another model.",
   "answerUnavailable": "This notebook answer is no longer available.",
   "newChat": "New chat",
   "book": {
@@ -239,6 +242,7 @@
       "make": "Make it",
       "chooseVoices": "Choose voices",
       "cancel": "Not now",
+      "addKey": "Add a key",
       "cancelled": "{{tool}} not made.",
       "opened": "Opened the {{tool}} options."
     },
