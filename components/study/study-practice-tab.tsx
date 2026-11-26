@@ -275,7 +275,15 @@ function SessionSetup({
         <p className="text-sm text-muted-foreground">{t(`study.goals.simulation.${simulation}.hint`)}</p>
       ) : null}
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" size={embedded ? "md" : "sm"} disabled={!ready || openingPractice} loading={starting}>
+        {/* Outside an exercise row (a new conversation) Start is tonal: the chosen exercise keeps the filled button. */}
+        <Button
+          type="submit"
+          size={embedded ? "md" : "sm"}
+          variant={embedded ? "default" : "secondary"}
+          className={embedded ? undefined : "border border-input"}
+          disabled={!ready || openingPractice}
+          loading={starting}
+        >
           {t(embedded ? "study.practicePage.start" : "study.practice.start")}
         </Button>
         {cancel ? (
