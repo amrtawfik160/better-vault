@@ -553,7 +553,7 @@
     "account": {
       "label": "Account and plan",
       "detail": "Optional. Add your name and picture",
-      "lead": "An account is optional. Everything works without one; it is only for Better Vault AI and Cloud. Your notebooks, notes and keys never go to it."
+      "lead": "An account is optional. Everything works without one. Your notebooks, notes and keys never go to it."
     },
     "storage": {
       "label": "Storage and data",
