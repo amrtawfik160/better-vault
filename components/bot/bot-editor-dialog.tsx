@@ -155,8 +155,15 @@ function BotForm({
                       placeholder={t("editor.namePlaceholder")}
                       maxLength={80}
                       onChange={(event) => set({ name: event.target.value })}
+                      aria-describedby={name ? undefined : `${nameId}-needed`}
                       autoFocus
                     />
+                    {/* Says why Create waits, instead of a silent disabled button. */}
+                    {name ? null : (
+                      <p id={`${nameId}-needed`} className="text-xs text-muted-foreground">
+                        {t("editor.nameNeeded")}
+                      </p>
+                    )}
                   </Field>
                   <Field label={t("editor.role")} htmlFor={roleId}>
                     <Input

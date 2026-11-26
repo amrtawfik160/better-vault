@@ -91,7 +91,8 @@
     "delegate": "Can hand tasks to other bots",
     "pinned": "Pin to the top",
     "create": "Create bot",
-    "save": "Save"
+    "save": "Save",
+    "nameNeeded": "Give the bot a name to create it."
   },
   "shapes": {
     "blob": "Blob",
