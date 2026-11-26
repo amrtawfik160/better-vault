@@ -5,7 +5,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { DirectionalText } from "@/components/common/directional-text";
 import { Icon } from "@/components/icon";
-import { Button } from "@/components/panelui/button";
+import { Button, buttonVariants } from "@/components/panelui/button";
 import { readingLink } from "@/components/sources/source-reader";
 import { sourceKindIcons } from "@/components/sources/source-kind";
 import { useStudyClock } from "@/components/study/use-study-clock";
@@ -115,7 +115,10 @@ export function NotebookOverview() {
       <div className="mx-auto w-full max-w-3xl space-y-10 px-4 pt-6 pb-16 sm:px-8">
         {lastRead ? <WhereYouAre book={lastRead} opened={relativeDay(lastRead.lastReadAt ?? now)} /> : null}
 
-        <section aria-label={t("overview.study")} className="grid gap-3 sm:grid-cols-2">
+        <section
+          aria-label={t("overview.study")}
+          className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))]"
+        >
           <Stat
             value={t("overview.cards", { count: cards })}
             detail={due ? t("overview.due", { count: due }) : t("overview.nothingDue")}
@@ -257,17 +260,13 @@ function Stat({
   detail: string;
   action?: { label: string; to: string };
 }) {
+  // Stacked, so it reads well however narrow the column is beside the companion.
   return (
-    <div className="flex min-h-20 items-center gap-3 rounded-2xl border px-5 py-4">
-      <div className="min-w-0 flex-1">
-        <p className="text-base font-medium tabular-nums">{value}</p>
-        <p className="text-sm text-muted-foreground">{detail}</p>
-      </div>
+    <div className="flex flex-col items-start gap-1 rounded-2xl border px-5 py-4">
+      <p className="text-base font-medium tabular-nums">{value}</p>
+      <p className="text-sm text-pretty text-muted-foreground">{detail}</p>
       {action ? (
-        <Link
-          to={action.to}
-          className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md px-3 text-[0.8125rem] font-medium outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/40"
-        >
+        <Link to={action.to} className={buttonVariants({ variant: "ghost", size: "sm", className: "-ms-3 mt-1" })}>
           {action.label}
           <Icon icon={ArrowRight01Icon} size={14} className="rtl:rotate-180" />
         </Link>

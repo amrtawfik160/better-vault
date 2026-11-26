@@ -1,31 +1,33 @@
 import { useState } from "react";
-import { providerIds } from "@/lib/ai/catalog";
+import { useStoreQuery } from "@/lib/db/live";
 import { useNotebooks } from "@/lib/db/notebooks";
-import { isProviderReady, useSettings } from "@/lib/db/settings";
-import { OnboardingDialog } from "./onboarding-dialog";
+import { useSettings } from "@/lib/db/settings";
+import { store } from "@/lib/db/store";
 import { UpgradeNotice } from "./upgrade-notice";
 import { firstScreen, type FirstScreen } from "./visibility";
 
 /**
- * Shows the first-run flow to a newcomer or the one-time upgrade notice to
- * someone who already used the app. The choice is made once the data has
- * loaded and then kept, so adding material mid-flow does not swap it.
+ * The one-time note about the redesign, for someone who had already finished
+ * the welcome screens. Decided once the data has loaded, then kept, so
+ * finishing the welcome screens during this visit never brings it up.
  */
 export function FirstRun() {
   const settings = useSettings();
   const notebooks = useNotebooks();
+  const welcomed = useStoreQuery(
+    async () => ((await store().getSetting("onboarding")) as { done?: boolean } | undefined)?.done === true,
+    [],
+    ["settings"],
+  );
   const [chosen, setChosen] = useState<FirstScreen | null>(null);
-  if (chosen === null && settings && notebooks) {
+  if (chosen === null && settings && notebooks && welcomed !== undefined) {
     setChosen(
       firstScreen({
-        onboardingDone: settings.onboardingDone === true,
+        welcomed,
         upgradeNoticeSeen: settings.upgradeNoticeSeen === true,
         notebookCount: notebooks.length,
-        hasModel: providerIds.some((id) => isProviderReady(settings, id)),
       }),
     );
   }
-  if (chosen === "onboarding") return <OnboardingDialog />;
-  if (chosen === "upgrade") return <UpgradeNotice />;
-  return null;
+  return chosen === "upgrade" ? <UpgradeNotice /> : null;
 }

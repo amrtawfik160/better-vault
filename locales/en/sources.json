@@ -48,7 +48,7 @@
     "choose": "Choose a file",
     "fileTypes": "Files: PDF, EPUB, Markdown or text, up to 20 MB each.",
     "textTitlePlaceholder": "Pasted text",
-    "submit": "Add to {{name}}",
+    "submit": "Add",
     "adding": "Adding…",
     "inputLabel": "Link, file or text to add",
     "placeholder": "Paste any link, drop a file, or type text",
@@ -73,8 +73,7 @@
       "retry": "Try again"
     },
     "goesTo": "Goes to",
-    "current": "the notebook you are in",
-    "changed": "changed",
+    "current": "Open now",
     "notebook": "Notebook",
     "newNotebook": "New notebook",
     "newNotebookLabel": "New notebook name",

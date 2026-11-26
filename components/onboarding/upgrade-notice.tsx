@@ -22,7 +22,7 @@ export function UpgradeNotice() {
   return (
     <Dialog open={open} onOpenChange={(next) => !next && dismiss()}>
       <Dialog.Content size="md" closeLabel={tCommon("actions.close")}>
-        <Dialog.Header title={t("upgrade.title")} description={t("upgrade.eyebrow")} />
+        <Dialog.Header title={t("upgrade.title")} description={t("upgrade.eyebrow", { app: tCommon("appName") })} />
         <Dialog.Body>
           <ul className="flex flex-col gap-4">
             {items.map((id) => (

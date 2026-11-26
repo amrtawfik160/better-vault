@@ -129,7 +129,7 @@ function AskPanel() {
   return (
     <>
       <div className="flex shrink-0 items-center gap-2 px-3 py-2">
-        <span className="text-xs text-muted-foreground">{t("companion.answersFrom")}</span>
+        <span className="shrink-0 text-xs whitespace-nowrap text-muted-foreground">{t("companion.answersFrom")}</span>
         <button
           type="button"
           onClick={() => {
@@ -162,8 +162,10 @@ function AskPanel() {
           </Button>
         </span>
       </div>
-      <div className="relative min-h-0 flex-1">
-        <ChatView />
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="min-h-0 flex-1">
+          <ChatView />
+        </div>
         <PromptBar />
       </div>
     </>

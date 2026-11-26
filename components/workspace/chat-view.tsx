@@ -75,7 +75,7 @@ export function ChatView() {
   return (
     <ScrollArea className="h-full" viewportRef={scroller}>
       <SelectableText
-        className="mx-auto flex max-w-3xl flex-col gap-8 px-4 pt-4 pb-56 sm:px-6"
+        className="mx-auto flex max-w-3xl flex-col gap-8 px-4 pt-4 pb-6"
         place={{
           title: notebook.title,
           notebookId: notebook.id,
@@ -201,7 +201,7 @@ function EmptyChat({ missingAnswer }: { missingAnswer: boolean }) {
 
   return (
     <ScrollArea className="h-full">
-      <div className="flex min-h-full flex-col items-center justify-center px-4 pt-6 pb-48 text-center">
+      <div className="flex min-h-full flex-col items-center justify-center px-4 pt-6 pb-6 text-center">
         {missingAnswer ? (
           <div className="mb-4">
             <AnswerUnavailable />

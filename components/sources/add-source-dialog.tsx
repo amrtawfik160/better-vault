@@ -1,4 +1,5 @@
 import {
+  ArrowLeft01Icon,
   Add01Icon,
   AlertCircleIcon,
   CloudServerIcon,
@@ -6,7 +7,6 @@ import {
   Link01Icon,
   Loading03Icon,
   PodcastIcon,
-  Tick02Icon,
 } from "@hugeicons/core-free-icons";
 import {
   useId,
@@ -23,6 +23,7 @@ import { Icon } from "@/components/icon";
 import { Button } from "@/components/panelui/button";
 import { Dialog } from "@/components/panelui/dialog";
 import { Input } from "@/components/panelui/input";
+import { Select } from "@/components/panelui/select";
 import { Textarea } from "@/components/panelui/textarea";
 import { createNotebook, useNotebooks } from "@/lib/db/notebooks";
 import { vaultOf } from "@/lib/db/vaults";
@@ -35,6 +36,7 @@ import {
   ingestUrl,
   type VideoInfo,
 } from "@/lib/sources/ingest";
+import { pastedTitle } from "@/lib/sources/pasted-title";
 import { youtubeVideoId } from "@/lib/sources/youtube";
 import { CloudBrowser } from "@/components/storage/cloud-browser";
 import { storageIds } from "@/lib/storage/catalog";
@@ -54,7 +56,6 @@ import { YouTubeGeminiCard } from "./youtube-gemini-card";
 type Mode = "main" | "cloud" | "media";
 
 /** Notebooks offered as chips: the open one first, then the most recent. */
-const MAX_CHIPS = 5;
 const WEB_ADDRESS = /^https?:\/\/\S+$/i;
 
 interface AddSourceDialogProps {
@@ -130,13 +131,9 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
     const others = sameVault.filter((notebook) => notebook.id !== notebookId);
     const picked = others.find((notebook) => notebook.id === target);
     const rest = others.filter((notebook) => notebook.id !== target);
-    return [...(current ? [current] : []), ...(picked ? [picked] : []), ...rest].slice(
-      0,
-      MAX_CHIPS,
-    );
+    return [...(current ? [current] : []), ...(picked ? [picked] : []), ...rest];
   }, [notebooks, notebookId, target]);
   const targetTitle = choices.find((notebook) => notebook.id === target)?.title ?? "";
-  const changed = target !== notebookId;
   const locked = busy || geminiBusy;
 
   function describe(error: unknown): string {
@@ -224,7 +221,7 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
           ),
       ]);
     } else if (kind === "text") {
-      const firstLine = trimmed.split("\n", 1)[0]?.slice(0, 60).trim();
+      const firstLine = pastedTitle(trimmed);
       void run([
         () => ingestText(target, firstLine || t("addDialog.textTitlePlaceholder"), source),
       ]);
@@ -238,25 +235,6 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
       event.preventDefault();
       submit();
     }
-  }
-
-  function onChipKey(event: KeyboardEvent) {
-    const at = choices.findIndex((notebook) => notebook.id === target);
-    const rtl = getComputedStyle(event.currentTarget).direction === "rtl";
-    const last = choices.length - 1;
-    let next = -1;
-    if (event.key === "ArrowDown" || event.key === (rtl ? "ArrowLeft" : "ArrowRight"))
-      next = at >= last ? 0 : at + 1;
-    else if (event.key === "ArrowUp" || event.key === (rtl ? "ArrowRight" : "ArrowLeft"))
-      next = at <= 0 ? last : at - 1;
-    else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = last;
-    if (next < 0) return;
-    event.preventDefault();
-    const pick = choices[next];
-    if (!pick) return;
-    setTarget(pick.id);
-    document.getElementById(`${whereId}-${pick.id}`)?.focus();
   }
 
   const onDrop = (event: DragEvent) => {
@@ -449,70 +427,57 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
           </form>
         )}
 
-        <div className="flex flex-col gap-2 pt-4">
-          <p id={whereId} className="text-sm">
-            {t("addDialog.goesTo")} <span className="font-medium">{targetTitle}</span>
-            <span className="text-muted-foreground">
-              {" "}
-              · {changed ? t("addDialog.changed") : t("addDialog.current")}
-            </span>
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <div
-              role="radiogroup"
-              aria-label={t("addDialog.notebook")}
-              aria-describedby={whereId}
-              onKeyDown={onChipKey}
-              className="flex flex-wrap gap-2"
-            >
-              {choices.map((notebook) => {
-                const on = notebook.id === target;
-                return (
-                  <button
-                    key={notebook.id}
-                    id={`${whereId}-${notebook.id}`}
-                    type="button"
-                    role="radio"
-                    aria-checked={on}
-                    tabIndex={on ? 0 : -1}
-                    disabled={locked}
-                    onClick={() => setTarget(notebook.id)}
-                    className={cn(
-                      "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60",
-                      on
-                        ? "border-ring bg-accent ps-2.5 font-medium text-foreground"
-                        : "text-muted-foreground hover:border-ring hover:text-foreground",
-                    )}
-                  >
-                    {on ? <Icon icon={Tick02Icon} size={14} /> : null}
-                    {notebook.title}
-                  </button>
-                );
-              })}
-            </div>
-            {creating ? (
-              <Input
-                autoFocus
-                value={newTitle}
-                aria-label={t("addDialog.newNotebookLabel")}
-                placeholder={t("addDialog.newNotebookPlaceholder")}
-                onChange={(event) => setNewTitle(event.target.value)}
-                onBlur={() => {
-                  if (!newTitle.trim()) setCreating(false);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    void makeNotebook();
-                  } else if (event.key === "Escape") {
-                    event.stopPropagation();
-                    setCreating(false);
-                  }
-                }}
-                className="h-8 w-44"
-              />
-            ) : (
+        {/* Where it goes: a field of its own, so a long notebook name stays on one line. */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-4">
+          <span id={whereId} className="text-sm text-muted-foreground">
+            {t("addDialog.goesTo")}
+          </span>
+          {creating ? (
+            <Input
+              autoFocus
+              size="sm"
+              value={newTitle}
+              aria-label={t("addDialog.newNotebookLabel")}
+              placeholder={t("addDialog.newNotebookPlaceholder")}
+              onChange={(event) => setNewTitle(event.target.value)}
+              onBlur={() => {
+                if (!newTitle.trim()) setCreating(false);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void makeNotebook();
+                } else if (event.key === "Escape") {
+                  event.stopPropagation();
+                  setCreating(false);
+                }
+              }}
+              className="min-w-0 flex-1"
+            />
+          ) : (
+            <>
+              <Select
+                items={choices.map(({ id, title }) => ({ value: id, label: title }))}
+                value={target}
+                onValueChange={(value) => typeof value === "string" && setTarget(value)}
+                disabled={locked}
+              >
+                <Select.Trigger size="sm" aria-labelledby={whereId} className="min-w-0 flex-1">
+                  <Select.Value className="truncate" />
+                </Select.Trigger>
+                <Select.Content className="max-w-(--anchor-width)">
+                  {choices.map((notebook) => (
+                    <Select.Item
+                      key={notebook.id}
+                      value={notebook.id}
+                      description={notebook.id === notebookId ? t("addDialog.current") : undefined}
+                    >
+                      {notebook.title}
+                    </Select.Item>
+                  ))}
+                </Select.Content>
+              </Select>
               <Button
                 type="button"
                 variant="ghost"
@@ -523,24 +488,23 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
                 <Icon icon={Add01Icon} size={14} />
                 {t("addDialog.newNotebook")}
               </Button>
-            )}
-          </div>
+            </>
+          )}
         </div>
-      </Dialog.Body>
-      <Dialog.Footer>
-        <div className="me-auto flex gap-1">
+        {/* The other ways in: a transcript or a recording, and files in connected storage. */}
+        <div className="-mx-2 flex flex-wrap gap-1 pt-1">
           {mode === "main" ? (
             <>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setMode("media")}>
+                <Icon icon={PodcastIcon} size={16} />
+                {t("addDialog.tabs.media")}
+              </Button>
               {hasStorage ? (
                 <Button type="button" variant="ghost" size="sm" onClick={() => setMode("cloud")}>
                   <Icon icon={CloudServerIcon} size={16} />
                   {t("addDialog.tabs.cloud")}
                 </Button>
               ) : null}
-              <Button type="button" variant="ghost" size="sm" onClick={() => setMode("media")}>
-                <Icon icon={PodcastIcon} size={16} />
-                {t("addDialog.tabs.media")}
-              </Button>
             </>
           ) : (
             <Button
@@ -553,15 +517,18 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
                 setErrors([]);
               }}
             >
+              <Icon icon={ArrowLeft01Icon} size={16} className="rtl:rotate-180" />
               {t("addDialog.back")}
             </Button>
           )}
         </div>
+      </Dialog.Body>
+      <Dialog.Footer>
         <Dialog.Close render={<Button variant="secondary" />}>
           {tCommon("actions.cancel")}
         </Dialog.Close>
         {mode !== "cloud" ? (
-          <div className="flex flex-col items-end gap-1">
+          <>
             <Button
               type="submit"
               form={formId}
@@ -569,12 +536,13 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
               loading={busy}
               aria-describedby={whyId}
             >
-              {t("addDialog.submit", { name: targetTitle })}
+              {t("addDialog.submit")}
             </Button>
-            <span id={whyId} className="text-xs text-muted-foreground">
+            {/* The body already says what is missing; this tells a screen reader why Add waits. */}
+            <span id={whyId} className="sr-only">
               {why}
             </span>
-          </div>
+          </>
         ) : null}
       </Dialog.Footer>
     </>

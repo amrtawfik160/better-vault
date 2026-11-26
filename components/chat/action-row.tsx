@@ -98,7 +98,7 @@ function Row({
       className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border bg-foreground/[0.02] py-1.5 ps-3 pe-1.5 text-[0.8125rem] leading-5"
     >
       {mark}
-      <p className="min-w-0 flex-1 text-pretty text-muted-foreground">{children}</p>
+      <p className="line-clamp-2 min-w-0 flex-1 text-muted-foreground">{children}</p>
       {actions ? <div className="flex items-center gap-1">{actions}</div> : null}
     </div>
   );
