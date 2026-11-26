@@ -160,8 +160,39 @@ export async function cliProxyLanguageModel(modelId: string) {
           first?.role === "system"
             ? [{ ...first, content: `${first.content}\n\n${instruction}` }, ...rest]
             : [{ role: "system" as const, content: instruction }, ...params.prompt];
-        return { ...params, prompt, responseFormat: undefined };
+        return {
+          ...params,
+          prompt,
+          responseFormat: undefined,
+          // Marks the call for wrapGenerate; not sent upstream (only "cliproxyapi" options are).
+          providerOptions: { ...params.providerOptions, betterVault: { jsonReply: true } },
+        };
+      },
+      // Models behind the proxy often wrap the JSON in a code fence or a sentence; keep the JSON.
+      wrapGenerate: async ({ doGenerate, params }) => {
+        const result = await doGenerate();
+        if (!params.providerOptions?.betterVault?.jsonReply) return result;
+        return {
+          ...result,
+          content: result.content.map((part) =>
+            part.type === "text" ? { ...part, text: jsonFromReply(part.text) } : part,
+          ),
+        };
       },
     },
   });
+}
+
+/**
+ * The JSON in a model's reply: without a markdown fence, and without text
+ * before or after it. A reply with no JSON object or array is returned as is.
+ */
+export function jsonFromReply(text: string): string {
+  const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(text)?.[1];
+  const body = (fenced ?? text).trim();
+  const start = body.search(/[[{]/);
+  if (start < 0) return text;
+  const close = body[start] === "{" ? "}" : "]";
+  const end = body.lastIndexOf(close);
+  return end > start ? body.slice(start, end + 1) : body.slice(start);
 }

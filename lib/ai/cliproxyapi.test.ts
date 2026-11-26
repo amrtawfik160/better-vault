@@ -126,3 +126,13 @@ describe("subscription model names", () => {
     expect(subscriptionModelName("gemini-3.8-flash")).toBe("Gemini 3.8 Flash");
   });
 });
+
+describe("jsonFromReply", () => {
+  it("keeps the JSON from a fenced or chatty reply", async () => {
+    const { jsonFromReply } = await import("./cliproxyapi");
+    expect(jsonFromReply('```json\n{"a":1}\n```')).toBe('{"a":1}');
+    expect(jsonFromReply('Here is the quiz:\n{"questions":[1,2]}\nHope it helps.')).toBe('{"questions":[1,2]}');
+    expect(jsonFromReply("[1, 2]")).toBe("[1, 2]");
+    expect(jsonFromReply("no json here")).toBe("no json here");
+  });
+});
