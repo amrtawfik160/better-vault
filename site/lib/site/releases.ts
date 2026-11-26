@@ -1,5 +1,4 @@
 import { cacheLife } from "next/cache";
-import { site } from "@/lib/site/config";
 import { installersFrom, type GithubAsset, type Installer } from "@/lib/site/installers";
 
 /**
@@ -18,7 +17,11 @@ export interface LatestRelease {
   installers: Installer[];
 }
 
-export const releasesUrl = `${site.repo}/releases`;
+/** Releases are read only from the repository this names (owner/repo); none by default. */
+const releaseRepository = process.env.DEEPLE_RELEASE_REPOSITORY;
+export const releasesUrl = releaseRepository
+  ? `https://github.com/${releaseRepository}/releases`
+  : "/docs/desktop#build-from-source";
 
 interface GithubRelease {
   tag_name: string;
@@ -31,9 +34,13 @@ interface GithubRelease {
 /** The latest published release, or `null` when GitHub can't be reached. */
 export async function latestRelease(): Promise<LatestRelease | null> {
   "use cache";
+  if (!releaseRepository || !/^[\w.-]+\/[\w.-]+$/.test(releaseRepository)) {
+    cacheLife("hours");
+    return null;
+  }
   try {
     const response = await fetch(
-      "https://api.github.com/repos/better-vault/better-vault/releases/latest",
+      `https://api.github.com/repos/${releaseRepository}/releases/latest`,
       {
         headers: {
           Accept: "application/vnd.github+json",

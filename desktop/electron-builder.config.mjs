@@ -35,7 +35,9 @@ const config = {
   files: ["out/**", "build/icon.png", "package.json"],
   icon: "build/icon.png",
   artifactName: "${productName}-${version}-${os}-${arch}.${ext}",
-  publish: [{ provider: "github", owner: "better-vault", repo: "better-vault" }],
+  // Update publishing is off: builds carry no app-update.yml, so installed
+  // apps don't update themselves (desktop/src/updates.ts stays idle).
+  publish: null,
 
   beforePack: async ({ packager, arch, electronPlatformName }) => {
     await installCliProxy(

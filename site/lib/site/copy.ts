@@ -186,6 +186,6 @@ export const faq: { question: string; answer: string }[] = [
   {
     question: "Is there a desktop app?",
     answer:
-      "Yes. deepLe runs as a desktop app on macOS, Windows and Linux, with the same interface as the web app. It keeps notebooks in a file on your computer and updates itself.",
+      "Yes. deepLe runs as a desktop app on macOS, Windows and Linux, with the same interface as the web app. It keeps notebooks in a file on your computer.",
   },
 ];

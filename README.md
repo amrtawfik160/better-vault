@@ -59,7 +59,7 @@ Audio and video overviews are out of scope.
 
 ### Desktop app
 
-Download the installer for macOS, Windows or Linux from [better-vault.dev/download](https://better-vault.dev/download) or the [latest release](https://github.com/better-vault/better-vault/releases/latest), install it and open it. It updates itself when a new version comes out. The [desktop docs](https://better-vault.dev/docs/desktop) cover installing and moving your notebooks over.
+From this checkout, run `bun run setup` to install dependencies and `bun run desktop:dev` to open the desktop app. Use `bun run desktop:pack` to build the unpacked app in `desktop/release`. The desktop app doesn't update itself; the [desktop docs](https://better-vault.dev/docs/desktop) cover installing and moving your notebooks over.
 
 ### Run from source
 

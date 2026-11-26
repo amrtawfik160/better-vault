@@ -6,8 +6,10 @@ import path from "node:path";
 import type { UpdateState } from "../../lib/desktop/bridge";
 
 /**
- * Updates come from the project's GitHub releases (see `publish` in
- * electron-builder.config.mjs). The app checks at launch, every hour and when
+ * Update publishing is turned off (`publish: null` in
+ * electron-builder.config.mjs), so builds carry no app-update.yml and all of
+ * this stays idle; turning `publish` on again brings it back. With it on,
+ * updates come from the project's GitHub releases. The app checks at launch, every hour and when
  * the computer wakes; the page shows what it finds in Settings → About &
  * Updates and lets the person download it and restart. Nothing downloads on
  * its own, but a downloaded update is installed when the app quits.

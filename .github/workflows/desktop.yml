@@ -8,8 +8,8 @@
 #
 #   gh workflow run desktop.yml -R better-vault/better-vault -f tag=v0.4.0
 #
-# The installers are uploaded with the `latest*.yml` files that electron-updater
-# reads, so installed apps update to the newest release.
+# Update publishing is off (`publish: null` in electron-builder.config.mjs),
+# so there are no `latest*.yml` files and installed apps don't update.
 #
 # ## macOS signing and notarization (one-time setup)
 #

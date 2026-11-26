@@ -1,17 +1,17 @@
 ---
 title: "Desktop app"
-description: "Install the deepLe desktop app for macOS, Windows or Linux. It has the same interface as the web app, keeps notebooks in a local file and updates itself."
+description: "Install the deepLe desktop app for macOS, Windows or Linux. It has the same interface as the web app, and keeps notebooks in a local file."
 ---
 
 The desktop app is deepLe for macOS, Windows and Linux, with the same interface as the web app and no setup.
 
-It runs the whole app on your computer, including the server that talks to your AI provider. Your notebooks are kept in a file on your disk instead of in a browser, and the app updates itself when a new version is released.
+It runs the whole app on your computer, including the server that talks to your AI provider. Your notebooks are kept in a file on your disk instead of in a browser.
 
 The installer includes the local service that connects AI subscriptions. Open **Settings → AI → AI subscriptions** and choose an account; the provider handles the sign-in in your browser.
 
 ## Download
 
-The [download page](/download) offers the installer for your computer and lists every file. The same files are attached to each [release on GitHub](https://github.com/better-vault/better-vault/releases/latest).
+The [download page](/download) lists published deepLe installers when available. You can also [build the app](#build-from-source) from your checkout.
 
 | System  | File                                                                           |
 | ------- | ------------------------------------------------------------------------------ |
@@ -47,14 +47,14 @@ chmod +x better-vault-*.AppImage
 ./better-vault-*.AppImage
 ```
 
-On Debian or Ubuntu you can install the `.deb` with `sudo apt install ./better-vault-*.deb` instead.
+On Debian or Ubuntu you can install the `.deb` with `sudo apt install ./deepLe-*.deb` instead.
 
 </Step>
 </Steps>
 
 ## Updates
 
-The app checks for a new version when it starts and every few hours after that. It downloads the update in the background and asks whether to restart now; if you choose later, the update is installed when you quit. You can also choose **Check for Updates…** in the app menu on macOS, or in the Help menu on Windows and Linux.
+The desktop app doesn't update itself. To move to a new version, install or build the new version over the old one; your notebooks stay in the data folder below.
 
 ## Where your data lives
 
