@@ -20,6 +20,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Icon } from "@/components/icon";
+import { Alert } from "@/components/panelui/alert";
 import { Button } from "@/components/panelui/button";
 import { Dialog } from "@/components/panelui/dialog";
 import { Input } from "@/components/panelui/input";
@@ -320,15 +321,18 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
                     }}
                     className="min-w-0 flex-1 px-0"
                   />
+                  {/* Once something is typed or pasted, the file button folds to its icon so the text has room. */}
                   <Button
                     type="button"
                     variant="ghost"
-                    size="sm"
+                    size={source ? "icon-sm" : "sm"}
                     disabled={locked}
+                    aria-label={source ? t("addDialog.choose") : undefined}
+                    title={source ? t("addDialog.choose") : undefined}
                     onClick={() => fileInput.current?.click()}
                   >
                     <Icon icon={CloudUploadIcon} size={16} />
-                    {t("addDialog.choose")}
+                    {source ? null : t("addDialog.choose")}
                   </Button>
                   <input
                     ref={fileInput}
@@ -376,43 +380,42 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
                 ) : null}
 
                 {linkFailure ? (
-                  <div
-                    role="alert"
-                    className="flex items-start gap-3 rounded-xl border border-destructive/40 bg-destructive/5 p-3"
-                  >
-                    <Icon icon={AlertCircleIcon} size={16} className="mt-0.5 text-destructive" />
-                    <div className="flex min-w-0 flex-col gap-2">
-                      <p className="text-sm font-medium">{t("addDialog.failed.title")}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {t("addDialog.failed.body", {
-                          host: linkFailure.host,
-                          reason: linkFailure.reason,
-                        })}
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => {
-                            setSource("");
-                            setLinkFailure(undefined);
-                            field.current?.focus();
-                          }}
-                        >
-                          {t("addDialog.failed.paste")}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => void addLink(trimmed)}
-                        >
-                          {t("addDialog.failed.retry")}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
+                  // Panel's inline error (design-system §7): the cause, then the fixes as buttons.
+                  <Alert tone="destructive" variant="plain" className="rounded-xl">
+                    <Alert.Icon>
+                      <Icon icon={AlertCircleIcon} size={16} />
+                    </Alert.Icon>
+                    <Alert.Title>{t("addDialog.failed.title")}</Alert.Title>
+                    <Alert.Description>
+                      {t("addDialog.failed.body", {
+                        host: linkFailure.host,
+                        reason: linkFailure.reason,
+                      })}
+                    </Alert.Description>
+                    <Alert.Actions>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="border border-input"
+                        onClick={() => {
+                          setSource("");
+                          setLinkFailure(undefined);
+                          field.current?.focus();
+                        }}
+                      >
+                        {t("addDialog.failed.paste")}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => void addLink(trimmed)}
+                      >
+                        {t("addDialog.failed.retry")}
+                      </Button>
+                    </Alert.Actions>
+                  </Alert>
                 ) : null}
               </>
             )}

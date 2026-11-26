@@ -52,24 +52,25 @@ export function SourcesView() {
             <h2 className="text-xl font-semibold tracking-tight">{t("title")}</h2>
             <p className="mt-0.5 text-sm text-muted-foreground">{t("description")}</p>
           </div>
-          <Button shape="pill" className="shrink-0" onClick={() => setAddSourceOpen(true)}>
+          {/* Outline: the header's Practise this is the page's one filled button. */}
+          <Button variant="outline" size="sm" className="shrink-0" onClick={() => setAddSourceOpen(true)}>
             <Icon icon={Add01Icon} />
             {t("add")}
           </Button>
         </div>
 
         {sources.length === 0 ? (
-          <button
-            type="button"
-            onClick={() => setAddSourceOpen(true)}
-            className="mt-8 flex w-full cursor-pointer flex-col items-center gap-3 rounded-3xl border border-dashed px-6 py-14 text-center transition-colors outline-none hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring"
-          >
+          <div className="mt-8 flex flex-col items-center gap-3 rounded-2xl border border-dashed px-6 py-14 text-center">
             <span className="flex size-12 items-center justify-center rounded-full bg-muted">
               <Icon icon={Book02Icon} size={22} />
             </span>
-            <span className="font-medium">{t("empty.title")}</span>
-            <span className="max-w-sm text-sm text-muted-foreground">{t("empty.body")}</span>
-          </button>
+            <h3 className="text-sm font-medium">{t("empty.title")}</h3>
+            <p className="max-w-sm text-[0.8125rem] text-muted-foreground">{t("empty.body")}</p>
+            <Button variant="secondary" className="mt-1 border border-input" onClick={() => setAddSourceOpen(true)}>
+              <Icon icon={Add01Icon} />
+              {t("add")}
+            </Button>
+          </div>
         ) : (
           <>
             {readable.length > 0 ? (

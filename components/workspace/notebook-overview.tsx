@@ -19,6 +19,7 @@ import { vaultOf } from "@/lib/db/vaults";
 import { studyHref } from "@/lib/study/links";
 import { studyReadingProgress } from "@/lib/study/reading-progress";
 import type { StudyBook } from "@/lib/study/records";
+import { cn } from "@/lib/utils";
 import { studyReturnState } from "@/lib/study/return-links";
 import { reviewCollection, reviewQueue } from "@/lib/study/review-session";
 import { studioTools, type StudioToolId } from "@/studio/tools";
@@ -192,6 +193,7 @@ export function NotebookOverview() {
                             ? tStudio(`tools.${meta.id}.name`)
                             : ""
                     }
+                    failed={output.status === "error"}
                     onClick={() => openOutput(output.id)}
                   />
                 );
@@ -240,10 +242,7 @@ function WhereYouAre({ book, opened }: { book: StudyBook; opened: string }) {
           <DirectionalText as="span" text={excerpt} className="line-clamp-2 font-serif text-base text-foreground" />
         </p>
       ) : null}
-      <Link
-        to={readingLink(book, undefined)}
-        className="inline-flex h-9 items-center gap-2 rounded-lg border bg-background px-4 text-sm font-medium outline-none hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/40"
-      >
+      <Link to={readingLink(book, undefined)} className={buttonVariants({ variant: "outline" })}>
         <Icon icon={Book02Icon} size={16} />
         {t("overview.continue")}
       </Link>
@@ -282,7 +281,7 @@ function Group({ title, action, children }: { title: string; action?: React.Reac
         <h3 className="text-sm font-medium">{title}</h3>
         {action}
       </div>
-      <ul className="divide-y rounded-2xl border">{children}</ul>
+      <ul className="divide-y overflow-hidden rounded-2xl border">{children}</ul>
     </div>
   );
 }
@@ -291,26 +290,29 @@ function Row({
   icon,
   title,
   detail,
+  failed = false,
   onClick,
 }: {
   icon: React.ReactNode;
   title: string;
   detail: string;
+  /** A failed output: its detail reads in the destructive colour, so it is found at a glance. */
+  failed?: boolean;
   onClick: () => void;
 }) {
   return (
     <li>
-      <button
-        type="button"
-        onClick={onClick}
-        className="flex min-h-14 w-full cursor-pointer items-center gap-3 rounded-2xl px-4 py-2 text-start outline-none hover:bg-muted/40 focus-visible:ring-[3px] focus-visible:ring-ring/40"
-      >
+      <Button variant="ghost" onClick={onClick} className={cn(rowButton, "min-h-14")}>
         <span className="flex size-4 shrink-0 items-center justify-center">{icon}</span>
         <span className="min-w-0 flex-1">
           <DirectionalText as="span" text={title} className="block truncate text-sm font-medium" />
-          {detail ? <span className="block truncate text-xs text-muted-foreground">{detail}</span> : null}
+          {detail ? (
+            <span className={cn("block truncate text-xs", failed ? "text-destructive" : "text-muted-foreground")}>
+              {detail}
+            </span>
+          ) : null}
         </span>
-      </button>
+      </Button>
     </li>
   );
 }
@@ -318,13 +320,13 @@ function Row({
 function More({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <li>
-      <button
-        type="button"
-        onClick={onClick}
-        className="flex min-h-11 w-full cursor-pointer items-center rounded-2xl px-4 text-start text-sm text-muted-foreground outline-none hover:bg-muted/40 focus-visible:ring-[3px] focus-visible:ring-ring/40"
-      >
+      <Button variant="ghost" onClick={onClick} className={cn(rowButton, "text-sm text-muted-foreground")}>
         {label}
-      </button>
+      </Button>
     </li>
   );
 }
+
+/** A row of the documents and outputs lists: Panel's ghost button laid out as a flat row. */
+const rowButton =
+  "h-auto min-h-11 w-full justify-start gap-3 rounded-none px-4 py-2 text-start font-normal whitespace-normal active:not-disabled:scale-100";
