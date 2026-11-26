@@ -331,7 +331,7 @@ export function StudyReview({
   const sourceBook = highlightBook ?? books.find(({ id }) => id === sourceBookId);
   const source =
     item?.kind === "highlight"
-      ? [sourceBook?.title, sourceBook?.sections[item.section]?.title].filter(Boolean).join(" · ")
+      ? [...new Set([sourceBook?.title, sourceBook?.sections[item.section]?.title].filter(Boolean))].join(" · ")
       : (sourceBook?.title ?? (word ? word.language : item?.tags[0]));
   const counts = Object.fromEntries(
     studyRatings.map((rating) => [rating, grades.filter((review) => review.rating === rating).length]),

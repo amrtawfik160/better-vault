@@ -1531,6 +1531,7 @@
         "title": "Your results will appear here",
         "body": "Each session you finish adds one row: the date, what you practised and how it went."
       },
+      "conversations_zero": "Earlier conversations",
       "conversations_one": "{{count}} earlier conversation",
       "conversations_other": "{{count}} earlier conversations",
       "noMaterial": {

@@ -296,9 +296,12 @@ function Preferences() {
     ...studyCorrections.map((value) => ({ value, label: t(`study.practice.correctionOptions.${value}`) })),
   ];
   return (
-    <details className="rounded-2xl border p-3 text-sm">
-      <summary className="cursor-pointer font-medium">{t("study.practice.preferences")}</summary>
-      <div className="mt-3 grid gap-3">
+    <details className="group rounded-2xl border text-sm">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-2xl px-4 font-medium outline-none focus-visible:ring-[3px] focus-visible:ring-ring/40 [&::-webkit-details-marker]:hidden">
+        <Icon icon={ArrowDown01Icon} size={16} className="text-muted-foreground transition-transform group-open:rotate-180" />
+        {t("study.practice.preferences")}
+      </summary>
+      <div className="grid gap-3 px-4 pt-1 pb-4">
         <div className="flex flex-wrap items-center gap-3">
           <span>{t("study.practice.corrections")}</span>
           <Select
