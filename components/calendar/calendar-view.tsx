@@ -46,7 +46,10 @@ export default function CalendarView() {
   if (!settings) return null;
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <ToolHeader title={t("calendar.title")} detail={t("calendar.scope", { vault: scope })} />
+      <ToolHeader title={t("calendar.title")} detail={t("calendar.scope", { vault: scope })}>
+        {/* kloq has no Add button: say how entries are made. */}
+        <span className="hidden text-xs text-muted-foreground lg:inline">{t("calendar.hint")}</span>
+      </ToolHeader>
       <div className="min-h-0 flex-1">
       <Kloq
         key={revision}
