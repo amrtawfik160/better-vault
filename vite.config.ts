@@ -5,7 +5,7 @@ import { isLoopbackHost } from "./lib/ai/server-config.ts";
 import { appConfig } from "./vite.shared.ts";
 
 /**
- * Serves the API (server/app.ts) from the dev server, so `npm run dev` runs
+ * Serves the API (server/app.ts) from the dev server, so `bun run dev` runs
  * the whole app on one port. The module is reloaded when its code changes.
  */
 function devApi(): Plugin {

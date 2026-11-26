@@ -3,7 +3,7 @@
  *   1. copy `locales/en/` to `locales/<code>/` and translate the values,
  *   2. import its files in `lib/i18n/resources.ts`,
  *   3. add an entry below.
- * `npm run i18n:check` reports missing or extra keys.
+ * `bun run i18n:check` reports missing or extra keys.
  */
 export interface LanguageInfo {
   /** BCP 47 code, also the folder name under `locales/`. */

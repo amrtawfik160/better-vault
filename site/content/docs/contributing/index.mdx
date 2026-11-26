@@ -40,7 +40,7 @@ lib/ai                    providers, model catalog, web-search tools, prompts
 lib/db                    data functions, the storage interface, Dexie and SQLite stores
 lib/grounding             chunking, retrieval and citations
 locales/<lng>/*.json      interface translations
-desktop/                  the Electron app: main process, preload, packaging (its own npm project)
+desktop/                  the Electron app: main process, preload, packaging (its own bun project)
 site/                     this website and documentation (its own Next.js project)
 ```
 
@@ -53,16 +53,16 @@ The interface uses Panel UI first and falls back to shadcn only for what Panel l
 Run the app's checks before you open a pull request:
 
 ```bash
-npm run lint && npm run typecheck && npm test && npm run i18n:check && npm run build
+bun run lint && bun run typecheck && bun run test && bun run i18n:check && bun run build
 ```
 
 When you change the server, storage or anything the desktop app depends on, also run the desktop checks. The first command installs the website and desktop projects once:
 
 ```bash
-npm run setup
-npm run desktop:check
+bun run setup
+bun run desktop:check
 ```
 
-`npm run desktop:dev` opens the desktop app on the app's dev server, and `npm run site:dev` opens this website.
+`bun run desktop:dev` opens the desktop app on the app's dev server, and `bun run site:dev` opens this website.
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org).

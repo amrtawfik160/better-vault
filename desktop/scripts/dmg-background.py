@@ -3,7 +3,7 @@
 #
 #   python3 desktop/scripts/dmg-background.py
 #
-# Run it after `npm install` at the repository root, which provides Geist, the
+# Run it after `bun install` at the repository root, which provides Geist, the
 # app's font (SIL Open Font License), through Next.js.
 import math
 from pathlib import Path

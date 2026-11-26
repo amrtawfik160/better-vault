@@ -14,18 +14,18 @@ Everything in AGENTS.md applies. In addition:
 
 ## Desktop app
 
-better-vault also ships as a desktop app for macOS, Windows and Linux, in `desktop/` (its own npm project). It is the same Vite app, not a copy: AGENTS.md ("Desktop app") explains how it runs.
+better-vault also ships as a desktop app for macOS, Windows and Linux, in `desktop/` (its own bun project). It is the same Vite app, not a copy: AGENTS.md ("Desktop app") explains how it runs.
 
 **How it runs.** electron-vite builds the main process, the preload script and the root app's page into `desktop/out/`. The window shows the page as `app://better-vault`, and the main process answers `/api/…` itself with the app's Hono API (`server/app.ts`). Data lives in `better-vault.sqlite` in the app's data folder, through Node's built-in `node:sqlite`. The page reaches it over IPC (`window.betterVault`, from `desktop/src/preload.ts`), and `lib/db/store.ts` chooses that store over IndexedDB when it is present.
 
 **Keep web and desktop in step.** Every change to the web app must work in the desktop app too, in the same change:
 
 - A `lib/db` change touches `Backend`, both stores, `backendMethods` and `writes`. The contract tests in `lib/db/db.test.ts` must pass on IndexedDB and SQLite.
-- A new API route, server dependency, runtime file, environment variable, `vite.shared.ts` or `index.html` change needs `npm run pack` in `desktop/` to succeed, and the app must start from that build.
-- New windows, `target="_blank"` links, downloads, file pickers, clipboard or permissions must be tried in the desktop app (`npm run dev` at the root and in `desktop/`).
+- A new API route, server dependency, runtime file, environment variable, `vite.shared.ts` or `index.html` change needs `bun run pack` in `desktop/` to succeed, and the app must start from that build.
+- New windows, `target="_blank"` links, downloads, file pickers, clipboard or permissions must be tried in the desktop app (`bun run dev` at the root and in `desktop/`).
 - Desktop-only behaviour stays in `desktop/src/`; the page learns it is on desktop only through `lib/desktop/bridge.ts`.
 
-**Checks.** From the root, run `npm run desktop:check` (after `npm run setup` once). CI runs the same checks on every push. `npm run desktop:dev` opens the desktop app on the app's dev server.
+**Checks.** From the root, run `bun run desktop:check` (after `bun run setup` once). CI runs the same checks on every push. `bun run desktop:dev` opens the desktop app on the app's dev server.
 
 **Releases.** The desktop version is the root `package.json` version. Publishing the GitHub release starts `.github/workflows/desktop.yml`, which builds the installers on all three systems and attaches them, with the updater's `latest*.yml`, to the release. Check that run after each release. macOS signing and notarization need the `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID` secrets. Never put certificates or passwords in the repository.
 

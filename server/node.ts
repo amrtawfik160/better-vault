@@ -15,7 +15,7 @@ import {
 import { createApi } from "./app";
 
 /**
- * `npm start`: the built app on http://localhost:3000 (or $PORT). It serves
+ * `bun run start`: the built app on http://localhost:3000 (or $PORT). It serves
  * the pages from dist/client and the API from ./app.
  */
 const here = path.dirname(fileURLToPath(import.meta.url));

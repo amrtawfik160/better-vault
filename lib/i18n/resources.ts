@@ -12,7 +12,7 @@ import enWorkspace from "@/locales/en/workspace.json";
 
 /**
  * Every translation, bundled. English is the source of truth: other languages
- * must have the same keys (checked by `npm run i18n:check`).
+ * must have the same keys (checked by `bun run i18n:check`).
  */
 export const resources = {
   en: {

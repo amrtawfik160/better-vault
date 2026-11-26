@@ -176,7 +176,7 @@ export const faq: { question: string; answer: string }[] = [
   {
     question: "Can I self-host it?",
     answer:
-      "Yes. better-vault is a Vite app with a small API and no database. Run npm run build and npm start on any host with Node.js 22.12 or later, or use the desktop app for macOS, Windows and Linux.",
+      "Yes. better-vault is a Vite app with a small API and no database. Run bun run build and bun run start on any host with Node.js 22.12 or later, or use the desktop app for macOS, Windows and Linux.",
   },
   {
     question: "Does it make audio overviews like NotebookLM?",

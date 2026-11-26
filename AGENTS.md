@@ -11,7 +11,7 @@ better-vault is an open-source, bring-your-own-model alternative to Google's Not
 | **Chat mode**        | **Sources** (default): the model answers only from the notebook's selected sources and cites passages as `[n]`. **Web**: the model may also use its provider's own web search.                                                                                                                                                                                                                                                                                                                                                                                                |
 | **Studio**           | The sheet opened by **Create**. It holds **tools** (Audio Overview, Report, Flashcards, Quiz, Data table, Mind map, Anatomy, Slide deck, Infographic, Whiteboard). Each tool opens a **dialog** of options, except **local** tools (the Whiteboard), which are made in the browser at once.                                                                                                                                                                                                                                                                                   |
 | **Output**           | One generated Studio result (for example "Entrepreneurship Flashcards"). It is listed under the tools and opened in a **viewer** in the Studio tab.                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| **Notes**            | Obsidian-style Markdown notes in a vault (`lib/db/notes.ts`, `components/notes/`): `[[links]]` to notes, notebooks and sources across vaults, backlinks, a graph and Obsidian's keys. Skills (`lib/db/skills.ts`) are SKILL.md files in a vault. The desktop app's MCP server (`desktop/src/mcp/`, one file per area, tested with `npm run desktop:test`) gives agents every area (notebooks, sources, notes, skills, calendar, chats, outputs, bots, plugins), with a switch per area for changes; never settings or keys. `describe_app` tells agents what each area holds. |
+| **Notes**            | Obsidian-style Markdown notes in a vault (`lib/db/notes.ts`, `components/notes/`): `[[links]]` to notes, notebooks and sources across vaults, backlinks, a graph and Obsidian's keys. Skills (`lib/db/skills.ts`) are SKILL.md files in a vault. The desktop app's MCP server (`desktop/src/mcp/`, one file per area, tested with `bun run desktop:test`) gives agents every area (notebooks, sources, notes, skills, calendar, chats, outputs, bots, plugins), with a switch per area for changes; never settings or keys. `describe_app` tells agents what each area holds. |
 | **Bot**              | A persona drawn as better-vault's own character (`components/bot/character/`: a superellipsoid head projected to SVG, a deterministic pose model and accessories in slots, ids in `lib/bot/look.ts`), with one ongoing thread (`lib/db/bots.ts`, `components/bot/`). `/api/bot` only declares its tools (`lib/bot/tools.ts`); the page runs them on the user's data (`lib/bot/run-tool.ts`): reads at once, writes after a "Needs your OK" card, and `ask_bot` hands a task to another bot (one level, no loops).                                                             |
 | **Plugin**           | Panels and themes made by the user or an agent (`lib/plugins/`, `components/plugins/`): a manifest with permissions and a few text files. Panels run sandboxed in `public/plugin-host.html` (no `allow-same-origin`, a CSP that loads nothing) and reach data only through the bridge (`lib/plugins/bridge.ts`), checked against what the user granted. Themes set only colour tokens. They arrive turned off. **Creator mode**: agents build them over MCP (`describe_app`, `install_plugin`).                                                                               |
 | **Desktop app**      | The same app inside Electron (`desktop/`) for macOS, Windows and Linux. It runs the app's API in Electron's main process and stores data in SQLite instead of IndexedDB; the interface is identical.                                                                                                                                                                                                                                                                                                                                                                          |
@@ -21,7 +21,7 @@ better-vault is an open-source, bring-your-own-model alternative to Google's Not
 
 ## Interface
 
-The repository holds the app, the website and a desktop shell. The **app** is the root project, a Vite + React single-page app with a small Hono API: notebooks at `/`, a notebook at `/notebook/:id` (paths from `lib/routes.ts`, routes in `src/router.tsx`); people run it themselves, and nothing hosts it for them. The **desktop app** (`desktop/`, its own npm project) packages that same app with Electron; see "Desktop app" below. The **website** (landing page and Fumadocs docs, deployed at better-vault.dev) is its own Next.js project in `site/`, with its own `package.json`, lockfile and checks; it never links into a running app. The rest of this section describes the app.
+The repository holds the app, the website and a desktop shell. The **app** is the root project, a Vite + React single-page app with a small Hono API: notebooks at `/`, a notebook at `/notebook/:id` (paths from `lib/routes.ts`, routes in `src/router.tsx`); people run it themselves, and nothing hosts it for them. The **desktop app** (`desktop/`, its own bun project) packages that same app with Electron; see "Desktop app" below. The **website** (landing page and Fumadocs docs, deployed at better-vault.dev) is its own Next.js project in `site/`, with its own `package.json`, lockfile and checks; it never links into a running app. The rest of this section describes the app.
 
 The redesign (rationale in `design-brief.md`, `design-system.md`, `ux-brief.md` and `ui-progress.md`; follow `design-system.md` for new screens) gives every page one frame:
 
@@ -82,8 +82,8 @@ Keep the desktop shell thin: desktop-only behaviour belongs in `desktop/src/`, a
 
 ## UI rules
 
-- **Components:** Panel UI first (`components/panelui`, added with `npx shadcn@latest add @panelui/<name>`). Use shadcn (`components/ui`) only when Panel has no such component. Do not add other component libraries (Rare UI was removed on purpose); build what is missing from Panel and shadcn parts, with a design of our own. Do not hand-edit vendored components unless necessary, and note why in the file.
-- **Calendar:** the calendar is [kloq](https://coss.com/kloq/docs), copied from its registry into `components/kloq/` (MIT, keep its `LICENSE`). It is the one other component library, chosen by the maintainer. Its `lucide-react` imports point at `components/kloq/lib/icons.tsx`, which draws them with Hugeicons; after re-running `npx shadcn@latest add @kloq/kloq`, point them there again and move the files from `src/components/kloq` to `components/kloq`. `src/styles/calendar.css` hands the app's tokens and fonts back to it. Entries are stored through `lib/db/calendar.ts` (the `calendar` table), never kloq's localStorage, and kloq's own ⌘K and design mode stay off.
+- **Components:** Panel UI first (`components/panelui`, added with `bunx shadcn@latest add @panelui/<name>`). Use shadcn (`components/ui`) only when Panel has no such component. Do not add other component libraries (Rare UI was removed on purpose); build what is missing from Panel and shadcn parts, with a design of our own. Do not hand-edit vendored components unless necessary, and note why in the file.
+- **Calendar:** the calendar is [kloq](https://coss.com/kloq/docs), copied from its registry into `components/kloq/` (MIT, keep its `LICENSE`). It is the one other component library, chosen by the maintainer. Its `lucide-react` imports point at `components/kloq/lib/icons.tsx`, which draws them with Hugeicons; after re-running `bunx shadcn@latest add @kloq/kloq`, point them there again and move the files from `src/components/kloq` to `components/kloq`. `src/styles/calendar.css` hands the app's tokens and fonts back to it. Entries are stored through `lib/db/calendar.ts` (the `calendar` table), never kloq's localStorage, and kloq's own ⌘K and design mode stay off.
 - **Colours:** only semantic tokens (`bg-card`, `text-muted-foreground`, `text-info`, `bg-chart-3`, …) from `src/styles/tokens.css`, which holds the Panel palette (`site/app/tokens.css` is a copy; keep the two in step). Never use raw colours like `bg-neutral-800` or hex values in app code.
 - **Icons:** only [Hugeicons](https://hugeicons.com): `import { HugeiconsIcon } from "@hugeicons/react"` and icons from `@hugeicons/core-free-icons`. No lucide or other sets. The small glyphs built into Panel components are left as they ship. The exceptions are brand marks: the providers' logos in the app (`lib/ai/provider-icons.ts`, theSVG's single-colour marks drawn by `components/provider-icon.tsx`) and on the website (`site/public/providers`) the desktop systems' logos on the download page (`site/public/platforms`) and the file-format badges on the Vault page (`public/formats`), each with a README.
 - **Text:** every user-facing string in the app goes through i18next (`useTranslation`, `t("…")`). No hard-coded UI strings. English in `locales/en/*.json` is the source of truth. Keys are typed, so a missing key is a type error. The website and docs are English only: landing copy lives in `site/lib/site/copy.ts` and docs in `site/content/docs/*.mdx`.
@@ -97,7 +97,7 @@ Keep the desktop shell thin: desktop-only behaviour belongs in `desktop/src/`, a
 
 ```
 index.html, src/          the page: entry (main.tsx), routes (router.tsx), styles (globals.css, tokens.css)
-server/                   the API (Hono): app.ts mounts the routes; node.ts serves the built app (`npm start`)
+server/                   the API (Hono): app.ts mounts the routes; node.ts serves the built app (`bun run start`)
   routes/chat             streamText: Sources (grounded) or Web (provider search)
   routes/bot              one turn of a bot's thread; its tools are declared here and run in the page
   routes/skills-fetch     SKILL.md files from a GitHub repo (what npx skills add from skills.sh installs)
@@ -127,7 +127,7 @@ lib/desktop               the bridge type the desktop preload puts on window.bet
 lib/grounding             chunking, retrieval and citations
 lib/i18n                  language registry and i18next setup
 locales/<lng>/*.json      translations
-desktop/                  the desktop app: its own npm project (Electron, electron-builder)
+desktop/                  the desktop app: its own bun project (Electron, electron-builder)
   src/                    main process (app:// protocol with the API, SQLite over IPC, menu, updates) and preload
   electron.vite.config.ts the build of main, preload and the page (→ out/)
   scripts/                dmg-background.py
@@ -146,7 +146,7 @@ site/                     the website: its own Next.js project (see below)
 
 - **Add a Studio tool:** create `studio/tools/<id>/` with `definition.ts` (id, icon, tint, option schema and defaults), `server.ts` (prompt and output schema), `dialog.tsx` (options form) and `viewer.tsx` (output view). Register it in the client and server registries and add its strings under `studio` in `locales/en/studio.json`.
 - **Add a local tool** (made in the browser, like the Whiteboard): give its `definition.ts` a `local: { blank }` and no `server.ts` or dialog; its viewer receives `onDataChange` to save edits. Mark its client `immersive` to give the viewer the whole tab: the page drops its header and passes the title, downloads, rename and delete as `chrome` for the viewer to show. Register it in `studio/client.ts` and `studio/definitions.ts`; the Studio sheet creates it at once and opens it.
-- **Add a UI language:** copy `locales/en/` to `locales/<code>/`, import it in `lib/i18n/resources.ts`, add it to `lib/i18n/config.ts`, run `npm run i18n:check`.
+- **Add a UI language:** copy `locales/en/` to `locales/<code>/`, import it in `lib/i18n/resources.ts`, add it to `lib/i18n/config.ts`, run `bun run i18n:check`.
 - **Add a provider:** add it to the catalog in `lib/ai/catalog.ts` and handle it in `lib/ai/providers.ts` (model factory, optional web-search tool, model listing).
 
 - **Change stored data:** add or change the row type in `lib/db/types.ts`, the `Backend` method in `lib/db/backend.ts`, both stores (`dexie-backend.ts` with a new Dexie version if indexes change, `sqlite/store.ts` with a new migration), and `writes` for any table a write touches. Add a test to the contract suite.
@@ -172,45 +172,45 @@ Headings are short noun phrases or tasks ("Add an API key"), never questions ans
 
 ## Commands
 
-The project uses **npm** (not pnpm or yarn). Keep `package-lock.json` committed and use `npx` for one-off tools.
+The project uses **bun** (not npm, pnpm or yarn) to install packages and run scripts. Keep the `bun.lock` files committed and use `bunx` for one-off tools.
 
 ```bash
-npm run dev        # start on http://localhost:3000 (Vite, with the API)
-npm run lint       # ESLint
-npm run typecheck  # tsc
-npm test           # Vitest
-npm run i18n:check # every locale has the same keys as English
-npm run build      # production build into dist/ (page and server)
-npm start          # run that build on http://localhost:3000
+bun run dev        # start on http://localhost:3000 (Vite, with the API)
+bun run lint       # ESLint
+bun run typecheck  # tsc
+bun run test       # Vitest
+bun run i18n:check # every locale has the same keys as English
+bun run build      # production build into dist/ (page and server)
+bun run start      # run that build on http://localhost:3000
 ```
 
-The website has its own commands, run inside `site/` (`npm install` there first):
+The website has its own commands, run inside `site/` (`bun install` there first):
 
 ```bash
-npm run dev        # start on http://localhost:3001
-npm run lint && npm run typecheck && npm run build
+bun run dev        # start on http://localhost:3001
+bun run lint && bun run typecheck && bun run build
 ```
 
-The root `package.json` runs all three projects. `npm run setup` installs them; then:
+The root `package.json` runs all three projects. `bun run setup` installs them; then:
 
 ```bash
-npm run site:dev       # the website on http://localhost:3001
-npm run site:check     # the website's lint, typecheck and build
-npm run desktop:dev    # the desktop app with hot reload (electron-vite dev)
-npm run desktop:start  # the desktop app on a production build
-npm run desktop:check  # the desktop typecheck and an unpacked app in desktop/release/
-npm run desktop:dist   # installers for this system
+bun run site:dev       # the website on http://localhost:3001
+bun run site:check     # the website's lint, typecheck and build
+bun run desktop:dev    # the desktop app with hot reload (electron-vite dev)
+bun run desktop:start  # the desktop app on a production build
+bun run desktop:check  # the desktop typecheck and an unpacked app in desktop/release/
+bun run desktop:dist   # installers for this system
 ```
 
-The same desktop commands also exist inside `desktop/` (`npm install` there first):
+The same desktop commands also exist inside `desktop/` (`bun install` there first):
 
 ```bash
-npm run build         # build main, preload and the page into desktop/out
-npm run start         # open that build (electron-vite preview)
-npm run dev           # open the app with hot reload (electron-vite dev)
-npm run typecheck
-npm run pack          # unpacked app in desktop/release/ for this system
-npm run dist          # installers (DMG, NSIS, AppImage, deb) for this system
+bun run build         # build main, preload and the page into desktop/out
+bun run start         # open that build (electron-vite preview)
+bun run dev           # open the app with hot reload (electron-vite dev)
+bun run typecheck
+bun run pack          # unpacked app in desktop/release/ for this system
+bun run dist          # installers (DMG, NSIS, AppImage, deb) for this system
 ```
 
 ## Workflow
@@ -220,7 +220,7 @@ npm run dist          # installers (DMG, NSIS, AppImage, deb) for this system
 - **Versioning:** SemVer, starting at 0.1.0. The version lives in `package.json`, and `CHANGELOG.md` collects changes under "Unreleased".
 - **Releases:** when a phase is complete, **ask the maintainer whether to release**. Only on a yes: bump the version, move "Unreleased" under the new version in the changelog, tag `vX.Y.Z` and create a GitHub release. The desktop app takes its version from the root `package.json`. Publishing the release starts the **Desktop** workflow (`.github/workflows/desktop.yml`), which builds the installers on macOS, Windows and Linux and attaches them, with the `latest*.yml` files the updater reads, to that release. Check that the run succeeds.
 - **Website:** better-vault.dev does not deploy on push (`site/vercel.json` sets `git.deploymentEnabled: false`). It deploys only through the **Deploy site** workflow (`.github/workflows/deploy-site.yml`), which fires a Vercel deploy hook stored as the `VERCEL_DEPLOY_HOOK` secret. After each release, ask the maintainer whether to update the site, and run the workflow only on a yes, once the release's Desktop workflow has attached the installers. (The download page also re-checks a release without installers every few minutes, `site/lib/site/releases.ts`, so an early deploy fixes itself.)
-- Before pushing: `npm run lint && npm run typecheck && npm test && npm run i18n:check && npm run build`, the website's checks in `site/` when it changed, and the desktop checks in `desktop/` (`npm run typecheck && npm run pack`) when the change falls under the desktop rule above.
+- Before pushing: `bun run lint && bun run typecheck && bun run test && bun run i18n:check && bun run build`, the website's checks in `site/` when it changed, and the desktop checks in `desktop/` (`bun run typecheck && bun run pack`) when the change falls under the desktop rule above.
 
 ## Roadmap
 

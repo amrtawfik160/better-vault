@@ -21,7 +21,7 @@ import { startUpdates } from "./updates";
  * built by Vite, runs the app's API in this process, and keeps notebooks in a
  * SQLite file instead of the browser's IndexedDB.
  *
- * `npm run dev` (electron-vite) sets ELECTRON_RENDERER_URL to its dev server;
+ * `bun run dev` (electron-vite) sets ELECTRON_RENDERER_URL to its dev server;
  * the page is then fetched from there, with hot reload.
  */
 const devServer = app.isPackaged ? undefined : process.env.ELECTRON_RENDERER_URL;
@@ -62,8 +62,8 @@ function openExternal(url: string) {
 
 /**
  * Our icon for the Dock and the window. Installed apps get it from the
- * package (electron-builder, build/icon.png); this covers `npm start` and
- * `npm run dev`, and the window icon on Linux.
+ * package (electron-builder, build/icon.png); this covers `bun run start` and
+ * `bun run dev`, and the window icon on Linux.
  */
 const icon = path.join(__dirname, "..", "..", "build", "icon.png");
 

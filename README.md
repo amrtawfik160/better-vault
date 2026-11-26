@@ -63,13 +63,13 @@ Download the installer for macOS, Windows or Linux from [better-vault.dev/downlo
 
 ### Run from source
 
-**Requirements:** [Node.js](https://nodejs.org) 22.12 or newer, with npm 10 (included with Node.js).
+**Requirements:** [Node.js](https://nodejs.org) 22.12 or newer and [Bun](https://bun.sh).
 
 ```bash
 git clone https://github.com/better-vault/better-vault.git
 cd better-vault
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
 Open <http://localhost:3000> and choose **Use without an account**. The welcome screens ask you to connect your AI: sign in with ChatGPT, Claude or another plan you already pay for. You can do this later in **Settings → AI → AI subscriptions**, or add an API key or a local model in **Settings → AI → AI providers**.
@@ -77,8 +77,8 @@ Open <http://localhost:3000> and choose **Use without an account**. The welcome 
 ### Production build
 
 ```bash
-npm run build
-npm start
+bun run build
+bun run start
 ```
 
 ### Local models (Ollama, LM Studio)
@@ -113,7 +113,7 @@ The study workflows were adapted from [MemoFlash](https://github.com/amrtawfik16
 
 Open **Settings → AI → AI subscriptions**, choose a provider, and approve the sign-in in your browser. ChatGPT, Claude, Antigravity, Grok, both Kimi portals, Devin, and Muse Code are available. When a provider shows a one-time code, enter it in the provider's sign-in page. Connected models appear in the Chat, Bots, and Studio model pickers.
 
-The desktop installer includes CLIProxyAPI. A web app started on loopback with `npm run dev` or `npm start` installs the pinned, checksum-verified proxy on first use. The app starts and restarts it automatically. The proxy keeps credentials under `~/.better-vault/cliproxyapi` by default. The app sends relevant notebook context through the proxy to the provider you select.
+The desktop installer includes CLIProxyAPI. A web app started on loopback with `bun run dev` or `bun run start` installs the pinned, checksum-verified proxy on first use. The app starts and restarts it automatically. The proxy keeps credentials under `~/.better-vault/cliproxyapi` by default. The app sends relevant notebook context through the proxy to the provider you select.
 
 Use **Reconnect** or **Disconnect** beside an account to manage it.
 
@@ -145,7 +145,7 @@ Contributions are welcome, from typo fixes to new Studio tools. Please read [CON
 2. Make your change. Use [Conventional Commits](https://www.conventionalcommits.org) for messages.
 3. Run the checks:
    ```bash
-   npm run lint && npm run typecheck && npm test && npm run i18n:check && npm run build
+   bun run lint && bun run typecheck && bun run test && bun run i18n:check && bun run build
    ```
    If your change touches the server, storage or anything else the desktop app depends on, run the checks in `desktop/` too (see [CONTRIBUTING.md](CONTRIBUTING.md#the-desktop-app)).
 4. Open a pull request and fill in the template.
@@ -159,7 +159,7 @@ The UI is fully translatable with [i18next](https://www.i18next.com). English is
 1. Copy `locales/en/` to `locales/<code>/` (for example `locales/fr/`) and translate the values, not the keys.
 2. Import the new files in `lib/i18n/resources.ts`.
 3. Add the language to `lib/i18n/config.ts`, with `dir: "rtl"` for right-to-left scripts.
-4. Run `npm run i18n:check` to find missing or extra keys, then open a pull request.
+4. Run `bun run i18n:check` to find missing or extra keys, then open a pull request.
 
 ## 🐛 Reporting issues
 

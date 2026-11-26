@@ -4,13 +4,13 @@ Thank you for helping. This guide covers setup, the rules the code follows and h
 
 ## Setup
 
-Requirements: Node.js 22.12+ with npm 10 (included with Node.js).
+Requirements: Node.js 22.12+ and [Bun](https://bun.sh).
 
 ```bash
 git clone https://github.com/<you>/better-vault.git
 cd better-vault
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
 The app runs at <http://localhost:3000>. Add an API key in **Settings → AI providers** to try AI features, or use a local model through Ollama or LM Studio.
@@ -31,33 +31,33 @@ Every AI call goes through the Vercel AI SDK, and web search uses only the provi
 2. Commit with [Conventional Commits](https://www.conventionalcommits.org): `feat: add quiz hints`, `fix(chat): keep citations after reload`.
 3. Run every check:
    ```bash
-   npm run lint && npm run typecheck && npm test && npm run i18n:check && npm run build
+   bun run lint && bun run typecheck && bun run test && bun run i18n:check && bun run build
    ```
 4. Open a pull request and fill in the template. Add screenshots for UI changes, in light and dark mode.
 
 ## The desktop app
 
-The desktop app in `desktop/` is the same web app inside Electron, so most changes reach it without extra work. Data goes through `lib/db`, which has an IndexedDB store for the browser and a SQLite store for the desktop; `npm test` runs the database tests against both.
+The desktop app in `desktop/` is the same web app inside Electron, so most changes reach it without extra work. Data goes through `lib/db`, which has an IndexedDB store for the browser and a SQLite store for the desktop; `bun run test` runs the database tests against both.
 
 If your change touches the server, storage, environment variables, new windows, downloads or files, check the desktop app as well. From the repository root, install the website and desktop projects once, then run the desktop checks:
 
 ```bash
-npm run setup
-npm run desktop:check
+bun run setup
+bun run desktop:check
 ```
 
-This builds an unpacked app in `desktop/release/` that you can open. To work on the desktop app with hot reload, run `npm run desktop:dev`, which starts the app's dev server and opens the desktop app on it.
+This builds an unpacked app in `desktop/release/` that you can open. To work on the desktop app with hot reload, run `bun run desktop:dev`, which starts the app's dev server and opens the desktop app on it.
 
 ## The website
 
-The website and documentation live in `site/`. Run `npm run site:dev` to open it at <http://localhost:3001>, and `npm run site:check` before you send a change to it.
+The website and documentation live in `site/`. Run `bun run site:dev` to open it at <http://localhost:3001>, and `bun run site:check` before you send a change to it.
 
 ## Adding a language
 
 1. Copy `locales/en/` to `locales/<code>/` and translate the values (not the keys). Keep `{{placeholders}}` as they are.
 2. Import the files in `lib/i18n/resources.ts`.
 3. Add the language to `lib/i18n/config.ts`; use `dir: "rtl"` for right-to-left scripts.
-4. Run `npm run i18n:check`.
+4. Run `bun run i18n:check`.
 
 ## Adding a Studio tool
 

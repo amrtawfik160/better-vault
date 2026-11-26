@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Checks that every locale under locales/ has exactly the keys of locales/en.
-// Usage: npm run i18n:check
+// Usage: bun run i18n:check
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 

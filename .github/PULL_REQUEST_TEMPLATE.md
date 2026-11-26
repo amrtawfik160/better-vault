@@ -12,7 +12,7 @@
 
 ## Checklist
 
-- [ ] `npm run lint && npm run typecheck && npm test && npm run i18n:check && npm run build` pass
+- [ ] `bun run lint && bun run typecheck && bun run test && bun run i18n:check && bun run build` pass
 - [ ] UI text goes through `t()` and new strings are in `locales/en/*.json`
 - [ ] Icons come from Hugeicons and colours from theme tokens
 - [ ] Screenshots attached for UI changes (light and dark)

@@ -17,8 +17,8 @@
     "build": "electron-vite build",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
-    "dist": "npm run build && electron-builder --config electron-builder.config.mjs",
-    "pack": "npm run build && electron-builder --config electron-builder.config.mjs --dir",
+    "dist": "bun run build && electron-builder --config electron-builder.config.mjs",
+    "pack": "bun run build && electron-builder --config electron-builder.config.mjs --dir",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
