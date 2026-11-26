@@ -1,3 +1,4 @@
+import { SettingsSection } from "./settings-section";
 import {
   AiBrain01Icon,
   Camera01Icon,
@@ -16,8 +17,12 @@ import { Icon } from "@/components/icon";
 import { ProviderIcon } from "@/components/provider-icon";
 import { Button } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
-import { Sheet } from "@/components/panelui/sheet";
 import { signIn, signOut, useAccount } from "@/lib/account/account";
+import {
+  subscriptionConnectionsAllowed,
+  useSubscriptionConnections,
+} from "@/lib/ai/cliproxyapi-client";
+import { cliProxyBrands } from "@/lib/ai/cliproxyapi-oauth";
 import { providerIds, providers } from "@/lib/ai/catalog";
 import { desktopBridge } from "@/lib/desktop/bridge";
 import { useFolders } from "@/lib/db/folders";
@@ -39,6 +44,7 @@ export function AccountPanel() {
   const account = useAccount();
   const [busy, setBusy] = useState<string | null>(null);
   const settings = useSettings();
+  const { accounts } = useSubscriptionConnections();
   const notebooks = useNotebooks();
   const folders = useFolders();
   const counts = useNotebookCounts();
@@ -76,7 +82,7 @@ export function AccountPanel() {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (message !== "cancelled")
-        toast.error(message === "popup-blocked" ? t("subscription.popupBlocked") : message);
+        toast.error(message === "popup-blocked" ? t("account.popupBlocked") : message);
     } finally {
       setBusy(null);
     }
@@ -95,8 +101,7 @@ export function AccountPanel() {
 
   return (
     <>
-      <Sheet.Header title={t("account.title")} description={t("account.description")} />
-      <Sheet.Body>
+      <SettingsSection title={t("account.title")} description={t("account.description")}>
         <div className="flex flex-col gap-6 pb-4">
           <div className="flex flex-col items-center gap-3 pt-2 text-center">
             <button
@@ -175,18 +180,6 @@ export function AccountPanel() {
                   label={t("account.username")}
                   value={user.username ? `@${user.username}` : t("account.noUsername")}
                 />
-                <SettingsRow
-                  to="subscription"
-                  icon={<Logo size={20} />}
-                  label={t("rows.subscription")}
-                  hint={
-                    account?.account.plan
-                      ? t("rows.subscriptionPlan", {
-                          plan: t(`subscription.plans.${account.account.plan}`),
-                        })
-                      : t("account.freePlan")
-                  }
-                />
               </div>
             ) : (
               <div className="flex flex-col gap-3 rounded-2xl bg-muted/50 p-4">
@@ -203,7 +196,7 @@ export function AccountPanel() {
                     disabled={busy !== null}
                     onClick={() => void run("signin", () => signIn("signin"))}
                   >
-                    {t("subscription.signIn")}
+                    {t("account.signIn")}
                   </Button>
                   <Button
                     className="flex-1"
@@ -211,7 +204,7 @@ export function AccountPanel() {
                     disabled={busy !== null}
                     onClick={() => void run("signup", () => signIn("signup"))}
                   >
-                    {t("subscription.createAccount")}
+                    {t("account.createAccount")}
                   </Button>
                 </div>
               </div>
@@ -223,25 +216,39 @@ export function AccountPanel() {
               {t("account.connected")}
             </h3>
             <div className="-mx-2 flex flex-col gap-0.5">
-              <SettingsRow
-                to="providers"
-                icon={<ProviderIcon provider="openai" />}
-                label={t("account.chatgpt")}
-                hint={
-                  !desktop
-                    ? t("account.desktopOnly")
-                    : chatgpt
-                      ? chatgpt.email || chatgpt.name || t("account.signedIn")
+              {subscriptionConnectionsAllowed() ? (
+                <SettingsRow
+                  to="group-ai"
+                  icon={AiBrain01Icon}
+                  label={t("cliproxyapi.title")}
+                  hint={
+                    accounts.length
+                      ? [...new Set(accounts.map(({ provider }) => cliProxyBrands[provider]))].join(
+                          ", ",
+                        )
                       : t("account.notConnected")
-                }
-                end={
-                  chatgpt ? (
-                    <span aria-hidden className="size-2 rounded-full bg-success" />
-                  ) : undefined
-                }
-              />
+                  }
+                />
+              ) : null}
+              {desktop ? (
+                <SettingsRow
+                  to="group-ai"
+                  icon={<ProviderIcon provider="openai" />}
+                  label={t("account.chatgpt")}
+                  hint={
+                    chatgpt?.email ||
+                    chatgpt?.name ||
+                    t(chatgpt ? "account.signedIn" : "account.notConnected")
+                  }
+                  end={
+                    chatgpt ? (
+                      <span aria-hidden className="size-2 rounded-full bg-success" />
+                    ) : undefined
+                  }
+                />
+              ) : null}
               <SettingsRow
-                to="providers"
+                to="group-ai"
                 icon={AiBrain01Icon}
                 label={t("account.providers")}
                 hint={
@@ -283,7 +290,7 @@ export function AccountPanel() {
             </Button>
           ) : null}
         </div>
-      </Sheet.Body>
+      </SettingsSection>
     </>
   );
 }

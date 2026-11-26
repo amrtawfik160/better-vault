@@ -1,5 +1,15 @@
 import { APICallError } from "ai";
 
+export const imageInputErrorStatuses = [400, 415, 422];
+
+export function rejectsImageInput(detail: string) {
+  return (
+    /unsupported[_ -](image|modality)|only supports text/i.test(detail) ||
+    (/image|vision|multimodal/i.test(detail) &&
+      /unsupported|not support|not enabled|not available|only supports/i.test(detail))
+  );
+}
+
 /** Hides anything that looks like an API key before an error is shown or sent. */
 export function redactSecrets(text: string): string {
   return text

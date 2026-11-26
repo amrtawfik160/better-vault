@@ -1,11 +1,11 @@
 {
   "title": "Settings",
-  "description": "Saved in this browser only.",
+  "description": "Saved on this device as you change them.",
   "rows": {
     "providers": "AI providers",
     "providersHint_one": "{{count}} ready",
     "providersHint_other": "{{count}} ready",
-    "providersNone": "None set up",
+    "providersNone": "API keys and local models",
     "appearance": "Appearance",
     "language": "Language",
     "data": "Data",
@@ -26,9 +26,15 @@
     "mcp": "MCP",
     "mcpOn": "Agents can connect",
     "mcpOff": "Let AI agents use your notebooks, notes and more",
-    "subscription": "Subscription",
-    "subscriptionNone": "Better Vault AI and Cloud",
-    "subscriptionPlan": "{{plan}} plan",
+    "subscriptions": "AI subscriptions",
+    "subscriptionsNone": "Sign in with ChatGPT, Claude and more",
+    "voice": "Reading voice",
+    "voiceHint": "How text is read aloud",
+    "voiceReady": "Natural voice on this device",
+    "voiceMissing": "Natural voice not downloaded",
+    "voiceDownloading": "Downloading the natural voice ({{percent}}%)",
+    "voiceFailed": "The natural voice couldn’t download",
+    "voiceUnsupported": "System voices only on this device",
     "plugins": "Plugins",
     "pluginsNone": "Studio tools, themes and mods",
     "pluginsHint_one": "{{count}} turned on",
@@ -36,7 +42,7 @@
   },
   "providers": {
     "title": "AI providers",
-    "description": "Add a key, sign in with ChatGPT or use a local model. Keys stay in this browser and are only sent to reach the provider.",
+    "description": "Add an API key or use a local model. Saved keys stay on this device and are sent with provider requests. To use a plan you already pay for, connect it in AI subscriptions.",
     "ready": "Ready",
     "off": "Off",
     "needsKey": "Needs a key",
@@ -79,6 +85,39 @@
     "opencodeIdle": "Not checked yet. A Zen or Go key works without it.",
     "opencodeCheckAgain": "Check again"
   },
+  "cliproxyapi": {
+    "title": "AI subscriptions",
+    "description": "Use the AI plan you already pay for. Sign in with ChatGPT, Claude or another account, and its models work in chat, Studio, Study and bots. No API key needed.",
+    "connect": "Connect {{provider}}",
+    "modelsEmpty": "Connected models will appear in the model picker.",
+    "refreshModels": "Refresh models",
+    "openSignIn": "Open {{provider}} sign-in",
+    "reopenSignIn": "Reopen {{provider}} sign-in",
+    "openPrompt": "Open the sign-in page to continue.",
+    "devicePrompt": "Open the sign-in page and enter the one-time code if asked.",
+    "copyCode": "Copy code",
+    "codeCopied": "Copied",
+    "copyCodeFailed": "Could not copy the code. Select it to copy it manually.",
+    "starting": "Starting sign-in…",
+    "waiting": "Finish signing in in your browser, then return here.",
+    "connected": "{{provider}} sign-in complete.",
+    "signInFailed": "Sign-in did not finish. Connect the account again to retry.",
+    "cancel": "Cancel sign-in",
+    "cancelling": "Cancelling sign-in…",
+    "cancelFailed": "Could not cancel sign-in. Check that CLIProxyAPI is running and try again.",
+    "reconnect": "Reconnect",
+    "disconnect": "Disconnect",
+    "accountStatus": {
+      "connected": "Connected",
+      "reconnect": "Sign-in needed"
+    },
+    "proxyUnavailable": "AI subscriptions are available in the desktop app or a web app running on this computer.",
+    "proxySetup": "Could not set up the local connection service. Check your internet connection and try again.",
+    "proxyOffline": "The local connection service is offline. Try again to restart it.",
+    "proxyRequestFailed": "Could not complete the request. Try again.",
+    "proxyRateLimited": "Too many requests. Wait a moment and try again.",
+    "accountMissing": "That account is no longer connected. Connect it again."
+  },
   "appearance": {
     "title": "Appearance",
     "theme": "Theme",
@@ -117,6 +156,29 @@
     "title": "Language",
     "description": "The language of the interface. Answers follow the language you write in, and each Studio tool lets you pick its output language.",
     "helpTranslate": "Help translate better-vault"
+  },
+  "voice": {
+    "title": "Reading voice",
+    "description": "English is read aloud by Kokoro, a natural voice that runs on this device.",
+    "name": "Natural voice",
+    "checking": "Checking…",
+    "missing": "Not downloaded · {{size}}",
+    "installed": "On this device · {{size}}",
+    "failed": "The download failed. Check your connection and try again.",
+    "unsupported": "This browser can’t run the natural voice, so your system voices read aloud.",
+    "download": "Download ({{size}})",
+    "retry": "Try again",
+    "cancel": "Cancel download",
+    "sample": "Listen to a sample",
+    "stopSample": "Stop",
+    "sampleText": "Hello! I’ll read your books, words and answers aloud, right here on your device.",
+    "remove": "Remove",
+    "removed": "The natural voice was removed, freeing {{size}}.",
+    "gpu": "This device has WebGPU, so the voice runs on the graphics chip, faster than speech.",
+    "cpu": "This device has no WebGPU, so the voice runs on the processor: quick for words and sentences, slower for long answers.",
+    "meanwhile": "Until it’s downloaded, your system voice reads English.",
+    "privacy": "It downloads once from Hugging Face, then works offline. Your text never leaves your device.",
+    "otherLanguages": "Other languages are read by your system’s voices. On a Mac, you can add better ones in System Settings → Accessibility → Spoken Content."
   },
   "data": {
     "title": "Data",
@@ -247,10 +309,12 @@
     "email": "Email",
     "username": "Username",
     "noUsername": "Not set",
-    "freePlan": "Free, with your own keys",
     "signInTitle": "Sign in to better-vault",
-    "signInBody": "An account is optional. It's only for Better Vault AI and Cloud; your notebooks never leave this device.",
-    "signOut": "Sign out"
+    "signInBody": "Sign in or create an account to set up your username. Your notebooks stay on this device.",
+    "signOut": "Sign out",
+    "signIn": "Sign in",
+    "createAccount": "Create account",
+    "popupBlocked": "Allow pop-ups for this page to sign in."
   },
   "storage": {
     "title": "Storage",
@@ -473,6 +537,43 @@
       "labelHint": "Adds vault_api and run_vault_script. Changes still follow the permissions above.",
       "only": "Only list Vault script",
       "onlyHint": "Agents see just describe_app and the script tools, which saves the most tokens."
+    }
+  },
+  "groups": {
+    "ai": {
+      "label": "AI",
+      "detail": "Choose who answers",
+      "lead": "Choose who answers. Keys stay on this device and go only with requests to their provider. Better Vault never shows a saved key."
+    },
+    "reading": {
+      "label": "Reading and voice",
+      "detail": "How words are read aloud",
+      "lead": "How words are read aloud while you read."
+    },
+    "account": {
+      "label": "Account and plan",
+      "detail": "Optional. Add your name and picture",
+      "lead": "An account is optional. Everything works without one; it is only for Better Vault AI and Cloud. Your notebooks, notes and keys never go to it."
+    },
+    "storage": {
+      "label": "Storage and data",
+      "detail": "On this device, no sync",
+      "lead": "Everything lives on this device. Connect a storage service to add files from it and keep backups there."
+    },
+    "appearance": {
+      "label": "Appearance and language",
+      "detail": "Theme, colour and language",
+      "lead": "How the app looks and the language of its interface."
+    },
+    "tools": {
+      "label": "Tools",
+      "detail": "Calendar, MCP and plugins",
+      "lead": "The calendar, MCP for AI agents on this computer, and plugins."
+    },
+    "about": {
+      "label": "About and updates",
+      "detail": "Version and updates",
+      "lead": "An open-source, bring-your-own-model place to learn from what you bring."
     }
   },
   "subscription": {

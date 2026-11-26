@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
+import { stopCliProxy } from "@/lib/ai/cliproxyapi-runtime";
+import { isLoopbackHost } from "@/lib/ai/server-config";
 import {
   inlineScriptHashes,
   PLUGIN_HOST_PATH,
@@ -31,11 +33,19 @@ app.use("*", async (c, next) => {
   const own = c.req.path === PLUGIN_HOST_PATH ? pluginHeaders : headers;
   for (const [name, value] of Object.entries(own)) c.res.headers.set(name, value);
 });
-app.route("/", createApi());
+app.route("/", createApi({ loopback: isLoopbackHost(hostname) }));
 app.use("/*", serveStatic({ root: path.relative(process.cwd(), client) }));
 // Every other path is a page of the single-page app.
 app.get("*", (c) => c.html(index));
 
-serve({ fetch: app.fetch, port, hostname }, (info) => {
+const listener = serve({ fetch: app.fetch, port, hostname }, (info) => {
   console.log(`better-vault is running on http://${hostname}:${info.port}`);
 });
+
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.once(signal, () => {
+    stopCliProxy();
+    listener.close();
+    if ("closeAllConnections" in listener) listener.closeAllConnections();
+  });
+}

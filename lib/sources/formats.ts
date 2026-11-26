@@ -9,8 +9,11 @@
  * components/sources/source-format.ts).
  */
 
-/** How a source's text is read and shown. */
-export const sourceKinds = ["text", "markdown", "pdf", "url", "youtube"] as const;
+/**
+ * How a source's text is read and shown. An `epub` source keeps the book
+ * itself, so Study can read it with its own layout.
+ */
+export const sourceKinds = ["text", "markdown", "pdf", "epub", "url", "youtube"] as const;
 export type SourceKind = (typeof sourceKinds)[number];
 
 export const sourceFormats = [
@@ -167,6 +170,8 @@ export function sourceFormatOf(source: {
       return "markdown";
     case "pdf":
       return "pdf";
+    case "epub":
+      return "epub";
     case "url":
       return "web";
     case "youtube":

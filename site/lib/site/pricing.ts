@@ -133,12 +133,12 @@ export const pricingFaq: { question: string; answer: string }[] = [
   {
     question: "What is an AI credit?",
     answer:
-      "Credits measure how much Better Vault AI you use. A short question uses a fraction of a credit; a long answer over many sources uses more. Settings → Subscription shows what you have used and what is left, and credits renew each month.",
+      "Credits measure how much Better Vault AI you use. A short question uses a fraction of a credit; a long answer over many sources uses more. Settings → Account and plan shows what you have used and what is left, and credits renew each month.",
   },
   {
     question: "What happens when my credits run out?",
     answer:
-      "Better Vault AI pauses until the next month, unless you turn on extra usage in Settings → Subscription. Extra usage costs $2 per 1,000 credits, up to a monthly limit you choose. Your own API keys keep working either way.",
+      "Better Vault AI pauses until the next month, unless you turn on extra usage in Settings → Account and plan. Extra usage costs $2 per 1,000 credits, up to a monthly limit you choose. Your own API keys keep working either way.",
   },
   {
     question: "Are my API keys or notebooks sent to Better Vault?",
@@ -148,6 +148,6 @@ export const pricingFaq: { question: string; answer: string }[] = [
   {
     question: "Can I cancel any time?",
     answer:
-      "Yes. Cancel in Settings → Subscription → Manage, and your plan stays until the end of the month you paid for. Payments and invoices are handled by Dodo Payments.",
+      "Yes. Cancel in Settings → Account and plan → Manage, and your plan stays until the end of the month you paid for. Payments and invoices are handled by Dodo Payments.",
   },
 ];

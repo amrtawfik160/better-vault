@@ -123,7 +123,7 @@ export default async function PluginPage({ params }: Props) {
         <section className="flex flex-col gap-3 rounded-2xl border bg-card p-5">
           <h2 className="font-medium">Install it</h2>
           <p className="text-sm text-muted-foreground">
-            Open better-vault, go to Settings, then Plugins, then Browse, and choose {plugin.name}.
+            Open better-vault, go to Settings, then Tools, then Plugins, then Browse, and choose {plugin.name}.
             The app shows its permissions and a warning before it installs, and you can uninstall it
             at any time.
           </p>

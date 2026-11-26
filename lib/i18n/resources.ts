@@ -3,7 +3,9 @@ import enChat from "@/locales/en/chat.json";
 import enCommon from "@/locales/en/common.json";
 import enHome from "@/locales/en/home.json";
 import enNotes from "@/locales/en/notes.json";
+import enOnboarding from "@/locales/en/onboarding.json";
 import enSettings from "@/locales/en/settings.json";
+import enShell from "@/locales/en/shell.json";
 import enSources from "@/locales/en/sources.json";
 import enStudio from "@/locales/en/studio.json";
 import enWorkspace from "@/locales/en/workspace.json";
@@ -23,5 +25,7 @@ export const resources = {
     chat: enChat,
     sources: enSources,
     bot: enBot,
+    onboarding: enOnboarding,
+    shell: enShell,
   },
 } as const;

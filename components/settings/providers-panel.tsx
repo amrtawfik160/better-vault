@@ -1,3 +1,4 @@
+import { SettingsSection } from "./settings-section";
 import {
   AudioWave01Icon,
   Cancel01Icon,
@@ -37,6 +38,7 @@ import {
   type ProviderSettings,
 } from "@/lib/db/settings";
 import { cn } from "@/lib/utils";
+import { CliProxyPanel } from "./cliproxyapi-sign-in";
 import { SettingsRow } from "./settings-row";
 
 type Status = "ready" | "needsKey" | "off";
@@ -65,18 +67,20 @@ export function ProvidersPanel({ onChatGPTSignIn }: ProvidersPanelProps) {
 
   return (
     <>
-      <Sheet.Header title={t("providers.title")} description={t("providers.description")} />
-      <Sheet.Body>
-        {/* Better Vault AI is set up by subscribing (Settings → Subscription), not with a key. */}
+      <SettingsSection title={t("providers.title")} description={t("providers.description")}>
+        {/* Better Vault AI is set up by subscribing (Settings → Account and plan), not with a key. */}
         <ProviderList
-          ids={chatProviderIds.filter((id) => id !== "bettervault")}
+          ids={[
+            "cliproxyapi",
+            ...chatProviderIds.filter((id) => id !== "bettervault" && id !== "cliproxyapi"),
+          ]}
           settings={settings}
         />
         <h3 className="mt-5 mb-1 px-0.5 text-xs font-medium text-muted-foreground">
           {t("providers.speech")}
         </h3>
         <ProviderList ids={speechProviderIds} settings={settings} />
-      </Sheet.Body>
+      </SettingsSection>
       <Sheet.Next name="provider" closeLabel={tCommon("actions.close")}>
         {(id: ProviderId) => <ProviderDetail id={id} onChatGPTSignIn={onChatGPTSignIn} />}
       </Sheet.Next>
@@ -127,6 +131,7 @@ function ProviderList({
 function ProviderDetail({ id, onChatGPTSignIn }: { id: ProviderId; onChatGPTSignIn: () => void }) {
   const settings = useSettings();
   if (!settings) return null;
+  if (id === "cliproxyapi") return <CliProxyPanel saved={settings.providers[id]} />;
   return <ProviderForm id={id} saved={settings.providers[id]} onChatGPTSignIn={onChatGPTSignIn} />;
 }
 
@@ -284,15 +289,18 @@ function ProviderForm({
                     });
                   }}
                 />
-                <Input.Addon align="end">
-                  <button
-                    type="button"
+                <Input.Addon align="end" className="pe-1">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
                     onClick={() => setShowKey((shown) => !shown)}
                     aria-label={showKey ? t("providers.hideKey") : t("providers.showKey")}
-                    className="cursor-pointer rounded p-0.5 hover:text-foreground"
+                    aria-pressed={showKey}
+                    title={showKey ? t("providers.hideKey") : t("providers.showKey")}
+                    className="size-7 text-muted-foreground"
                   >
                     <Icon icon={showKey ? ViewOffIcon : ViewIcon} size={16} />
-                  </button>
+                  </Button>
                 </Input.Addon>
               </Input.Group>
             </Field>
@@ -326,17 +334,16 @@ function ProviderForm({
               <Field
                 label={t("providers.models")}
                 action={
-                  <button
-                    type="button"
-                    disabled={!canLoad || loading}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={!canLoad}
+                    loading={loading}
                     onClick={loadModels}
-                    className="inline-flex cursor-pointer items-center gap-1 text-foreground underline-offset-4 hover:underline disabled:cursor-default disabled:no-underline disabled:opacity-50"
+                    className="-me-2 h-7 px-2"
                   >
-                    {loading ? (
-                      <Icon icon={Loading03Icon} size={14} className="animate-spin" />
-                    ) : null}
-                    {loading ? t("providers.refreshing") : t("providers.refresh")}
-                  </button>
+                    {t("providers.refresh")}
+                  </Button>
                 }
                 hint={
                   loadError
@@ -358,16 +365,19 @@ function ProviderForm({
                         >
                           {model}
                           {saved.models.length > 0 ? (
-                            <button
-                              type="button"
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              shape="pill"
                               aria-label={t("providers.removeModel", { model })}
+                              title={t("providers.removeModel", { model })}
                               onClick={() =>
                                 save({ models: saved.models.filter((m) => m !== model) })
                               }
-                              className="cursor-pointer rounded-full p-0.5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground"
+                              className="size-5 text-muted-foreground"
                             >
                               <Icon icon={Cancel01Icon} size={12} />
-                            </button>
+                            </Button>
                           ) : null}
                         </li>
                       ))}

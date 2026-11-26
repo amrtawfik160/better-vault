@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { ToolHeader, useScopeName } from "@/components/common/tool-header";
 import {
   Kloq,
   KloqNav,
@@ -19,6 +21,8 @@ import type { CalendarEntry } from "@/lib/db/types";
  * Settings → Calendar, and subscribed calendars refresh when it opens.
  */
 export default function CalendarView() {
+  const { t } = useTranslation("home");
+  const scope = useScopeName();
   const settings = useCalendarSettings();
   // kloq loads entries once; a new key reloads it after a subscription changes them.
   const [revision, setRevision] = useState(0);
@@ -41,7 +45,12 @@ export default function CalendarView() {
   );
   if (!settings) return null;
   return (
-    <div className="h-full min-h-0">
+    <div className="flex h-full min-h-0 flex-col">
+      <ToolHeader title={t("calendar.title")} detail={t("calendar.scope", { vault: scope })}>
+        {/* kloq has no Add button: say how entries are made. */}
+        <span className="hidden text-xs text-muted-foreground lg:inline">{t("calendar.hint")}</span>
+      </ToolHeader>
+      <div className="min-h-0 flex-1">
       <Kloq
         key={revision}
         defaultEvents={[]}
@@ -60,6 +69,7 @@ export default function CalendarView() {
           <KloqNav />
         </KloqToolbar>
       </Kloq>
+      </div>
     </div>
   );
 }

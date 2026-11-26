@@ -161,7 +161,7 @@ export const faq: { question: string; answer: string }[] = [
   {
     question: "Can I use it with Claude, ChatGPT or Gemini models?",
     answer:
-      "Yes. better-vault works with Anthropic's Claude, OpenAI's GPT and Google's Gemini models with your own API key, and you can switch models for each question.",
+      "Yes. Connect an AI subscription you already pay for, such as ChatGPT or Claude, use your own OpenAI, Anthropic or Google API key, or choose a local model. You can switch models for each question.",
   },
   {
     question: "Does it work with local models?",

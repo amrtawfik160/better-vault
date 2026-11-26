@@ -3,7 +3,7 @@ title: "Providers and models"
 description: "Use better-vault with OpenAI, Anthropic, Gemini, OpenRouter, Kimi, OpenCode, DeepSeek, Ollama or LM Studio, and ElevenLabs for speech, with your own key."
 ---
 
-better-vault works with nine providers that write and one that speaks: you bring the key or the local server, and you pick the provider and model for each question in the prompt bar.
+better-vault works with nine providers that write and one that speaks: you bring the key or the local server, and you pick the provider and model for each question in the prompt bar. You can also [connect an AI subscription](#connect-an-ai-subscription) you already pay for, such as ChatGPT or Claude, without a key.
 
 | Provider            | Needs                                     | Web mode | Pictures (Infographic)    |
 | ------------------- | ----------------------------------------- | -------- | ------------------------- |
@@ -21,9 +21,12 @@ better-vault works with nine providers that write and one that speaks: you bring
 
 **OpenRouter** serves hundreds of models from many makers behind one key; better-vault lists the ones your key may use. **Kimi** is Moonshot AI's own platform for its Kimi models.
 
-**OpenCode** serves many makers' models behind one key. Choose **Zen** to pay as you go with console credits, or **Go** for its monthly plan, in **Settings → AI providers → OpenCode**.
+**OpenCode** serves many makers' models behind one key. Choose **Zen** to pay as you go with console credits, or **Go** for its monthly plan, in **Settings → AI → AI providers → OpenCode**.
 
-<Screenshot name="providers" alt="The AI providers sheet in Settings, with Anthropic and Ollama ready" />
+<Screenshot
+  name="providers"
+  alt="The AI providers sheet in Settings, with Anthropic and Ollama ready"
+/>
 
 ## Add an API key
 
@@ -39,14 +42,20 @@ Create one in the provider's console: [OpenAI](https://platform.openai.com/api-k
 
 ### Paste it in better-vault
 
-Open **Settings → AI providers**, choose the provider and paste the key. better-vault loads the model list from the provider with your key, so new models appear without an update.
+Open **Settings → AI → AI providers**, choose the provider and paste the key. better-vault loads the model list from the provider with your key, so new models appear without an update.
 
 </Step>
 </Steps>
 
 Your key is stored on your device and sent only with the requests that need it. [Privacy](/docs/privacy) explains what is sent where.
 
-## Use your ChatGPT plan
+## Connect an AI subscription
+
+In **Settings → AI → AI subscriptions**, choose ChatGPT, Claude, Antigravity, Grok, Kimi, Devin, or Muse Code and authorize the connection in your browser. Some providers ask for a one-time code. Connected models show the provider and account in the model picker. Use **Reconnect** or **Disconnect** to manage an account.
+
+The desktop installer includes the local connection service. A web app running on the same computer sets it up on first use. Chat, Bots, and Studio text generation can use these models. Web search, image generation, and speech use providers that offer those features separately.
+
+## Use the original desktop ChatGPT connection
 
 If you pay for ChatGPT, the [desktop app](/docs/desktop) can use your plan instead of an OpenAI API key. Chat and every Studio tool then count against the usage included in your plan. The web app doesn't support it: the sign-in is kept by the app's server, and a web server could share it with anyone who reaches it.
 
@@ -55,7 +64,7 @@ If you pay for ChatGPT, the [desktop app](/docs/desktop) can use your plan inste
 
 ### Continue with ChatGPT
 
-Open **Settings → AI providers → OpenAI** and choose **Continue with ChatGPT**, then **Open ChatGPT**. Your browser opens OpenAI's sign-in page.
+Open **Settings → AI → AI providers → OpenAI** and choose **Continue with ChatGPT**, then **Open ChatGPT**. Your browser opens OpenAI's sign-in page.
 
 </Step>
 <Step>
@@ -96,7 +105,7 @@ Use the [desktop app](/docs/desktop), or run the web app yourself as shown in [G
 
 ### Turn the provider on
 
-In **Settings → AI providers**, enable Ollama (`http://localhost:11434`) or LM Studio (`http://localhost:1234`), then pick the model in the prompt bar.
+In **Settings → AI → AI providers**, enable Ollama (`http://localhost:11434`) or LM Studio (`http://localhost:1234`), then pick the model in the prompt bar.
 
 </Step>
 </Steps>

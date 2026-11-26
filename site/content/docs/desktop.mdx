@@ -7,6 +7,8 @@ The desktop app is better-vault for macOS, Windows and Linux, with the same inte
 
 It runs the whole app on your computer, including the server that talks to your AI provider. Your notebooks are kept in a file on your disk instead of in a browser, and the app updates itself when a new version is released.
 
+The installer includes the local service that connects AI subscriptions. Open **Settings → AI → AI subscriptions** and choose an account; the provider handles the sign-in in your browser.
+
 ## Download
 
 The [download page](/download) offers the installer for your computer and lists every file. The same files are attached to each [release on GitHub](https://github.com/better-vault/better-vault/releases/latest).
@@ -68,8 +70,12 @@ Uninstalling the app leaves this folder in place, so your notebooks are still th
 
 ## Move notebooks from the browser
 
-The web app and the desktop app keep separate data. To bring your browser notebooks over, open **Settings → Data** in the web app and export a backup. Then open the same screen in the desktop app and import it. Backups never contain API keys, so paste your keys again in **Settings → AI providers**.
+The web app and the desktop app keep separate data. To bring your browser notebooks over, open **Settings → Storage and data** in the web app and export a backup. Then open the same screen in the desktop app and import it. Backups never contain API keys, so paste your keys again in **Settings → AI → AI providers**.
 
 ## Local models
 
-The desktop app works well with Ollama and LM Studio. Start the model server, turn the provider on in **Settings → AI providers**, and your sources never leave your computer. [Providers and models](/docs/providers) has the steps.
+The desktop app works well with Ollama and LM Studio. Start the model server, turn the provider on in **Settings → AI → AI providers**, and your sources never leave your computer. [Providers and models](/docs/providers) has the steps.
+
+## Build from source
+
+You can also build the app from a checkout of the repository. From the project root, run `npm run setup`, then `npm run desktop:pack` to build an unpacked app or `npm run desktop:dist` to build an installer. The build downloads the subscription proxy and checks its checksum before bundling it.

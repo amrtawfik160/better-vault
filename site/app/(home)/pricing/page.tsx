@@ -97,7 +97,7 @@ export default function PricingPage() {
         </div>
         <p className="mx-auto mt-6 max-w-5xl text-center text-sm text-muted-foreground">
           Prices in US dollars, billed monthly through Dodo Payments. Subscribe from the app in Settings →
-          Subscription.
+          Account and plan.
         </p>
       </section>
 

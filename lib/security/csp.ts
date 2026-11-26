@@ -6,8 +6,9 @@ import { createHash } from "node:crypto";
  * with, by the web server (server/node.ts) and the desktop app
  * (desktop/src/protocol.ts). The page may run only its own scripts, plus
  * Google's sign-in and Picker, and may send data only to itself and the
- * storage services' APIs. AI providers are reached through the app's own
- * API, so they need no entry here. The dev server goes without, since Vite
+ * storage services' APIs; it also downloads the on-device voice's model from
+ * Hugging Face. AI providers are reached through the app's own API, so they
+ * need no entry here. The dev server goes without, since Vite
  * injects scripts of its own.
  */
 
@@ -35,7 +36,7 @@ export function contentSecurityPolicy(scriptHashes: readonly string[]): string {
   };
   const directives: Record<string, string[]> = {
     "default-src": ["'self'"],
-    // 'wasm-unsafe-eval' lets on-device speech to text (Whisper) run its WebAssembly.
+    // 'wasm-unsafe-eval' lets the on-device speech models (Whisper, the Kokoro reading voice) run their WebAssembly.
     "script-src": ["'self'", "'wasm-unsafe-eval'", ...scriptHashes, ...google.script],
     // React and Panel set inline styles; Tailwind's are in files.
     "style-src": ["'self'", "'unsafe-inline'", "https://accounts.google.com"],
@@ -52,7 +53,7 @@ export function contentSecurityPolicy(scriptHashes: readonly string[]): string {
       // OneDrive's upload sessions answer with addresses on these hosts.
       "https://*.sharepoint.com",
       "https://*.files.1drv.com",
-      // The on-device speech model's files, downloaded once from Hugging Face.
+      // The on-device speech models' files (lib/speech), downloaded once from Hugging Face.
       "https://huggingface.co",
       "https://*.huggingface.co",
       "https://*.hf.co",
@@ -115,6 +116,6 @@ export function securityHeaders(scriptHashes: readonly string[]): Record<string,
     "content-security-policy": contentSecurityPolicy(scriptHashes),
     "x-content-type-options": "nosniff",
     "referrer-policy": "strict-origin-when-cross-origin",
-    "permissions-policy": "camera=(), geolocation=(), microphone=(), payment=(), usb=()",
+    "permissions-policy": "camera=(), geolocation=(), microphone=(self), payment=(), usb=()",
   };
 }

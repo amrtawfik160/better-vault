@@ -1,0 +1,14 @@
+{
+  "upgrade": {
+    "eyebrow": "{{app}} has been updated",
+    "title": "A few things have moved",
+    "notebooks": "Your books now live in notebooks",
+    "notebooksBody": "Each one is in the sidebar under Notebooks, and all of them are in Library.",
+    "chats": "Your chats are in one history",
+    "chatsBody": "Notebook chats and reader questions are together now. Open History in Ask.",
+    "review": "All your flashcards are in Review",
+    "reviewBody": "One deck. Each card still belongs to its notebook.",
+    "footer": "Nothing else changes. Everything you had is still here, on this device.",
+    "done": "Got it"
+  }
+}

@@ -25,11 +25,12 @@ The build is two folders: `dist/client` holds the pages and `dist/server/node.js
 
 All of them are optional.
 
-| Variable                             | Default | Effect                                                                                                                                                  |
-| ------------------------------------ | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `BETTER_VAULT_ALLOW_LOCAL_PROVIDERS` | `true`  | Set to `false` to turn off Ollama and LM Studio. Their address comes from the user, so on a public server they would make the server fetch any address. |
-| `BETTER_VAULT_ALLOW_PRIVATE_URLS`    | `false` | Set to `true` to let web-page sources point at private or local network addresses. Only for trusted, private installs.                                  |
+| Variable                             | Default | Effect                                                                                                                                                                  |
+| ------------------------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BETTER_VAULT_ALLOW_LOCAL_PROVIDERS` | `true`  | Set to `false` to turn off Ollama, LM Studio and CLIProxyAPI. Their address comes from the user or the host, so on a public server they would make the server fetch it. |
+| `BETTER_VAULT_CLIPROXYAPI_URL`       | unset   | The address of a trusted CLIProxyAPI server for AI subscriptions. Remote addresses need HTTPS. Unset, the app starts its own proxy on this computer.                    |
+| `BETTER_VAULT_ALLOW_PRIVATE_URLS`    | `false` | Set to `true` to let web-page sources point at private or local network addresses. Only for trusted, private installs.                                                  |
 
 ## Public deployments
 
-For an install that strangers can reach, set `BETTER_VAULT_ALLOW_LOCAL_PROVIDERS=false` and leave private URLs off. Sign in with ChatGPT is never offered by the web app; it works only in the desktop app. Each user still brings their own key, which stays in their browser.
+For an install that strangers can reach, set `BETTER_VAULT_ALLOW_LOCAL_PROVIDERS=false` and leave private URLs off. AI subscription sign-in is enabled in the desktop app and loopback-only web sessions. A publicly bound server cannot use the host’s subscription accounts. Web users on a shared server can use their own API keys from their browser.

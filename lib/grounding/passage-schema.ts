@@ -11,3 +11,8 @@ export const passageRefSchema = z.object({
   format: z.enum(sourceFormats).optional(),
   snippet: z.string(),
 });
+
+export const passageSchema = passageRefSchema.omit({ snippet: true }).extend({
+  n: z.number().int().positive(),
+  text: z.string(),
+});

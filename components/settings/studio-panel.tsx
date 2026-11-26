@@ -1,6 +1,6 @@
+import { SettingsSection } from "./settings-section";
 import { useTranslation } from "react-i18next";
 import { Icon } from "@/components/icon";
-import { Sheet } from "@/components/panelui/sheet";
 import { Switch } from "@/components/panelui/switch";
 import { setChatVisuals, setStudioToolShown, useStudioSettings } from "@/lib/studio/settings";
 import { cn } from "@/lib/utils";
@@ -19,8 +19,7 @@ export function StudioPanel() {
 
   return (
     <>
-      <Sheet.Header title={t("studio.title")} description={t("studio.description")} />
-      <Sheet.Body>
+      <SettingsSection title={t("studio.title")} description={t("studio.description")}>
         <label className="mb-4 flex cursor-pointer items-center gap-3 rounded-2xl bg-muted/50 px-3 py-2.5">
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-medium">{t("studio.visuals")}</span>
@@ -65,7 +64,7 @@ export function StudioPanel() {
             );
           })}
         </ul>
-      </Sheet.Body>
+      </SettingsSection>
     </>
   );
 }

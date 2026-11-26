@@ -3,7 +3,7 @@ title: "Chat and citations"
 description: "Ask questions about your sources in better-vault and get answers with numbered citations, or switch to Web mode to let the model search the internet for you."
 ---
 
-The Chat tab answers questions about your notebook, and every answer shows where its claims came from.
+Ask, in the notebook's companion, answers questions about your notebook, and every answer shows where its claims came from.
 
 <Screenshot name="chat" alt="A chat answer in Sources mode with numbered citations and a References list under it" />
 
@@ -18,6 +18,14 @@ Point at or focus a citation mark to preview the passage it refers to. Each answ
 In Web mode the model may also search the internet with its provider's own built-in search, from OpenAI, Anthropic or Google. Web results are cited the same way, with links to the pages. better-vault uses no third-party search service.
 
 Ollama and LM Studio have no built-in search, so Web mode is not available with them.
+
+## Make cards and Studio outputs
+
+Ask the chat to make something and it does it for you. "Turn this into flashcards" adds cards to the notebook's study deck, and "make a quiz about chapter 2" starts a quiz in Studio from your selected sources. A row under the answer says what was made, with **Open** to see it and **Undo** to remove it.
+
+The chat can make flashcards, a report, a quiz, a mind map, a data table, a slide deck, an anatomy figure, an infographic and an audio overview. Infographics and audio overviews are slow and use a paid key, so the chat asks first: a card states what it will use, and nothing runs until you press **Make it** or **Choose voices**.
+
+Type `/` in the prompt to list the same actions. Choose one to run it at once, or type a focus after its name, such as `/quiz pricing`, and press Enter. The `/` commands also work with Ollama and LM Studio, whose models cannot make things on request.
 
 ## Choose the model
 

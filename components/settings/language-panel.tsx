@@ -1,7 +1,8 @@
+import { SettingsSection } from "./settings-section";
 import { ArrowUpRight01Icon, Tick02Icon } from "@hugeicons/core-free-icons";
 import { useTranslation } from "react-i18next";
+import { onRadioKeys } from "@/components/common/roving";
 import { Icon } from "@/components/icon";
-import { Sheet } from "@/components/panelui/sheet";
 import { saveLanguage } from "@/components/providers/i18n-provider";
 import { languages } from "@/lib/i18n/config";
 import { cn } from "@/lib/utils";
@@ -12,8 +13,7 @@ export function LanguagePanel() {
 
   return (
     <>
-      <Sheet.Header title={t("language.title")} description={t("language.description")} />
-      <Sheet.Body>
+      <SettingsSection title={t("language.title")} description={t("language.description")}>
         <div
           role="radiogroup"
           aria-label={t("language.title")}
@@ -27,6 +27,18 @@ export function LanguagePanel() {
                 type="button"
                 role="radio"
                 aria-checked={selected}
+                tabIndex={selected ? 0 : -1}
+                onKeyDown={(event) =>
+                  onRadioKeys(
+                    event,
+                    languages.map(({ code }) => code),
+                    i18n.language,
+                    (code) => {
+                      saveLanguage(code);
+                      void i18n.changeLanguage(code);
+                    },
+                  )
+                }
                 lang={language.code}
                 dir={language.dir}
                 onClick={() => {
@@ -53,7 +65,7 @@ export function LanguagePanel() {
           {t("language.helpTranslate")}
           <Icon icon={ArrowUpRight01Icon} size={14} className="rtl:-scale-x-100" />
         </a>
-      </Sheet.Body>
+      </SettingsSection>
     </>
   );
 }

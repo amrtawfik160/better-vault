@@ -1,6 +1,6 @@
 import type { ImageModel, LanguageModel, SpeechModel } from "ai";
 import type { ModelRef } from "@/lib/ai/catalog";
-import { formatPassages, type Passage } from "@/lib/grounding/passages";
+import { formatPassages, toPassageRefs, type Passage } from "@/lib/grounding/passages";
 import { languageName } from "@/studio/languages";
 
 export interface GenerateArgs<Options> {
@@ -72,3 +72,10 @@ export function seededRandom(seed: string): () => number {
 }
 
 export const clean = (text: string) => text.replace(/\s+/g, " ").trim();
+
+export function studioSourceRefs(passages: readonly Passage[], citations?: readonly number[]) {
+  if (!citations?.length) return undefined;
+  const cited = new Set(citations);
+  const sources = toPassageRefs(passages.filter(({ n }) => cited.has(n)).slice(0, 3));
+  return sources.length ? sources : undefined;
+}

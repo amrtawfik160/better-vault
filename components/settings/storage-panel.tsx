@@ -1,3 +1,4 @@
+import { SettingsSection } from "./settings-section";
 import { Loading03Icon, ViewIcon, ViewOffIcon } from "@hugeicons/core-free-icons";
 import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -36,8 +37,7 @@ export function StoragePanel() {
 
   return (
     <>
-      <Sheet.Header title={t("storage.title")} description={t("storage.description")} />
-      <Sheet.Body>
+      <SettingsSection title={t("storage.title")} description={t("storage.description")}>
         <div className="-mx-2 flex flex-col gap-0.5">
           {storageIds.map((id) => {
             const ready = settings ? isStorageReady(settings, id) : false;
@@ -88,7 +88,7 @@ export function StoragePanel() {
             );
           })}
         </div>
-      </Sheet.Body>
+      </SettingsSection>
       <Sheet.Next name="storage-service" closeLabel={tCommon("actions.close")}>
         {(id: StorageId) => <StorageDetail id={id} />}
       </Sheet.Next>

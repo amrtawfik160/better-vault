@@ -1,28 +1,16 @@
 import { generateText, Output } from "ai";
 import { z } from "zod";
-import { sourceFormats, sourceKinds } from "@/lib/sources/formats";
+import { rejectCliProxyRequest } from "@/lib/ai/cliproxyapi";
 import { describeError } from "@/lib/ai/errors";
 import { createLanguageModel } from "@/lib/ai/providers";
 import { credentialsSchema, effortSchema, modelRefSchema } from "@/lib/ai/request";
 import type { Passage } from "@/lib/grounding/passages";
+import { passageSchema } from "@/lib/grounding/passage-schema";
 import { studioSystem } from "@/studio/server/shared";
 
 const bodySchema = z.object({
   language: z.string().min(1).max(20),
-  passages: z
-    .array(
-      z.object({
-        n: z.number().int().positive(),
-        chunkId: z.string(),
-        sourceId: z.string(),
-        title: z.string(),
-        kind: z.enum(sourceKinds),
-        format: z.enum(sourceFormats).optional(),
-        text: z.string(),
-      }),
-    )
-    .min(1)
-    .max(200),
+  passages: z.array(passageSchema).min(1).max(200),
   model: modelRefSchema,
   credentials: credentialsSchema,
   effort: effortSchema,
@@ -42,6 +30,8 @@ const schema = z.object({
 export async function POST(request: Request) {
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Invalid request." }, { status: 400 });
+  const denied = rejectCliProxyRequest(request, parsed.data.model.provider);
+  if (denied) return denied;
   try {
     const { output } = await generateText({
       model: await createLanguageModel(

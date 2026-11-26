@@ -54,7 +54,8 @@ async function readFile(file: File, format: SourceFormat): Promise<Parsed> {
 /**
  * Turns an upload (multipart, field "file": PDF, HTML, Word, Excel,
  * PowerPoint or EPUB) or an address (JSON `{ url }`: a web page, an online
- * PDF or a YouTube video) into plain text. Nothing is stored on the server.
+ * PDF or a YouTube video's captions as a timed transcript) into plain text.
+ * Nothing is stored on the server.
  */
 export async function POST(request: Request) {
   try {
@@ -79,8 +80,13 @@ export async function POST(request: Request) {
     try {
       return Response.json(await readUrl(parsed.data.url));
     } catch (error) {
+      // Without captions the answer carries the video, so the page can offer
+      // to transcribe it with Gemini (`/api/sources/youtube`).
       if (error instanceof YouTubeError)
-        return Response.json({ error: error.message, reason: error.reason }, { status: 422 });
+        return Response.json(
+          { error: error.message, reason: error.reason, video: error.video },
+          { status: 422 },
+        );
       if (error instanceof Error && error.message === "That page is not text, HTML or PDF.")
         return Response.json({ error: error.message }, { status: 415 });
       throw error;

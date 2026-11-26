@@ -1,26 +1,40 @@
 import { ArrowUpRight01Icon } from "@hugeicons/core-free-icons";
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Link, useLocation, useNavigate } from "react-router";
+import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
+import { Button, buttonVariants } from "@/components/panelui/button";
+import { startSourceTutor, studyBookForSource, useSavedStudyBookForSource } from "@/lib/db/study";
+import { originHref, studyHref } from "@/lib/study/links";
+import { locateCitedChunk } from "@/lib/study/locators";
+import { findStudyDocumentExcerpt } from "@/lib/study/markdown-document";
+import type { StudyBook } from "@/lib/study/records";
+import { studyTextRevision } from "@/lib/study/text-edits";
 import { Icon } from "@/components/icon";
 import { Markdown } from "@/components/chat/markdown";
 import { Dialog } from "@/components/panelui/dialog";
+import { StudyReturnLinks } from "@/components/study/study-return-links";
+import { studyReturnState } from "@/lib/study/return-links";
 import { Sheet } from "@/components/panelui/sheet";
 import { loadBlob } from "@/lib/db/blobs";
 import { useSourceWithChunks } from "@/lib/db/sources";
+import { sourceHasText } from "@/lib/db/source-text";
 import type { Chunk, Source, SourceImage } from "@/lib/db/types";
 import { countWords } from "@/lib/format";
 import { sourceFormatOf } from "@/lib/sources/formats";
-import { secondsOf, youTubeId } from "@/lib/sources/youtube";
+import { parseTimestamp } from "@/lib/sources/transcript";
+import { youTubeId } from "@/lib/sources/youtube";
 import { reflow } from "@/lib/sources/reflow";
 import { cn } from "@/lib/utils";
 
 interface SourceReaderProps {
-  reading: { sourceId: string; passage?: string } | null;
+  notebookId: string;
+  reading: { sourceId: string; passage?: string; snippet?: string } | null;
   onClose: () => void;
 }
 
 /** Shows a source's text, scrolled to a cited passage when there is one. */
-export function SourceReader({ reading, onClose }: SourceReaderProps) {
+export function SourceReader({ notebookId, reading, onClose }: SourceReaderProps) {
   const { t: tCommon } = useTranslation();
   return (
     <Sheet side="right" open={reading !== null} onOpenChange={(open) => (open ? null : onClose())}>
@@ -28,17 +42,48 @@ export function SourceReader({ reading, onClose }: SourceReaderProps) {
         closeLabel={tCommon("actions.close")}
         className="w-[min(36rem,calc(100vw-2*var(--sheet-gap)))]"
       >
-        {reading ? <ReaderBody sourceId={reading.sourceId} passage={reading.passage} /> : null}
+        <StudyReturnLinks className="px-3 pt-3" />
+        {reading ? (
+          <ReaderBody key={reading.sourceId} notebookId={notebookId} {...reading} />
+        ) : null}
       </Sheet.Content>
     </Sheet>
   );
 }
 
-function ReaderBody({ sourceId, passage }: { sourceId: string; passage?: string }) {
+/** The Study reader on a document, at the passage an excerpt quotes when it is found. */
+export function readingLink(book: StudyBook, excerpt: string | undefined) {
+  const anchor = excerpt ? findStudyDocumentExcerpt(book, excerpt) : undefined;
+  return studyHref("library", {
+    book: book.id,
+    notebook: book.notebookId,
+    page: anchor?.section,
+    at: anchor?.offset,
+    length: anchor?.length,
+    rev: anchor ? studyTextRevision(book) : undefined,
+    reference: anchor ? "1" : undefined,
+  });
+}
+
+function ReaderBody({
+  notebookId,
+  sourceId,
+  passage,
+  snippet,
+}: NonNullable<SourceReaderProps["reading"]> & { notebookId: string }) {
   const { t, i18n } = useTranslation("sources");
   const read = useSourceWithChunks(sourceId);
-  const source = read?.source;
+  const navigate = useNavigate();
+  const returnState = studyReturnState(useLocation().state);
+  const [opening, setOpening] = useState(false);
+  const source = read?.source?.notebookId === notebookId ? read.source : undefined;
+  const saved = useSavedStudyBookForSource(notebookId, sourceId, Boolean(read && !source));
   const chunks = read?.chunks;
+  const excerpt = snippet?.replace(/…$/u, "").trim();
+  const cited = useMemo(
+    () => locateCitedChunk(chunks ?? [], passage, excerpt),
+    [chunks, passage, excerpt],
+  );
   const highlighted = useRef<HTMLDivElement>(null);
   // Where the video player starts: null until a time in the transcript is pressed.
   const [start, setStart] = useState<number | null>(null);
@@ -48,20 +93,80 @@ function ReaderBody({ sourceId, passage }: { sourceId: string; passage?: string 
   );
 
   useEffect(() => {
-    if (chunks && passage)
-      highlighted.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [chunks, passage]);
+    if (cited) highlighted.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [cited]);
 
-  if (!source) return null;
+  if (!read) return null;
+  if (!source) {
+    return (
+      <Sheet.Header
+        title={t("unavailable")}
+        description={saved ? t("savedStudyDescription") : undefined}
+      >
+        {saved ? (
+          <Link
+            to={readingLink(saved, excerpt)}
+            state={returnState}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            {t("openSavedStudy")}
+          </Link>
+        ) : null}
+      </Sheet.Header>
+    );
+  }
   const words = countWords(source.text);
   const video = source.kind === "youtube" && source.url ? youTubeId(source.url) : null;
+  const hasText = sourceHasText(source);
+  const sourceSize = hasText
+    ? t("words", { count: words, formattedCount: words.toLocaleString(i18n.language) })
+    : t("noSelectableText");
+
+  async function openStudy(destination: () => Promise<string>) {
+    setOpening(true);
+    try {
+      navigate(await destination(), { state: returnState });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+      setOpening(false);
+    }
+  }
 
   return (
     <>
       <Sheet.Header
         title={source.title}
-        description={`${t(`formats.${sourceFormatOf(source)}`)} · ${t("words", { count: words, formattedCount: words.toLocaleString(i18n.language) })}`}
+        description={`${t(`formats.${sourceFormatOf(source)}`)} · ${sourceSize}`}
       >
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={opening}
+            onClick={() =>
+              void openStudy(async () =>
+                readingLink(await studyBookForSource(source.id), excerpt || cited?.text),
+              )
+            }
+          >
+            {t("openStudy")}
+          </Button>
+          {hasText ? (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={opening}
+              onClick={() =>
+                void openStudy(async () => {
+                  const thread = await startSourceTutor(source.id);
+                  return originHref({ kind: "tutor", threadId: thread.id });
+                })
+              }
+            >
+              {t("askTutor")}
+            </Button>
+          ) : null}
+        </div>
         {source.url ? (
           <a
             href={source.url}
@@ -76,13 +181,27 @@ function ReaderBody({ sourceId, passage }: { sourceId: string; passage?: string 
       </Sheet.Header>
       <Sheet.Body>
         {video ? <YouTubePlayer id={video} start={start} title={source.title} /> : null}
+        {!hasText && source.originalFileId ? (
+          <p className="pb-4 text-sm text-muted-foreground">{t("readOriginalInStudy")}</p>
+        ) : null}
+        {passage && !cited ? (
+          <div role="status" className="mb-4 rounded-xl border p-3 text-sm text-muted-foreground">
+            {t("citationChanged")}
+            {snippet ? (
+              <blockquote dir="auto" className="mt-2 border-s-2 ps-3">
+                {snippet}
+              </blockquote>
+            ) : null}
+          </div>
+        ) : null}
         <div className="flex flex-col gap-3 pb-6 text-[0.9375rem] leading-7">
           {chunks?.map((chunk) => {
-            const active = chunk.id === passage;
+            const active = chunk.id === cited?.id;
             return (
               <Fragment key={chunk.id}>
                 <div
                   ref={active ? highlighted : undefined}
+                  data-cited-passage={active || undefined}
                   className={cn(
                     "flex flex-col gap-3 rounded-xl transition-colors",
                     active && "-mx-3 bg-info/10 px-3 py-2 ring-1 ring-info/30",
@@ -149,7 +268,7 @@ function TranscriptText({ text, onSeek }: { text: string; onSeek: (seconds: numb
     .filter((paragraph) => paragraph.trim())
     .map((paragraph, index) => {
       const match = /^\[((?:\d+:)?\d{1,2}:\d{2})\]\s*/.exec(paragraph);
-      const seconds = match ? secondsOf(match[1]) : null;
+      const seconds = match ? (parseTimestamp(match[1]) ?? null) : null;
       return (
         <p key={index}>
           {match && seconds !== null ? (

@@ -1,35 +1,63 @@
-import type { Extracted } from "@/lib/sources/extract";
+import { transcriptText, type TimedText } from "./transcript";
 
 /**
  * YouTube videos as sources, the way NotebookLM takes them: only the
  * transcript is imported, from the video's captions (written by the uploader
- * or made automatically), so a video needs to be public and to have captions.
- * The text keeps a [mm:ss] mark at the start of each paragraph, so citations
- * point at a moment in the video and the reader can start the player there.
+ * or made automatically), so a video needs to be public. The text keeps a
+ * `[mm:ss]` mark at the start of each paragraph (`lib/sources/transcript.ts`),
+ * so citations point at a moment in the video and the reader can start the
+ * player there. A video without captions can still be transcribed by Gemini
+ * (`server/routes/sources-youtube.ts`), which saves the same form.
  *
  * Runs on the server (the page's CSP doesn't allow YouTube). Only youtube.com
- * is ever fetched, whatever address was given.
+ * is ever fetched, whatever address was given. No key is needed, and nothing
+ * about the user is sent.
  */
 
 const HOST = "https://www.youtube.com";
-const TIMEOUT_MS = 15_000;
+const TIMEOUT_MS = 20_000;
 const MAX_BYTES = 5 * 1024 * 1024;
-/** Paragraphs of the transcript are cut at about this many seconds. */
-const PARAGRAPH_SECONDS = 45;
+const ID = /^[\w-]{11}$/;
 
-/** YouTube's Android app: its player answer lists caption files that can be read without a browser. */
-const CLIENT = {
-  clientName: "ANDROID",
-  clientVersion: "20.10.38",
-  androidSdkVersion: 30,
-  hl: "en",
-};
-const USER_AGENT = "com.google.android.youtube/20.10.38 (Linux; U; Android 11) gzip";
+/** The video id in a YouTube address (watch, youtu.be, shorts, embed, live), or null. */
+export function youTubeId(address: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(address.trim());
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  const host = url.hostname.toLowerCase().replace(/^(www\.|m\.|music\.)/, "");
+  const valid = (id: string | null | undefined) => (id && ID.test(id) ? id : null);
+  if (host === "youtu.be") return valid(url.pathname.split("/")[1]);
+  if (host !== "youtube.com" && host !== "youtube-nocookie.com") return null;
+  if (url.pathname === "/watch") return valid(url.searchParams.get("v"));
+  const match = /^\/(?:shorts|embed|live|v|e)\/([\w-]{11})(?:[/?#]|$)/.exec(url.pathname);
+  return valid(match?.[1]);
+}
+
+/** The address of a video, as it is saved with the source. */
+export const youTubeWatchUrl = (id: string) => `${HOST}/watch?v=${id}`;
+
+/** A video as the page needs it to offer another way to transcribe it. */
+export interface YouTubeVideoInfo {
+  id: string;
+  title: string;
+  author: string;
+  /** The video's length in seconds (0 for a live stream). */
+  seconds: number;
+  url: string;
+}
 
 export type YouTubeFailure = "private" | "unavailable" | "no-captions";
 
 export class YouTubeError extends Error {
-  constructor(readonly reason: YouTubeFailure) {
+  constructor(
+    readonly reason: YouTubeFailure,
+    /** For `no-captions`: the video, so it can be transcribed another way. */
+    readonly video?: YouTubeVideoInfo,
+  ) {
     super(
       reason === "no-captions"
         ? "This video has no captions, so there is no transcript to add."
@@ -41,165 +69,174 @@ export class YouTubeError extends Error {
   }
 }
 
-/** The video id in a YouTube address (watch, youtu.be, shorts, embed, live), or null. */
-export function youTubeId(address: string): string | null {
-  let url: URL;
-  try {
-    url = new URL(address.trim());
-  } catch {
-    return null;
+export interface CaptionTrack {
+  baseUrl: string;
+  languageCode: string;
+  /** `asr` for captions YouTube made from the speech. */
+  kind?: string;
+}
+
+/**
+ * The captions to save: ones written by people in the language spoken (the
+ * language of YouTube's automatic captions tells which that is), else the
+ * automatic ones, else the video's default track, else the first.
+ */
+export function pickCaptionTrack(
+  tracks: readonly CaptionTrack[],
+  defaultIndex?: number,
+): CaptionTrack | undefined {
+  const auto = tracks.find((track) => track.kind === "asr");
+  const written = tracks.filter((track) => track.kind !== "asr");
+  if (auto) {
+    const spoken = auto.languageCode.split("-")[0];
+    return written.find((track) => track.languageCode.split("-")[0] === spoken) ?? auto;
   }
-  const host = url.hostname.replace(/^(www\.|m\.|music\.)/, "");
-  const valid = (id: string | null | undefined) => (id && /^[\w-]{11}$/.test(id) ? id : null);
-  if (host === "youtu.be") return valid(url.pathname.slice(1).split("/")[0]);
-  if (host !== "youtube.com" && host !== "youtube-nocookie.com") return null;
-  if (url.pathname === "/watch") return valid(url.searchParams.get("v"));
-  const match = /^\/(?:shorts|embed|live|v)\/([\w-]{11})/.exec(url.pathname);
-  return valid(match?.[1]);
+  const preferred = defaultIndex === undefined ? undefined : tracks[defaultIndex];
+  return preferred ?? written[0];
 }
 
-/** The address of a video, as it is saved with the source. */
-export const youTubeWatchUrl = (id: string) => `${HOST}/watch?v=${id}`;
-
-/** "[1:02:03]" or "[4:05]" for a number of seconds. */
-export function timestamp(seconds: number): string {
-  const s = Math.max(0, Math.floor(seconds));
-  const hours = Math.floor(s / 3600);
-  const minutes = Math.floor((s % 3600) / 60);
-  const rest = String(s % 60).padStart(2, "0");
-  return hours > 0 ? `${hours}:${String(minutes).padStart(2, "0")}:${rest}` : `${minutes}:${rest}`;
+interface Json3 {
+  events?: { tStartMs?: number; dDurationMs?: number; segs?: { utf8?: string }[] }[];
 }
 
-/** The seconds in a "[mm:ss]" or "[h:mm:ss]" mark, or null. */
-export function secondsOf(mark: string): number | null {
-  const match = /^\[?(?:(\d+):)?(\d{1,2}):(\d{2})\]?$/.exec(mark.trim());
-  if (!match) return null;
-  return Number(match[1] ?? 0) * 3600 + Number(match[2]) * 60 + Number(match[3]);
+/** YouTube's `json3` caption format as timed pieces of speech. */
+export function json3Cues(data: Json3): TimedText[] {
+  const cues: TimedText[] = [];
+  for (const event of data.events ?? []) {
+    if (!event.segs || event.tStartMs === undefined) continue;
+    const text = event.segs
+      .map((seg) => seg.utf8 ?? "")
+      .join("")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!text) continue;
+    const start = event.tStartMs / 1000;
+    cues.push({ start, end: start + (event.dDurationMs ?? 0) / 1000, text });
+  }
+  return cues;
 }
 
-async function get(url: string, init?: RequestInit): Promise<Response> {
-  const response = await fetch(url, {
-    ...init,
-    redirect: "error",
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-    headers: { "user-agent": USER_AGENT, ...init?.headers },
-  });
+export interface YouTubeVideo extends YouTubeVideoInfo {
+  /** The captions, when the video has any. */
+  captions?: { language: string; auto: boolean; cues: TimedText[] };
+}
+
+// The mobile apps' player data lists caption tracks that can be read without a
+// browser session; the web player's often can't. The second is a fallback.
+const CLIENTS = [
+  {
+    client: { clientName: "ANDROID", clientVersion: "20.10.38", androidSdkVersion: 30 },
+    userAgent: "com.google.android.youtube/20.10.38 (Linux; U; Android 11) gzip",
+  },
+  {
+    client: { clientName: "IOS", clientVersion: "20.10.4", deviceModel: "iPhone16,2" },
+    userAgent: "com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)",
+  },
+] as const;
+
+interface PlayerResponse {
+  playabilityStatus?: { status?: string; reason?: string };
+  videoDetails?: { title?: string; author?: string; lengthSeconds?: string; isPrivate?: boolean };
+  captions?: {
+    playerCaptionsTracklistRenderer?: {
+      captionTracks?: CaptionTrack[];
+      audioTracks?: { defaultCaptionTrackIndex?: number }[];
+    };
+  };
+}
+
+async function get(url: string | URL, signal: AbortSignal, init?: RequestInit) {
+  const response = await fetch(url, { ...init, redirect: "error", signal });
   const length = Number(response.headers.get("content-length") ?? 0);
   if (length > MAX_BYTES) throw new Error("YouTube's answer was too large.");
   return response;
 }
 
-interface CaptionTrack {
-  baseUrl: string;
-  languageCode: string;
-  kind?: string;
-  name?: { runs?: { text: string }[]; simpleText?: string };
+async function player(id: string, signal: AbortSignal) {
+  let last: unknown;
+  for (const { client, userAgent } of CLIENTS) {
+    try {
+      const response = await get(`${HOST}/youtubei/v1/player?prettyPrint=false`, signal, {
+        method: "POST",
+        headers: { "content-type": "application/json", "user-agent": userAgent },
+        body: JSON.stringify({ context: { client: { ...client, hl: "en" } }, videoId: id }),
+      });
+      if (!response.ok) throw new Error(`YouTube answered ${response.status}.`);
+      const data = (await response.json()) as PlayerResponse;
+      const status = data.playabilityStatus?.status;
+      if (status === "OK" && !data.videoDetails?.isPrivate) return { data, userAgent };
+      last = new YouTubeError(
+        status === "LOGIN_REQUIRED" || data.videoDetails?.isPrivate ? "private" : "unavailable",
+      );
+    } catch (error) {
+      if (signal.aborted) throw error;
+      last = error;
+    }
+  }
+  throw last instanceof Error ? last : new YouTubeError("unavailable");
 }
 
-interface PlayerAnswer {
-  playabilityStatus?: { status?: string; reason?: string };
-  videoDetails?: { title?: string; author?: string; lengthSeconds?: string; isPrivate?: boolean };
-  captions?: { playerCaptionsTracklistRenderer?: { captionTracks?: CaptionTrack[] } };
+/** Reads a public video's title, length and captions from YouTube. */
+export async function fetchYouTubeVideo(
+  id: string,
+  { timeout = TIMEOUT_MS }: { timeout?: number } = {},
+): Promise<YouTubeVideo> {
+  if (!ID.test(id)) throw new YouTubeError("unavailable");
+  const signal = AbortSignal.timeout(timeout);
+  const { data, userAgent } = await player(id, signal);
+  const details = data.videoDetails ?? {};
+  const video: YouTubeVideo = {
+    id,
+    title: details.title?.trim() || `YouTube video ${id}`,
+    author: details.author?.trim() ?? "",
+    seconds: Number(details.lengthSeconds) || 0,
+    url: youTubeWatchUrl(id),
+  };
+  const list = data.captions?.playerCaptionsTracklistRenderer;
+  const track = pickCaptionTrack(
+    list?.captionTracks ?? [],
+    list?.audioTracks?.[0]?.defaultCaptionTrackIndex,
+  );
+  if (!track) return video;
+  const address = new URL(track.baseUrl, HOST);
+  if (address.hostname !== "www.youtube.com" && address.hostname !== "youtube.com") return video;
+  address.searchParams.set("fmt", "json3");
+  const response = await get(address, signal, { headers: { "user-agent": userAgent } });
+  if (!response.ok) return video;
+  const cues = json3Cues((await response.json().catch(() => ({}))) as Json3);
+  if (cues.length) {
+    video.captions = { language: track.languageCode, auto: track.kind === "asr", cues };
+  }
+  return video;
+}
+
+/** The video without its captions, as the page is told about it. */
+const infoOf = ({ id, title, author, seconds, url }: YouTubeVideo): YouTubeVideoInfo => ({
+  id,
+  title,
+  author,
+  seconds,
+  url,
+});
+
+/**
+ * A public video's title and timed transcript, from its captions. Throws
+ * `YouTubeError("no-captions")` with the video when it has none.
+ */
+export async function fetchYouTubeTranscript(
+  id: string,
+): Promise<{ title: string; text: string; author: string; video: YouTubeVideoInfo }> {
+  const video = await fetchYouTubeVideo(id);
+  const text = video.captions ? transcriptText(video.captions.cues) : "";
+  if (!text) throw new YouTubeError("no-captions", infoOf(video));
+  return { title: video.title, text, author: video.author, video: infoOf(video) };
 }
 
 /**
- * The track to read: the uploader's own captions in the language spoken in
- * the video (the automatic track's language), then any of the uploader's,
- * then the automatic ones.
+ * About how many tokens Gemini reads for a video at low resolution: a frame a
+ * second (66 tokens) and the sound (32 tokens a second), rounded up.
  */
-export function pickTrack(tracks: readonly CaptionTrack[]): CaptionTrack | undefined {
-  const automatic = tracks.find((track) => track.kind === "asr");
-  const written = tracks.filter((track) => track.kind !== "asr");
-  return (
-    written.find((track) => automatic && track.languageCode === automatic.languageCode) ??
-    written[0] ??
-    automatic
-  );
-}
+export const geminiVideoTokens = (seconds: number) => Math.ceil((seconds * 100) / 1000) * 1000;
 
-function decode(text: string): string {
-  return text
-    .replace(/<[^>]+>/g, "")
-    .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, code: string) => String.fromCodePoint(parseInt(code, 16)))
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&");
-}
-
-export interface Cue {
-  /** Start, in seconds. */
-  start: number;
-  text: string;
-}
-
-/** The cues of a caption file: YouTube's timed text (format 3, `<p t="ms">`) or its older `<text start="s">`. */
-export function parseCaptions(xml: string): Cue[] {
-  const cues: Cue[] = [];
-  for (const [, attrs, inner] of xml.matchAll(/<p\b([^>]*)>([\s\S]*?)<\/p>/g)) {
-    const t = /\bt="(\d+)"/.exec(attrs)?.[1];
-    if (t !== undefined) cues.push({ start: Number(t) / 1000, text: decode(inner) });
-  }
-  if (cues.length === 0) {
-    for (const [, attrs, inner] of xml.matchAll(/<text\b([^>]*)>([\s\S]*?)<\/text>/g)) {
-      const start = /\bstart="([\d.]+)"/.exec(attrs)?.[1];
-      if (start !== undefined) cues.push({ start: Number(start), text: decode(decode(inner)) });
-    }
-  }
-  return cues
-    .map((cue) => ({ ...cue, text: cue.text.replace(/\s+/g, " ").trim() }))
-    .filter((cue) => cue.text !== "");
-}
-
-/** Cues joined into paragraphs of about 45 seconds, each starting with its time. */
-export function transcriptText(cues: readonly Cue[]): string {
-  const paragraphs: string[] = [];
-  let start = -1;
-  let words: string[] = [];
-  const flush = () => {
-    if (words.length > 0) paragraphs.push(`[${timestamp(start)}] ${words.join(" ")}`);
-    words = [];
-  };
-  for (const cue of cues) {
-    const ends = /[.!?…]["')\]]?$/.test(words.at(-1) ?? "");
-    if (words.length > 0 && cue.start - start >= PARAGRAPH_SECONDS && ends) flush();
-    // Without punctuation (automatic captions), cut a little later anyway.
-    if (words.length > 0 && cue.start - start >= PARAGRAPH_SECONDS * 1.5) flush();
-    if (words.length === 0) start = cue.start;
-    words.push(cue.text);
-  }
-  flush();
-  return paragraphs.join("\n\n");
-}
-
-/** A public video's title and transcript. */
-export async function fetchYouTubeTranscript(id: string): Promise<Extracted & { author?: string }> {
-  const response = await get(`${HOST}/youtubei/v1/player?prettyPrint=false`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ context: { client: CLIENT }, videoId: id }),
-  });
-  if (!response.ok) throw new Error(`YouTube answered ${response.status}.`);
-  const player = (await response.json()) as PlayerAnswer;
-  const status = player.playabilityStatus?.status;
-  if (status === "LOGIN_REQUIRED" || player.videoDetails?.isPrivate)
-    throw new YouTubeError("private");
-  if (status && status !== "OK" && !player.videoDetails) throw new YouTubeError("unavailable");
-
-  const track = pickTrack(player.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? []);
-  if (!track) throw new YouTubeError("no-captions");
-  const captionUrl = new URL(track.baseUrl, HOST);
-  if (captionUrl.hostname !== "www.youtube.com") throw new Error("Unexpected caption address.");
-  const captions = await get(captionUrl.toString());
-  if (!captions.ok) throw new Error(`YouTube answered ${captions.status} for the captions.`);
-  const xml = await captions.text();
-  if (xml.length > MAX_BYTES) throw new Error("The captions are too long.");
-  const text = transcriptText(parseCaptions(xml));
-  if (!text) throw new YouTubeError("no-captions");
-
-  const title = player.videoDetails?.title?.trim() || `YouTube video ${id}`;
-  const author = player.videoDetails?.author?.trim();
-  return { title, text, author };
-}
+/** The longest video Gemini is asked to transcribe (its context holds about this much). */
+export const GEMINI_MAX_SECONDS = 3 * 60 * 60;

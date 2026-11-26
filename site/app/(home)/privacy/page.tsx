@@ -36,9 +36,9 @@ export default function PrivacyPage() {
 
       <LegalSection title="What we collect">
         <p>
-          <strong>Without an account, nothing.</strong> We do not collect, store, sell or share
-          your notebooks, sources, chats, notes, files, API keys, Google account information or
-          usage data. The app contains no analytics or tracking, and neither does this website.
+          <strong>Without an account, nothing.</strong> We do not collect, store, sell or share your
+          notebooks, sources, chats, notes, files, API keys, Google account information or usage
+          data. The app contains no analytics or tracking, and neither does this website.
         </p>
       </LegalSection>
 
@@ -54,7 +54,7 @@ export default function PrivacyPage() {
           through Anthropic), the files you choose to put in Better Vault Cloud, and, while sync is
           on, your skills and plugins, so another device can get them back. Your notebooks, notes
           and API keys never reach us. You can turn sync off in{" "}
-          <strong>Settings → Subscription</strong>.
+          <strong>Settings → Account and plan</strong>.
         </p>
       </LegalSection>
 
@@ -63,7 +63,7 @@ export default function PrivacyPage() {
           Your notebooks, sources, chats, Studio outputs, settings and API keys are stored on your
           device: in your browser&apos;s storage (IndexedDB) for the web app, or in a file in the
           app&apos;s data folder for the desktop app. You can export them as a backup, and delete
-          them at any time in <strong>Settings → Data</strong>.
+          them at any time in <strong>Settings → Storage and data</strong>.
         </p>
       </LegalSection>
 
@@ -75,9 +75,9 @@ export default function PrivacyPage() {
         <ul className="flex list-disc flex-col gap-2 ps-5">
           <li>
             <strong>AI providers</strong> (such as OpenAI, Anthropic, Google, OpenRouter, Kimi,
-            OpenCode, ElevenLabs, or Ollama and LM Studio on your own machine) receive your question, the relevant
-            passages of your sources and your key, and return the answer. Their own privacy policies
-            apply.
+            OpenCode, ElevenLabs, or Ollama and LM Studio on your own machine) receive your
+            question, the relevant passages of your sources and your key, and return the answer.
+            Their own privacy policies apply.
           </li>
           <li>
             <strong>Storage services</strong> (Google Drive, Amazon S3, Cloudflare R2) receive the
@@ -130,8 +130,8 @@ export default function PrivacyPage() {
         <p>
           The access token that Google issues stays on your device: in your browser&apos;s memory
           for the web app, or in a file only you can read in the desktop app&apos;s data folder.
-          Disconnect Google Drive in <strong>Settings → Storage</strong> to sign out and revoke the
-          access, or remove it at any time at{" "}
+          Disconnect Google Drive in <strong>Settings → Storage and data</strong> to sign out and
+          revoke the access, or remove it at any time at{" "}
           <a href="https://myaccount.google.com/connections">myaccount.google.com/connections</a>.
         </p>
       </LegalSection>

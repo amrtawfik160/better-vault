@@ -1,36 +1,51 @@
-import { Link, useSearchParams } from "react-router";
-import { useEffect } from "react";
+import { Link, useLocation, useSearchParams } from "react-router";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { buttonVariants } from "@/components/panelui/button";
+import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
+import { Icon } from "@/components/icon";
+import { Button, buttonVariants } from "@/components/panelui/button";
 import { ChatProvider } from "@/components/chat/chat-provider";
 import { ConversationActionDialogs } from "@/components/chat/conversation-action-dialogs";
-import { PromptBar } from "@/components/chat/prompt-bar";
-import { Tabs } from "@/components/panelui/tabs";
 import { OutputActionDialogs } from "@/components/studio/output-action-dialogs";
 import { StudioRunnerProvider } from "@/components/studio/studio-runner";
 import { ToolDialog } from "@/components/studio/tool-dialog";
 import { AddSourceDialog } from "@/components/sources/add-source-dialog";
 import { SourceReader } from "@/components/sources/source-reader";
+import { Desk } from "@/components/shell/app-frame";
+import { StudyReturnLinks } from "@/components/study/study-return-links";
 import { useNotebook } from "@/lib/db/notebooks";
-import { ChatView } from "./chat-view";
+import { currentVaultId, setCurrentVault, vaultOf } from "@/lib/db/vaults";
+import { studyReturnState } from "@/lib/study/return-links";
+import { Companion } from "./companion";
+import { NotebookOverview } from "./notebook-overview";
 import { SourcesView } from "./sources-view";
 import { StudioView } from "./studio-view";
 import { TopBar } from "./top-bar";
-import { WorkspaceProvider, useWorkspace, type WorkspaceTab } from "./workspace-context";
+import { WorkspaceProvider, useWorkspace } from "./workspace-context";
 import { routes } from "@/lib/routes";
+import { studioMakeRequest } from "@/studio/make-link";
 
 /** The notebook screen. */
 export function Workspace({ notebookId }: { notebookId: string }) {
   const notebook = useNotebook(notebookId);
+  const vault = notebook ? vaultOf(notebook) : null;
+  // The sidebar's links open the saved vault, so it follows the notebook shown.
+  useEffect(() => {
+    if (vault && vault !== currentVaultId()) setCurrentVault(vault);
+  }, [vault, notebookId]);
   if (notebook === undefined) return <div className="h-full" aria-busy="true" />;
   if (notebook === null) return <NotebookNotFound />;
   return (
     <WorkspaceProvider notebook={notebook}>
-      <ChatProvider notebookId={notebook.id}>
-        <StudioRunnerProvider notebookId={notebook.id}>
-          <WorkspaceLayout />
-        </StudioRunnerProvider>
-      </ChatProvider>
+      {/* The chat makes Studio outputs when asked, so the runner is outside it. */}
+      <StudioRunnerProvider notebookId={notebook.id}>
+        <ChatProvider notebookId={notebook.id}>
+          {/* The notebook on its desk beside the app sidebar: the header, the main column and the companion. */}
+          <Desk>
+            <WorkspaceLayout />
+          </Desk>
+        </ChatProvider>
+      </StudioRunnerProvider>
     </WorkspaceProvider>
   );
 }
@@ -45,63 +60,125 @@ function WorkspaceLayout() {
     reading,
     closeReader,
     activeTool,
+    toolSources,
+    openTool,
     closeTool,
     readSource,
-    openOutput,
+    openOutputId,
+    closeOutput,
+    openPanel,
+    closePluginPanel,
   } = useWorkspace();
   const { t } = useTranslation();
+  const { key, state } = useLocation();
   const [params, setParams] = useSearchParams();
+  const handled = useRef<string | null>(null);
 
-  // Links from the command palette: open a source at a passage, an output, a tab or Add source.
+  // The studio output stays in the URL. Source, Add source and Make links are one-shot commands.
   useEffect(() => {
-    if (params.size === 0) return;
     const source = params.get("source");
-    const output = params.get("output");
     const view = params.get("tab");
-    if (source) {
+    const addSource = params.get("add") === "source";
+    const make = studioMakeRequest(params);
+    if ((!source && !view && !addSource && !make && !params.has("make")) || handled.current === key)
+      return;
+    handled.current = key;
+    if (make) {
+      setTab("studio");
+      openTool(make.toolId, make.sourceIds);
+    } else if (source) {
       setTab("sources");
-      readSource(source, params.get("passage") ?? undefined);
-    } else if (output) openOutput(output);
-    else if (view === "chat" || view === "sources" || view === "studio") setTab(view);
-    if (params.get("add") === "source") setAddSourceOpen(true);
-    setParams({}, { replace: true });
-  }, [params, setParams, setTab, readSource, openOutput, setAddSourceOpen]);
+      const snippet = state?.studySourceSnippet;
+      readSource(
+        source,
+        params.get("passage") ?? undefined,
+        typeof snippet === "string" ? snippet.slice(0, 280) : undefined,
+      );
+    } else if (view === "chat" || view === "sources" || view === "studio" || view === "overview") {
+      setTab(view);
+    }
+    if (addSource) setAddSourceOpen(true);
+    const rest = new URLSearchParams(params);
+    for (const param of ["source", "passage", "add", "tab", "make", "from"]) rest.delete(param);
+    if (make || source || view === "chat" || view === "sources") rest.delete("output");
+    setParams(rest, { replace: true, state: studyReturnState(state) });
+  }, [key, params, state, setParams, setTab, readSource, setAddSourceOpen, openTool]);
 
   useEffect(() => {
     document.title = `${notebook.title} · ${t("appName")}`;
   }, [notebook.title, t]);
 
   return (
-    <Tabs
-      data-bv="notebook"
-      value={tab}
-      onValueChange={(value) => setTab(value as WorkspaceTab)}
-      className="h-full gap-0"
-    >
+    <div data-bv="notebook" className="flex h-full flex-col">
       <TopBar />
-      <div className="relative min-h-0 flex-1">
-        {/* The prompt belongs to the chat; kept mounted so a draft survives a tab switch. */}
-        <Tabs.Content value="chat" keepMounted className="relative h-full">
-          <ChatView />
-          <PromptBar />
-        </Tabs.Content>
-        <Tabs.Content value="sources" className="h-full">
-          <SourcesView />
-        </Tabs.Content>
-        <Tabs.Content value="studio" className="h-full">
-          <StudioView />
-        </Tabs.Content>
+      <StudyReturnLinks className="shrink-0 px-3 sm:px-5" />
+      <div className="flex min-h-0 flex-1">
+        {/* The main column: the overview, the sources to choose from, or Studio. */}
+        <main className="flex min-w-0 flex-1 flex-col">
+          {tab !== "overview" ? (
+            // One way back: the notebook, and from an open output, its list of outputs.
+            <nav
+              aria-label={t("header.breadcrumb", { ns: "workspace" })}
+              className="flex shrink-0 items-center gap-0.5 px-3 pt-2 sm:px-5"
+            >
+              <Button
+                variant="ghost"
+                size="sm"
+                className="min-w-0 shrink justify-start"
+                title={notebook.title}
+                onClick={() => setTab("overview")}
+              >
+                <Icon icon={ArrowLeft01Icon} size={16} className="rtl:rotate-180" />
+                <span className="truncate">
+                  {t("overview.back", { ns: "workspace", notebook: notebook.title })}
+                </span>
+              </Button>
+              {tab === "studio" && (openOutputId || openPanel) ? (
+                <>
+                  <Icon
+                    icon={ArrowRight01Icon}
+                    size={14}
+                    aria-hidden
+                    className="shrink-0 text-muted-foreground rtl:rotate-180"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={openPanel ? closePluginPanel : closeOutput}
+                  >
+                    {t("viewer.back", { ns: "studio" })}
+                  </Button>
+                </>
+              ) : null}
+            </nav>
+          ) : null}
+          <div className="relative min-h-0 flex-1">
+            {tab === "sources" ? (
+              <SourcesView />
+            ) : tab === "studio" ? (
+              <StudioView />
+            ) : (
+              <NotebookOverview />
+            )}
+          </div>
+        </main>
+        <Companion />
       </div>
       <AddSourceDialog
         notebookId={notebook.id}
         open={addSourceOpen}
         onOpenChange={setAddSourceOpen}
       />
-      <SourceReader reading={reading} onClose={closeReader} />
-      <ToolDialog notebookId={notebook.id} toolId={activeTool} onClose={closeTool} />
+      <SourceReader notebookId={notebook.id} reading={reading} onClose={closeReader} />
+      <ToolDialog
+        notebookId={notebook.id}
+        toolId={activeTool}
+        initialSourceIds={toolSources}
+        onClose={closeTool}
+      />
       <OutputActionDialogs />
       <ConversationActionDialogs />
-    </Tabs>
+    </div>
   );
 }
 
@@ -112,6 +189,7 @@ function NotebookNotFound() {
       <div className="max-w-sm text-center">
         <h1 className="text-xl font-semibold">{t("notFound.title")}</h1>
         <p className="mt-2 text-muted-foreground">{t("notFound.body")}</p>
+        <StudyReturnLinks className="mt-4" />
         <Link to={routes.home} className={buttonVariants({ className: "mt-6" })}>
           {t("notFound.action")}
         </Link>

@@ -9,6 +9,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - Website: screenshots of the app in the docs, in light and dark, and a Plugins section on the home page.
 - Website: the home page shows the Studio, links every Studio tool and the main docs pages, and docs pages tell search engines when they last changed.
+- Sign in with an AI subscription you already pay for (ChatGPT, Claude, Antigravity, Grok, Kimi, Devin and Muse Code) in Settings → AI → AI subscriptions, through a local CLIProxyAPI that the desktop app bundles and the web app sets up on first use. Connected models appear in the model pickers.
+- Study: a reader for PDF, EPUB and Markdown sources with highlights, bookmarks, vocabulary, translation and Ask AI, plus Today, Practice (spoken and written exercises), Review (spaced-repetition flashcards) and a Library.
+- A reading voice that reads English aloud on your device (Kokoro), and the system's voices for other languages.
+- Scanned PDFs: recognize page text on your computer and review it before it is saved.
+- YouTube videos without captions can be transcribed by Gemini with your Google key, and a subtitle file or a recording can be added as a transcript.
+- The chat can add flashcards and make Studio outputs for you, and "/" opens its commands.
+- A welcome flow for the first run that helps you connect an AI.
+
+### Changed
+
+- A new layout: an app sidebar with a vault switcher, a notebook overview with a companion (Ask, Practise, Make), one Add box with a notebook picker, and Settings in seven groups (AI, Reading and voice, Account and plan, Storage and data, Appearance and language, Tools, About and updates).
 
 ### Fixed
 

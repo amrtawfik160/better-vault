@@ -5,7 +5,10 @@ description: "Keep shared SKILL.md skills in a vault and let agents like Claude 
 
 Skills are instructions for AI agents that you keep in a vault, and MCP lets agents on your computer use them, along with everything else in better-vault.
 
-<Screenshot name="mcp" alt="The MCP sheet in Settings, which lets AI agents use your notebooks from the desktop app" />
+<Screenshot
+  name="mcp"
+  alt="The MCP sheet in Settings, which lets AI agents use your notebooks from the desktop app"
+/>
 
 ## Skills
 
@@ -29,7 +32,7 @@ The desktop app runs a [Model Context Protocol](https://modelcontextprotocol.io)
 
 ### Turn it on
 
-Open **Settings → MCP** in the desktop app and turn on **Allow agents to connect**. Agents can always read; under **What agents may change**, each part has its own switch, and **Read only** turns every change off. Plugins stay off until you allow them.
+Open **Settings → Tools → MCP** in the desktop app and turn on **Allow agents to connect**. Agents can always read; under **What agents may change**, each part has its own switch, and **Read only** turns every change off. Plugins stay off until you allow them.
 
 ### Set up your agent
 
@@ -55,13 +58,13 @@ Ask your agent about your notebooks. It starts with `describe_app`, which tells 
 
 Notes, sources and skills are also resources, at `note://`, `source://` and `skill://` addresses. [Creator mode](/docs/creator-mode) explains how an agent builds plugins.
 
-The web app can't run an MCP server, so Settings → MCP there links to the desktop app. **New token** in the same page stops every agent set up with the old one.
+The web app can't run an MCP server, so Settings → Tools → MCP there links to the desktop app. **New token** in the same page stops every agent set up with the old one.
 
 ## Vault script (beta)
 
 Vault script lets an agent write one short JavaScript program that calls the tools above, instead of calling them one at a time. The agent combines and filters the results in code and sends back only what it needs, so a task that took ten tool calls takes one, and uses far fewer tokens.
 
-Turn on **Allow Vault script** in Settings → MCP. Agents then get two more tools: `vault_api`, which lists the tools a script can call with their inputs, and `run_vault_script`, which runs the program. Turn on **Only list Vault script** as well to show agents just `describe_app` and the two script tools, which saves the most.
+Turn on **Allow Vault script** in Settings → Tools → MCP. Agents then get two more tools: `vault_api`, which lists the tools a script can call with their inputs, and `run_vault_script`, which runs the program. Turn on **Only list Vault script** as well to show agents just `describe_app` and the two script tools, which saves the most.
 
 A script looks like this:
 
@@ -72,4 +75,3 @@ return read.map((note) => ({ title: note.title, words: note.body.split(/\s+/).le
 ```
 
 Scripts run in a sandbox with no network, files or Node.js APIs, for at most 30 seconds. They reach your vault only through the same tools, so **Read only** and each area's switch still apply: a change that isn't allowed comes back as `{ error }` instead of being made.
-

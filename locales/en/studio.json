@@ -157,7 +157,14 @@
       "restart": "Start over",
       "finished": "Done! You knew {{known}} of {{total}}.",
       "practiceMissed_one": "Practise the card you missed",
-      "practiceMissed_other": "Practise the {{count}} you missed"
+      "practiceMissed_other": "Practise the {{count}} you missed",
+      "practiceUnrated_one": "Practise {{count}} unrated card",
+      "practiceUnrated_other": "Practise {{count}} unrated cards",
+      "reviewMissed_one": "Review {{count}} missed card in Study",
+      "reviewMissed_other": "Review {{count}} missed cards in Study",
+      "missedAlreadySaved": "These cards are already in Study",
+      "practiceChanged": "Your practice round changed. Continue from the latest card.",
+      "savePracticeFailed": "Could not save your flashcard practice. Try again."
     }
   },
   "quiz": {
@@ -174,6 +181,16 @@
       "incorrect": "Not quite",
       "score": "You got {{score}} of {{total}} right",
       "retry": "Try again",
+      "restart": "Start over",
+      "restartTitle": "Start this quiz over?",
+      "restartBody": "Your answers for this attempt will be cleared.",
+      "attemptChanged": "Your quiz attempt changed. Continue from the latest question.",
+      "saveAttemptFailed": "Could not save your quiz progress. Try again.",
+      "reviewMissed_one": "Review {{count}} missed question",
+      "reviewMissed_other": "Review {{count}} missed questions",
+      "savedMissed_one": "{{count}} question added to review",
+      "savedMissed_other": "{{count}} questions added to review",
+      "missedAlreadySaved": "These questions are already in review",
       "answer": "Answer: {{answer}}"
     }
   },
@@ -399,6 +416,11 @@
     }
   },
   "viewer": {
+    "addToStudy": "Review in Study",
+    "answerSources": "Sources",
+    "noStudyCards": "This set has no flashcards to review.",
+    "studyCardsAdded_one": "Added {{count}} flashcard to Study",
+    "studyCardsAdded_other": "Added {{count}} flashcards to Study",
     "back": "All outputs",
     "download": "Download",
     "copy": "Copy",
@@ -740,7 +762,7 @@
     "narrator": "Narrator",
     "writer": "Script written by",
     "writerHint": "This model reads your sources and writes what is said; ElevenLabs then speaks it.",
-    "noWriter": "No chat model yet. Add one in Settings → AI providers."
+    "noWriter": "No chat model yet. Connect one in Settings → AI subscriptions."
   },
   "allHidden": "Every tool is turned off. Turn some back on in Settings → Studio.",
   "canvas": {
@@ -785,6 +807,15 @@
     "menu": "Canvas options",
     "rename": "Rename canvas",
     "delete": "Delete canvas"
+  },
+  "frame": {
+    "breadcrumb": "Studio",
+    "generatingTitle": "Making your {{tool}}",
+    "failedTitle": "The {{tool}} couldn't be made",
+    "choicesKept": "Your choices are kept, so trying again needs no setup.",
+    "brokenTitle": "This output can't be shown",
+    "brokenBody": "Its saved content is damaged. The rest of the notebook is fine. You can make it again or delete it from the actions menu.",
+    "makeAgain": "Make it again"
   },
   "plugins": {
     "title": "Plugins",

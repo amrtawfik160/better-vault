@@ -1,59 +1,83 @@
 import MiniSearch, { type SearchResult } from "minisearch";
 import { store } from "@/lib/db/store";
 import { listVaults } from "@/lib/db/vaults";
-import type { Folder, Notebook, Source, StudioOutput, Vault } from "@/lib/db/types";
+import type { Folder, Note, Notebook, Source, StudioOutput, Vault } from "@/lib/db/types";
+import { noteEditorText, type NoteMatch } from "@/lib/notes/search-match";
+import { readFrontmatter } from "@/lib/notes/syntax";
+import { originHref } from "@/lib/study/links";
+import { studyTextRevision } from "@/lib/study/text-edits";
+import { studyTextWindows } from "@/lib/study/text-windows";
+import { studySearchCatalogue, type StudySearchLink } from "./study";
 
 /**
  * One search index over everything in the app: vaults, folders, notebooks,
  * sources (by title), every passage of every source (the full text, PDFs
- * included) and Studio outputs (title and text). It lives in memory, is built
- * the first time the command palette opens and then follows changes: when
- * sources come and go only their passages are added or removed.
+ * included), notes, Studio outputs, and saved Study material. Linked Study documents
+ * use their own page and chapter boundaries. The index lives in memory
+ * and follows changes while the command palette is open.
  */
 
-export type HitKind = "vault" | "folder" | "notebook" | "source" | "passage" | "output";
+export type HitKind = "vault" | "folder" | "notebook" | "source" | "passage" | "study-passage" | "output" | "note" | "study";
+
+type StudyAnchor = { bookId: string; section: number; offset: number; revision: number };
 
 interface Doc {
   id: string;
   kind: HitKind;
   title: string;
   text: string;
+  keywords?: string;
+  noteId?: string;
+  textOffset?: number;
   notebookId?: string;
   sourceId?: string;
   chunkId?: string;
   vaultId?: string;
   folderId?: string;
   outputId?: string;
+  study?: StudySearchLink;
+  studyAnchor?: StudyAnchor;
 }
 
-export interface Hit extends Omit<Doc, "text"> {
+export interface Hit extends Omit<Doc, "text" | "keywords" | "textOffset"> {
   score: number;
-  /** Around the first match, for passages and outputs. */
+  /** Around the first match in the indexed body. */
   snippet?: string;
   /** The words that matched, to mark in the snippet. */
   terms: string[];
+  noteMatch?: NoteMatch;
 }
+
+type CatalogueSource = Pick<Source, "id" | "notebookId" | "title" | "studyRevision">;
 
 export interface Catalogue {
   vaults: Vault[];
   folders: Folder[];
   notebooks: Notebook[];
-  sources: Pick<Source, "id" | "notebookId" | "title" | "kind">[];
+  notes: Note[];
+  sources: CatalogueSource[];
   outputs: StudioOutput[];
+  study: ReturnType<typeof studySearchCatalogue>;
 }
 
+type StudyDocument = Catalogue["study"]["documents"][number];
+
 const options = {
-  fields: ["title", "text"],
+  fields: ["title", "text", "keywords"],
   storeFields: [
     "kind",
     "title",
     "text",
+    "textOffset",
+    "noteId",
     "notebookId",
     "sourceId",
     "chunkId",
     "vaultId",
     "folderId",
     "outputId",
+    "study",
+    "studyAnchor",
   ],
   searchOptions: {
     boost: { title: 3 },
@@ -75,30 +99,76 @@ function textOf(value: unknown, out: string[] = [], budget = { left: 6000 }): st
   return out;
 }
 
-function snippetOf(text: string, terms: string[], size = 160): string {
+function snippetAt(text: string, at: number, size = 160): string {
+  const start = Math.max(0, at - Math.floor(size / 3));
+  const piece = text.slice(start, start + size).replace(/\s+/g, " ").trim();
+  return `${start > 0 ? "…" : ""}${piece}${start + size < text.length ? "…" : ""}`;
+}
+
+function snippetOf(text: string, terms: string[]): string {
   const lower = text.toLocaleLowerCase();
   let at = -1;
   for (const term of terms) {
     const found = lower.indexOf(term.toLocaleLowerCase());
     if (found >= 0 && (at < 0 || found < at)) at = found;
   }
-  const start = Math.max(0, at - size / 3);
-  const piece = text
-    .slice(start, start + size)
-    .replace(/\s+/g, " ")
-    .trim();
-  return `${start > 0 ? "…" : ""}${piece}${start + size < text.length ? "…" : ""}`;
+  return snippetAt(text, at);
+}
+
+const escapePattern = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+function textMatch(text: string, query: string, terms: string[] = []) {
+  const phrase = query.trim().split(/\s+/u).map(escapePattern).join("\\s+");
+  const exact = new RegExp(phrase, "iu").exec(text);
+  if (exact || !terms.length) return exact;
+  return new RegExp(terms.toSorted((a, b) => b.length - a.length).map(escapePattern).join("|"), "iu").exec(text);
+}
+
+function matchedText(result: SearchResult & Doc, query: string) {
+  const terms = result.terms.filter((term) => result.match[term]?.includes("text"));
+  return terms.length ? textMatch(result.text, query, terms) : null;
+}
+
+function noteDocument(note: Note): Doc {
+  const { content, length } = readFrontmatter(noteEditorText(note.body));
+  return {
+    id: `note:${note.id}`,
+    kind: "note",
+    noteId: note.id,
+    title: note.title,
+    text: content,
+    textOffset: length,
+    keywords: [...note.tags, ...note.aliases].join(" "),
+    vaultId: note.vaultId,
+    notebookId: note.notebookId ?? undefined,
+  };
+}
+
+function sameStudyDocument(left: StudyDocument, right: StudyDocument) {
+  const a = left.book;
+  const b = right.book;
+  return left.vaultId === right.vaultId && a.title === b.title && a.sourceId === b.sourceId &&
+    a.notebookId === b.notebookId && studyTextRevision(a) === studyTextRevision(b) &&
+    a.sections.length === b.sections.length && a.sections.every((section, index) =>
+      section.title === b.sections[index].title && section.text === b.sections[index].text,
+    );
 }
 
 class SearchIndex {
   private mini = new MiniSearch<Doc>(options);
-  /** The ids of the documents that are not passages, replaced on every sync. */
-  private others = new Set<string>();
-  /** Each indexed source's passage ids. */
-  private passages = new Map<string, string[]>();
+  private others = new Map<string, Doc>();
+  private passages = new Map<
+    string,
+    { ids: string[]; title: string; revision?: number; vaultId?: string }
+  >();
+  private studyPassages = new Map<string, StudyDocument & { ids: string[] }>();
   private queue: Promise<void> = Promise.resolve();
   private listeners = new Set<() => void>();
-  ready = false;
+  private current?: Catalogue;
+
+  isCurrent(catalogue: Catalogue | null | undefined) {
+    return !!catalogue && this.current === catalogue;
+  }
 
   /** Brings the index in line with what is stored. Calls are queued, so they never overlap. */
   sync(catalogue: Catalogue): Promise<void> {
@@ -110,9 +180,37 @@ class SearchIndex {
     return this.queue;
   }
 
+  private async syncStudyPassages(documents: StudyDocument[]) {
+    const next = new Map(documents.map((entry) => [entry.book.id, entry]));
+    for (const [bookId, indexed] of this.studyPassages) {
+      const current = next.get(bookId);
+      if (current && sameStudyDocument(indexed, current)) continue;
+      for (const id of indexed.ids) if (this.mini.has(id)) this.mini.discard(id);
+      this.studyPassages.delete(bookId);
+    }
+    for (const entry of documents) {
+      const { book, vaultId } = entry;
+      if (this.studyPassages.has(book.id)) continue;
+      const revision = studyTextRevision(book);
+      const passages = book.sections.flatMap(({ title, text }, section) =>
+        Array.from(studyTextWindows(text), (window): Doc => ({
+          id: `study-passage:${book.id}:${section}:${window.start}`,
+          kind: "study-passage",
+          title: title === book.title ? book.title : `${book.title} · ${title}`,
+          text: window.text,
+          vaultId,
+          notebookId: book.notebookId,
+          sourceId: book.sourceId,
+          studyAnchor: { bookId: book.id, section, offset: window.offset, revision },
+        })),
+      );
+      await this.mini.addAllAsync(passages, { chunkSize: 200 });
+      this.studyPassages.set(book.id, { ...entry, ids: passages.map(({ id }) => id) });
+    }
+  }
+
   private async apply(catalogue: Catalogue) {
-    for (const id of this.others) if (this.mini.has(id)) this.mini.discard(id);
-    this.others.clear();
+    this.current = undefined;
     const notebookVault = new Map(
       catalogue.notebooks.map((notebook) => [notebook.id, notebook.vaultId]),
     );
@@ -140,6 +238,7 @@ class SearchIndex {
         notebookId: notebook.id,
         vaultId: notebook.vaultId,
       })),
+      ...catalogue.notes.map(noteDocument),
       ...catalogue.sources.map((source) => ({
         id: `source:${source.id}`,
         kind: "source" as const,
@@ -160,18 +259,48 @@ class SearchIndex {
           outputId: output.id,
           vaultId: notebookVault.get(output.notebookId),
         })),
+      ...catalogue.study.entries,
     ];
-    this.mini.addAll(docs);
-    for (const doc of docs) this.others.add(doc.id);
+    const nextDocs = new Map(docs.map((doc) => [doc.id, doc]));
+    for (const id of this.others.keys()) {
+      if (!nextDocs.has(id)) this.mini.discard(id);
+    }
+    const changed = docs.filter((doc) => {
+      const previous = this.others.get(doc.id);
+      return (
+        previous?.title !== doc.title ||
+        previous.text !== doc.text ||
+        previous.textOffset !== doc.textOffset ||
+        previous.keywords !== doc.keywords ||
+        previous.vaultId !== doc.vaultId ||
+        previous.notebookId !== doc.notebookId ||
+        previous.study?.context !== doc.study?.context
+      );
+    });
+    for (const { id } of changed) if (this.mini.has(id)) this.mini.discard(id);
+    await this.mini.addAllAsync(changed);
+    this.others = nextDocs;
 
-    // Passages: only the sources that came or went.
-    const now = new Set(catalogue.sources.map((source) => source.id));
-    for (const [sourceId, ids] of this.passages) {
-      if (now.has(sourceId)) continue;
-      for (const id of ids) if (this.mini.has(id)) this.mini.discard(id);
+    await this.syncStudyPassages(catalogue.study.documents);
+    const studySources = new Set<string>();
+    for (const { book, ids } of this.studyPassages.values()) {
+      if (book.sourceId && ids.length) studySources.add(book.sourceId);
+    }
+    const notebookSources = catalogue.sources.filter(({ id }) => !studySources.has(id));
+    const sources = new Map(notebookSources.map((source) => [source.id, source]));
+    for (const [sourceId, indexed] of this.passages) {
+      const source = sources.get(sourceId);
+      if (
+        source &&
+        source.title === indexed.title &&
+        source.studyRevision === indexed.revision &&
+        notebookVault.get(source.notebookId) === indexed.vaultId
+      )
+        continue;
+      for (const id of indexed.ids) if (this.mini.has(id)) this.mini.discard(id);
       this.passages.delete(sourceId);
     }
-    const added = catalogue.sources.filter((source) => !this.passages.has(source.id));
+    const added = notebookSources.filter((source) => !this.passages.has(source.id));
     for (let at = 0; at < added.length; at += 20) {
       const batch = added.slice(at, at + 20);
       const chunks = await store().getChunks(batch.map((source) => source.id));
@@ -187,13 +316,16 @@ class SearchIndex {
         vaultId: notebookVault.get(chunk.notebookId),
       }));
       await this.mini.addAllAsync(passageDocs, { chunkSize: 200 });
-      for (const source of batch)
-        this.passages.set(
-          source.id,
-          passageDocs.filter((doc) => doc.sourceId === source.id).map((doc) => doc.id),
-        );
+      for (const source of batch) {
+        this.passages.set(source.id, {
+          ids: passageDocs.filter((doc) => doc.sourceId === source.id).map((doc) => doc.id),
+          title: source.title,
+          revision: source.studyRevision,
+          vaultId: notebookVault.get(source.notebookId),
+        });
+      }
     }
-    this.ready = true;
+    this.current = catalogue;
     for (const listener of this.listeners) listener();
   }
 
@@ -202,19 +334,56 @@ class SearchIndex {
     if (!query.trim()) return [];
     const results = this.mini.search(query) as (SearchResult & Doc)[];
     const taken = new Map<HitKind, number>();
+    const studySections = new Set<string>();
     const hits: Hit[] = [];
     for (const result of results) {
       const count = taken.get(result.kind) ?? 0;
       if (count >= limit) continue;
+      const { text, textOffset, ...doc } = result;
+      if (doc.studyAnchor) {
+        const { bookId, section, offset, revision } = doc.studyAnchor;
+        const key = JSON.stringify([bookId, section]);
+        if (studySections.has(key)) continue;
+        const match = matchedText(result, query);
+        if (!match) continue;
+        studySections.add(key);
+        taken.set(result.kind, count + 1);
+        hits.push({
+          ...doc,
+          score: result.score,
+          terms: [...new Set([match[0], ...result.terms])],
+          snippet: snippetAt(text, match.index),
+          study: {
+            type: "passage",
+            href: originHref({ kind: "book", bookId, section, offset: offset + match.index, length: match[0].length, revision }),
+          },
+        });
+        continue;
+      }
       taken.set(result.kind, count + 1);
-      const { text, ...doc } = result;
+      if (doc.noteId) {
+        const match = textMatch(doc.title, query) ? null : matchedText(result, query);
+        hits.push({
+          ...doc,
+          id: result.id as string,
+          snippet: match ? snippetAt(text, match.index) : undefined,
+          terms: match ? [...new Set([match[0], ...result.terms])] : result.terms,
+          noteMatch: match ? { offset: (textOffset ?? 0) + match.index, quote: match[0] } : undefined,
+        });
+        continue;
+      }
       hits.push({
         ...doc,
         id: result.id as string,
+        title:
+          result.kind === "study" && result.title.length > 160
+            ? snippetOf(result.title, result.terms)
+            : result.title,
         score: result.score,
         terms: result.terms,
         snippet:
-          result.kind === "passage" || (result.kind === "output" && text)
+          result.kind === "passage" ||
+          ((result.kind === "output" || result.kind === "study") && text.trim())
             ? snippetOf(text, result.terms)
             : undefined,
       });
@@ -235,18 +404,27 @@ export const searchIndex = new SearchIndex();
 
 /** What the index is built from, read fresh. Source texts are left out: passages carry them. */
 export async function readCatalogue(): Promise<Catalogue> {
-  const [vaults, folders, notebooks, sources, outputs] = await Promise.all([
+  const [vaults, folders, notebooks, sources, outputs, rows, notes] = await Promise.all([
     listVaults(),
     store().listFolders(),
     store().listNotebooks(),
     store().listAllSources(),
     store().listAllOutputs(),
+    store().listStudy(),
+    store().listNotes(),
   ]);
   return {
     vaults,
     folders,
     notebooks,
-    sources: sources.map(({ id, notebookId, title, kind }) => ({ id, notebookId, title, kind })),
+    notes,
+    sources: sources.map(({ id, notebookId, title, studyRevision }) => ({
+      id,
+      notebookId,
+      title,
+      studyRevision,
+    })),
     outputs,
+    study: studySearchCatalogue({ rows, notebooks, notes, vaults }),
   };
 }

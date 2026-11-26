@@ -1,20 +1,25 @@
 import {
   Add01Icon,
   AiBrain01Icon,
+  AiVoiceIcon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
+  BotIcon,
+  Books01Icon,
   CloudServerIcon,
-  FolderAddIcon,
   PaintBoardIcon,
-  Search01Icon,
   Calendar03Icon,
   Camera01Icon,
   Clock01Icon,
   GoogleIcon,
-  GridViewIcon,
+  InformationCircleIcon,
   Mail01Icon,
   MagicWand01Icon,
   Note01Icon,
+  PlugSocketIcon,
+  RepeatIcon,
+  Sun03Icon,
+  Target02Icon,
   Tick02Icon,
 } from "@hugeicons/core-free-icons";
 import { useEffect, useId, useRef, useState } from "react";
@@ -23,6 +28,13 @@ import { toast } from "sonner";
 import { Avatar } from "@/components/account/avatar";
 import { Logo } from "@/components/brand/logo";
 import { Field } from "@/components/common/field";
+import { SubscriptionConnect } from "@/components/settings/cliproxyapi-sign-in";
+import {
+  subscriptionConnectionsAllowed,
+  useSubscriptionConnections,
+} from "@/lib/ai/cliproxyapi-client";
+import { cliProxyBrands } from "@/lib/ai/cliproxyapi-oauth";
+import { useSettings } from "@/lib/db/settings";
 import { Icon } from "@/components/icon";
 import { Button } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
@@ -37,16 +49,17 @@ import { useStoreQuery } from "@/lib/db/live";
 import { updateProfile, useProfile } from "@/lib/db/profile";
 import { store } from "@/lib/db/store";
 import { avatarFromFile } from "@/lib/profile/avatar";
+import { onRadioKeys } from "@/components/common/roving";
 import { cn } from "@/lib/utils";
 
 const KEY = "onboarding";
-type Step = "profile" | "account" | "username" | "plan";
+type Step = "profile" | "ai" | "account" | "username" | "plan";
 type Plan = "free" | "pro" | "max";
 
 /**
  * The first screens of the app, two columns like a setup wizard: the step's
  * form on the left, and on the right a small better-vault window that fills
- * in with what is typed (name, picture, username, plan). The account is
+ * in with what is typed (name, picture, username). The account is
  * optional at every step: the app works fully on this device without one.
  */
 export function OnboardingGate() {
@@ -55,8 +68,7 @@ export function OnboardingGate() {
     [],
     ["settings"],
   );
-  if (done !== false) return null;
-  return <Onboarding />;
+  return done === false ? <Onboarding /> : null;
 }
 
 const finish = () => store().putSetting(KEY, { done: true, at: Date.now() });
@@ -70,18 +82,43 @@ function Onboarding() {
   const [username, setUsernameDraft] = useState("");
   const [plan, setPlan] = useState<Plan>("free");
   const [busy, setBusy] = useState(false);
+  const settings = useSettings();
   const shownName = name ?? profile?.name ?? "";
 
-  // The steps that apply: a username only once signed in.
-  const steps: Step[] = account
-    ? ["profile", "account", "username", "plan"]
-    : ["profile", "account", "plan"];
-  const at = Math.max(0, steps.indexOf(step));
+  // Connecting AI comes first: nothing in better-vault that thinks works without it.
+  const connectAI = subscriptionConnectionsAllowed();
+  const needsUsername = account != null && !account.user.username;
+  const steps: Step[] = [
+    "profile",
+    ...(connectAI ? (["ai"] as const) : []),
+    "account",
+    ...(step === "username" || needsUsername ? (["username"] as const) : []),
+    // A plan (Better Vault AI and Cloud) needs an account, so it is offered once signed in.
+    ...(account ? (["plan"] as const) : []),
+  ];
+  const at = steps.indexOf(step);
   const back = () => setStep(steps[Math.max(0, at - 1)]);
 
   const saveName = async () => {
     if (name !== null && name.trim() !== (profile?.name ?? ""))
       await updateProfile({ name: name.trim() });
+  };
+
+  const complete = async () => {
+    await saveName();
+    if (plan !== "free" && account && account.account.plan !== plan) await startCheckout(plan);
+    await finish();
+  };
+
+  const finishSetup = async () => {
+    setBusy(true);
+    try {
+      await complete();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const signInWith = async (mode: "signin" | "signup") => {
@@ -98,34 +135,17 @@ function Onboarding() {
     }
   };
 
-  const complete = async () => {
-    setBusy(true);
-    try {
-      await saveName();
-      if (plan !== "free" && account && account.account.plan !== plan) await startCheckout(plan);
-      await finish();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const skipAccount = async () => {
-    await saveName();
-    await finish();
-  };
-
   return (
     <div
       role="dialog"
       aria-modal
       aria-label={t("onboarding.label")}
-      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-background p-4 sm:p-8"
+      className="fixed inset-0 z-50 flex overflow-y-auto bg-background p-4 sm:p-8"
     >
-      <div className="grid w-full max-w-5xl overflow-hidden rounded-3xl bg-card ring-1 ring-border lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+      {/* `m-auto` centres it while it fits and lets it scroll from the top when the window is short. */}
+      <div className="m-auto grid w-full max-w-5xl overflow-hidden rounded-3xl bg-card ring-1 ring-border lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         {/* The step. */}
-        <div className="flex min-h-[34rem] flex-col p-6 sm:p-10">
+        <div className="flex min-h-[min(34rem,calc(100dvh-4rem))] flex-col p-6 sm:p-10">
           <header className="flex items-center gap-3">
             <Logo size={28} />
             <span className="text-sm font-semibold">better-vault</span>
@@ -148,6 +168,12 @@ function Onboarding() {
           <div className="flex flex-1 flex-col justify-center gap-6 py-8">
             {step === "profile" ? (
               <ProfileStep name={shownName} onName={setName} />
+            ) : step === "ai" ? (
+              <>
+                <Heading title={t("onboarding.ai.title")} body={t("onboarding.ai.body")} />
+                <SubscriptionConnect saved={settings?.providers.cliproxyapi} />
+                <p className="text-xs text-muted-foreground">{t("onboarding.ai.later")}</p>
+              </>
             ) : step === "account" ? (
               <>
                 <Heading
@@ -184,51 +210,10 @@ function Onboarding() {
               <UsernameStep
                 value={username}
                 onChange={setUsernameDraft}
-                onDone={() => setStep("plan")}
+                onDone={async () => setStep("plan")}
               />
             ) : (
-              <>
-                <Heading title={t("onboarding.plan.title")} body={t("onboarding.plan.body")} />
-                <div
-                  role="radiogroup"
-                  aria-label={t("onboarding.plan.title")}
-                  className="flex flex-wrap gap-2"
-                >
-                  {(["free", "pro", "max"] as const).map((each) => (
-                    <button
-                      key={each}
-                      type="button"
-                      role="radio"
-                      aria-checked={plan === each}
-                      onClick={() => setPlan(each)}
-                      className={cn(
-                        "flex cursor-pointer items-center gap-2 rounded-full px-4 py-2 text-sm ring-1 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-60",
-                        plan === each
-                          ? "bg-foreground text-background ring-foreground"
-                          : "ring-border hover:bg-accent",
-                      )}
-                    >
-                      <span className="font-medium">{t(`onboarding.plan.${each}.name`)}</span>
-                      <span
-                        className={cn(
-                          "tabular-nums",
-                          plan === each ? "text-background/70" : "text-muted-foreground",
-                        )}
-                      >
-                        {t(`onboarding.plan.${each}.price`)}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {t(`onboarding.plan.${plan}.detail`)}
-                </p>
-                {plan !== "free" && !account ? (
-                  <p className="rounded-2xl bg-muted/50 p-3 text-xs text-muted-foreground">
-                    {t("onboarding.plan.needsAccount")}
-                  </p>
-                ) : null}
-              </>
+              <PlanStep plan={plan} onPlan={setPlan} />
             )}
           </div>
 
@@ -239,29 +224,71 @@ function Onboarding() {
                 {t("onboarding.back")}
               </Button>
             ) : null}
-            <button
-              type="button"
-              onClick={() => void skipAccount()}
-              className="cursor-pointer px-2 text-sm text-muted-foreground underline-offset-4 outline-none hover:text-foreground hover:underline focus-visible:underline"
-            >
-              {step === "plan" ? t("onboarding.plan.later") : t("onboarding.withoutAccount")}
-            </button>
-            {step === "username" ? null : (
+            {step === "profile" ? (
+              <>
+                {!account && !connectAI ? (
+                  <Button variant="ghost" disabled={busy} onClick={() => void finishSetup()}>
+                    {t("onboarding.withoutAccount")}
+                  </Button>
+                ) : null}
+                <Button
+                  className="ms-auto"
+                  disabled={busy}
+                  onClick={() => {
+                    void saveName().catch((error: unknown) =>
+                      toast.error(error instanceof Error ? error.message : String(error)),
+                    );
+                    setStep(connectAI ? "ai" : "account");
+                  }}
+                >
+                  {t("onboarding.next")}
+                </Button>
+              </>
+            ) : step === "ai" ? (
+              <Button className="ms-auto" disabled={busy} onClick={() => setStep("account")}>
+                {t("onboarding.next")}
+              </Button>
+            ) : step === "plan" ? (
+              <>
+                {plan !== "free" && account?.account.plan !== plan ? (
+                  <Button
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() => {
+                      setPlan("free");
+                      void saveName()
+                        .then(finish)
+                        .catch((error: unknown) =>
+                          toast.error(error instanceof Error ? error.message : String(error)),
+                        );
+                    }}
+                  >
+                    {t("onboarding.plan.later")}
+                  </Button>
+                ) : null}
+                <Button className="ms-auto" disabled={busy} onClick={() => void finishSetup()}>
+                  {plan === "free" || account?.account.plan === plan
+                    ? t("onboarding.finish")
+                    : t("onboarding.plan.subscribe", { plan: t(`onboarding.plan.${plan}.name`) })}
+                </Button>
+              </>
+            ) : (
               <Button
                 className="ms-auto"
-                disabled={busy || (step === "plan" && plan !== "free" && !account)}
-                onClick={() => {
-                  if (step === "plan") return void complete();
-                  if (step === "profile") void saveName();
-                  setStep(steps[at + 1]);
-                }}
+                variant={step === "username" ? "ghost" : "default"}
+                disabled={busy}
+                onClick={() =>
+                  step === "account" && needsUsername
+                    ? setStep("username")
+                    : account
+                      ? setStep("plan")
+                      : void finishSetup()
+                }
               >
-                {step === "plan"
-                  ? plan === "free" || account?.account.plan === plan
-                    ? t("onboarding.finish")
-                    : t("onboarding.plan.subscribe", { plan: t(`onboarding.plan.${plan}.name`) })
-                  : step === "account" && !account
-                    ? t("onboarding.account.skip")
+                {step === "username"
+                  ? t("onboarding.skip")
+                  : !account
+                    ? t("onboarding.withoutAccount")
                     : t("onboarding.next")}
               </Button>
             )}
@@ -273,11 +300,55 @@ function Onboarding() {
           name={shownName}
           username={account?.user.username ?? (username || null)}
           email={account?.user.email ?? null}
-          plan={plan}
           step={step}
         />
       </div>
     </div>
+  );
+}
+
+/** Better Vault AI and Cloud: Free, Pro or Max, bought through Dodo Payments when finishing. */
+function PlanStep({ plan, onPlan }: { plan: Plan; onPlan: (plan: Plan) => void }) {
+  const { t } = useTranslation("common");
+  const plans = ["free", "pro", "max"] as const;
+  return (
+    <>
+      <Heading title={t("onboarding.plan.title")} body={t("onboarding.plan.body")} />
+      <div
+        role="radiogroup"
+        aria-label={t("onboarding.plan.title")}
+        className="flex flex-wrap gap-2"
+      >
+        {plans.map((each) => (
+          <button
+            key={each}
+            type="button"
+            role="radio"
+            aria-checked={plan === each}
+            tabIndex={plan === each ? 0 : -1}
+            onKeyDown={(event) => onRadioKeys(event, plans, plan, onPlan)}
+            onClick={() => onPlan(each)}
+            className={cn(
+              "flex cursor-pointer items-center gap-2 rounded-full px-4 py-2 text-sm ring-1 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              plan === each
+                ? "bg-foreground text-background ring-foreground"
+                : "ring-border hover:bg-accent",
+            )}
+          >
+            <span className="font-medium">{t(`onboarding.plan.${each}.name`)}</span>
+            <span
+              className={cn(
+                "tabular-nums",
+                plan === each ? "text-background/70" : "text-muted-foreground",
+              )}
+            >
+              {t(`onboarding.plan.${each}.price`)}
+            </span>
+          </button>
+        ))}
+      </div>
+      <p className="text-sm text-muted-foreground">{t(`onboarding.plan.${plan}.detail`)}</p>
+    </>
   );
 }
 
@@ -353,7 +424,7 @@ function UsernameStep({
 }: {
   value: string;
   onChange: (value: string) => void;
-  onDone: () => void;
+  onDone: () => Promise<void>;
 }) {
   const { t } = useTranslation("common");
   const id = useId();
@@ -434,28 +505,28 @@ const PAGE_H = 600;
 
 /**
  * The real notebooks page, drawn small, with the Settings sheet open as it
- * really is: its Account row shows the name, picture and username typed,
- * its Subscription row the plan chosen. Same classes as the live
- * components (vault-sidebar, home-cards, settings-row), scaled to fit.
+ * really is: its seven groups, the Account row showing the name, picture and
+ * username typed, and the AI row the subscriptions connected. It uses the
+ * live components' styles, scaled to fit.
  */
 function Preview({
   name,
   username,
   email,
-  plan,
   step,
 }: {
   name: string;
   username: string | null;
   email: string | null;
-  plan: Plan;
   step: Step;
 }) {
   const { t } = useTranslation("common");
   const { t: tHome } = useTranslation("home");
-  const { t: tNotes } = useTranslation("notes");
+  const { t: tShell } = useTranslation("shell");
   const { t: tSettings } = useTranslation("settings");
   const profile = useProfile();
+  const { accounts } = useSubscriptionConnections();
+  const subscriptions = [...new Set(accounts.map(({ provider }) => cliProxyBrands[provider]))];
   const frame = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.4);
   useEffect(() => {
@@ -467,13 +538,9 @@ function Preview({
   }, []);
 
   const row =
-    "relative flex h-8 w-full min-w-0 items-center gap-2.5 rounded-xl px-2.5 text-start text-sm";
-  const lit = (on: boolean) => (on ? "ring-2 ring-primary/70" : "");
-  const tiles = [
-    { title: tHome("untitled"), tint: "bg-chart-2/15 text-chart-2" },
-    { title: tNotes("title"), tint: "bg-chart-3/15 text-chart-3" },
-    { title: tHome("folders.untitled"), tint: "bg-chart-4/15 text-chart-4" },
-  ];
+    "flex h-8 w-full min-w-0 items-center gap-3 rounded-md px-2 text-start text-[0.8125rem] leading-5 text-muted-foreground";
+  const heading = "px-2 pt-4 pb-1 text-xs font-medium text-muted-foreground";
+  const highlight = "ring-2 ring-primary/70";
   return (
     <div
       className="relative hidden flex-col justify-center gap-4 border-s bg-muted/40 p-6 lg:flex"
@@ -488,92 +555,84 @@ function Preview({
           className="pointer-events-none absolute start-0 top-0 flex origin-top-left bg-background select-none rtl:origin-top-right"
           style={{ width: PAGE_W, height: PAGE_H, transform: `scale(${scale})` }}
         >
-          {/* The sidebar, as in components/home/vault-sidebar.tsx. */}
-          <aside className="m-2 me-0 flex w-60 shrink-0 flex-col rounded-3xl bg-muted/60 ring-1 ring-border/60">
-            <div className="flex h-14 shrink-0 items-center gap-2.5 px-4">
-              <Logo size={24} />
-              <span className="truncate text-sm font-semibold">{tHome("vaults.appTitle")}</span>
+          {/* The sidebar, as in components/shell/app-sidebar.tsx. */}
+          <aside className="flex w-56 shrink-0 flex-col ps-3 pe-2 pb-2">
+            <div className="flex h-13 shrink-0 items-center gap-3 px-2 text-[0.8125rem] font-medium">
+              <span className="flex size-5 items-center justify-center rounded-md bg-muted text-xs inset-ring inset-ring-border">
+                {tHome("vaults.default").slice(0, 1)}
+              </span>
+              {tHome("vaults.default")}
             </div>
-            <nav className="flex flex-col gap-5 px-2 pb-3">
-              <section className="flex flex-col gap-0.5">
-                <h2 className="px-2.5 pb-1 text-xs font-medium text-muted-foreground">
-                  {tHome("vaults.library")}
-                </h2>
-                {(
-                  [
-                    [Clock01Icon, tHome("vaults.recent")],
-                    [GridViewIcon, tHome("vaults.all")],
-                    [Note01Icon, tNotes("title")],
-                    [MagicWand01Icon, tNotes("skillsTitle")],
-                    [Calendar03Icon, tHome("calendar.title")],
-                  ] as const
-                ).map(([icon, label], index) => (
-                  <span
-                    key={label}
-                    className={cn(row, index === 1 && "bg-foreground/10 font-medium")}
-                  >
-                    <Icon icon={icon} size={18} className="text-muted-foreground" />
-                    {label}
-                  </span>
-                ))}
-              </section>
-              <section className="flex flex-col gap-0.5">
-                <h2 className="px-2.5 pb-1 text-xs font-medium text-muted-foreground">
-                  {tHome("vaults.label")}
-                </h2>
-                <span className={cn(row, "font-medium")}>
-                  <span className="flex size-6 shrink-0 items-center justify-center rounded-lg bg-muted">
-                    <Icon icon={Note01Icon} size={14} />
-                  </span>
-                  {tHome("vaults.default")}
-                </span>
-              </section>
-            </nav>
+            <span className={cn(row, "mt-1 border border-input font-medium text-foreground")}>
+              <Icon icon={Add01Icon} size={16} strokeWidth={1.5} />
+              <span className="flex-1">{tShell("nav.add")}</span>
+              <span className="text-xs font-normal text-muted-foreground">
+                {tShell("nav.addHint")}
+              </span>
+            </span>
+            <p className={heading}>{tShell("nav.study")}</p>
+            {(
+              [
+                [Sun03Icon, tShell("nav.today")],
+                [Target02Icon, tShell("nav.practice")],
+                [RepeatIcon, tShell("nav.review")],
+                [Books01Icon, tShell("nav.library")],
+              ] as const
+            ).map(([icon, label]) => (
+              <span key={label} className={row}>
+                <Icon icon={icon} size={16} strokeWidth={1.5} />
+                {label}
+              </span>
+            ))}
+            <p className={heading}>{tShell("nav.notebooks")}</p>
+            {(
+              [
+                [Clock01Icon, tShell("nav.recent")],
+                [Note01Icon, tShell("nav.notes")],
+              ] as const
+            ).map(([icon, label]) => (
+              <span key={label} className={row}>
+                <Icon icon={icon} size={16} strokeWidth={1.5} />
+                {label}
+              </span>
+            ))}
+            <p className={heading}>{tShell("nav.tools")}</p>
+            {(
+              [
+                [Calendar03Icon, tShell("nav.calendar")],
+                [BotIcon, tShell("nav.bot")],
+                [MagicWand01Icon, tShell("nav.skills")],
+              ] as const
+            ).map(([icon, label]) => (
+              <span key={label} className={row}>
+                <Icon icon={icon} size={16} strokeWidth={1.5} />
+                {label}
+              </span>
+            ))}
           </aside>
 
-          {/* The page, as in components/home/notebook-home.tsx. */}
-          <div className="flex min-w-0 flex-1 flex-col">
-            <header className="flex h-16 shrink-0 items-center gap-3 px-6">
-              <div className="flex h-10 items-center gap-0.5 rounded-full bg-card px-1 ring-1 ring-border">
-                <span className="flex size-8 items-center justify-center text-muted-foreground">
-                  <Icon icon={ArrowLeft01Icon} size={18} />
-                </span>
-                <span className="flex size-8 items-center justify-center text-muted-foreground">
-                  <Icon icon={ArrowRight01Icon} size={18} />
-                </span>
-              </div>
-              <h1 className="min-w-0 flex-1 truncate text-lg font-semibold tracking-tight">
-                {tHome("vaults.default")}
+          {/* The notebooks list, as in components/home/notebook-home.tsx. */}
+          <div className="my-2 me-2 flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card">
+            <header className="flex h-13 shrink-0 items-center gap-3 border-b ps-5 pe-2">
+              <h1 className="min-w-0 flex-1 truncate text-[0.8125rem] font-medium">
+                {tShell("list.title")}
               </h1>
-              <div className="flex h-10 items-center gap-0.5 rounded-full bg-card px-1 ring-1 ring-border">
-                {[GridViewIcon, Add01Icon, FolderAddIcon].map((icon, index) => (
-                  <span
-                    key={index}
-                    className="flex size-8 items-center justify-center text-muted-foreground"
-                  >
-                    <Icon icon={icon} size={18} />
-                  </span>
-                ))}
-              </div>
-              <span className="flex size-10 items-center justify-center rounded-full bg-card text-muted-foreground ring-1 ring-border">
-                <Icon icon={Search01Icon} size={18} />
+              <span className="flex h-8 items-center gap-2 rounded-md px-3 text-[0.8125rem] font-medium">
+                <Icon icon={Add01Icon} size={16} className="text-muted-foreground" />
+                {tShell("list.add")}
+              </span>
+              <span className="flex h-8 items-center rounded-md bg-primary px-3 text-[0.8125rem] font-medium text-primary-foreground">
+                {tShell("list.newNotebook")}
               </span>
             </header>
-            <main className="grid grid-cols-5 gap-2 px-6 pt-2">
-              {tiles.map((tile) => (
-                <div
-                  key={tile.title}
-                  className="flex flex-col items-center gap-2 rounded-2xl px-2 pt-4 pb-3 text-center"
-                >
-                  <span
-                    className={cn(
-                      "flex size-20 items-center justify-center rounded-[1.375rem]",
-                      tile.tint,
-                    )}
-                  >
-                    <Icon icon={Note01Icon} size={34} />
+            <main className="flex flex-col px-6 pt-8">
+              {[0, 1, 2].map((index) => (
+                <div key={index} className="flex items-center gap-4 border-b py-4">
+                  <span className="h-12 w-9 shrink-0 rounded-md bg-muted" />
+                  <span className="flex min-w-0 flex-1 flex-col gap-2">
+                    <span className="h-3 w-2/5 rounded-full bg-muted" />
+                    <span className="h-2.5 w-3/5 rounded-full bg-muted/70" />
                   </span>
-                  <span className="w-full truncate text-sm font-medium">{tile.title}</span>
                 </div>
               ))}
             </main>
@@ -585,45 +644,50 @@ function Preview({
             <p className="pb-4 text-sm text-muted-foreground">{tSettings("description")}</p>
             <div className="-mx-2 flex flex-col gap-0.5">
               <SheetRow
-                className={lit(step === "profile" || step === "username")}
+                className={step === "ai" ? highlight : undefined}
+                icon={<Icon icon={AiBrain01Icon} />}
+                label={tSettings("groups.ai.label")}
+                hint={
+                  subscriptions.length > 0
+                    ? subscriptions.join(", ")
+                    : tSettings("groups.ai.detail")
+                }
+              />
+              <SheetRow
+                icon={<Icon icon={AiVoiceIcon} />}
+                label={tSettings("groups.reading.label")}
+                hint={tSettings("groups.reading.detail")}
+              />
+              <SheetRow
+                className={step === "ai" ? undefined : highlight}
                 icon={<Avatar profile={profile ? { ...profile, name } : undefined} size={36} />}
-                label={name || tSettings("rows.account")}
+                label={name || tSettings("groups.account.label")}
                 hint={
                   username
                     ? `@${username}`
                     : (email ??
-                      (name ? tSettings("rows.accountHint") : tSettings("rows.accountSetUp")))
-                }
-              />
-              <SheetRow
-                className={lit(step === "account" || step === "plan")}
-                icon={<Logo size={22} />}
-                label={tSettings("rows.subscription")}
-                hint={
-                  plan === "free"
-                    ? tSettings("rows.subscriptionNone")
-                    : tSettings("rows.subscriptionPlan", {
-                        plan: tSettings(`subscription.plans.${plan}`),
-                      })
-                }
-              />
-              <SheetRow
-                icon={<Icon icon={AiBrain01Icon} />}
-                label={tSettings("rows.providers")}
-                hint={
-                  plan === "free"
-                    ? tSettings("rows.providersNone")
-                    : t("onboarding.preview.betterVault")
+                      (name ? tSettings("rows.accountHint") : tSettings("groups.account.detail")))
                 }
               />
               <SheetRow
                 icon={<Icon icon={CloudServerIcon} />}
-                label={tSettings("rows.storage")}
-                hint={tSettings("rows.storageNone")}
+                label={tSettings("groups.storage.label")}
+                hint={tSettings("groups.storage.detail")}
               />
               <SheetRow
                 icon={<Icon icon={PaintBoardIcon} />}
-                label={tSettings("rows.appearance")}
+                label={tSettings("groups.appearance.label")}
+                hint={tSettings("groups.appearance.detail")}
+              />
+              <SheetRow
+                icon={<Icon icon={PlugSocketIcon} />}
+                label={tSettings("groups.tools.label")}
+                hint={tSettings("groups.tools.detail")}
+              />
+              <SheetRow
+                icon={<Icon icon={InformationCircleIcon} />}
+                label={tSettings("groups.about.label")}
+                hint={tSettings("groups.about.detail")}
               />
             </div>
           </div>

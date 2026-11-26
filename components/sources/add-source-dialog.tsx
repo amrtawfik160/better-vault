@@ -1,48 +1,77 @@
 import {
+  ArrowLeft01Icon,
+  Add01Icon,
+  AlertCircleIcon,
   CloudServerIcon,
   CloudUploadIcon,
-  Globe02Icon,
   Link01Icon,
   Loading03Icon,
-  TextIcon,
+  PodcastIcon,
   YoutubeIcon,
 } from "@hugeicons/core-free-icons";
-import { useId, useRef, useState, useSyncExternalStore, type DragEvent } from "react";
+import {
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type DragEvent,
+  type KeyboardEvent,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { Field } from "@/components/common/field";
-import { Segmented } from "@/components/common/segmented";
 import { Icon } from "@/components/icon";
+import { Alert } from "@/components/panelui/alert";
 import { Button } from "@/components/panelui/button";
 import { Dialog } from "@/components/panelui/dialog";
 import { Input } from "@/components/panelui/input";
+import { Select } from "@/components/panelui/select";
 import { Textarea } from "@/components/panelui/textarea";
-import { SOURCE_EXTENSIONS } from "@/lib/sources/formats";
-import { youTubeId } from "@/lib/sources/youtube";
+import { createNotebook, useNotebooks } from "@/lib/db/notebooks";
+import { DEFAULT_VAULT, vaultOf } from "@/lib/db/vaults";
 import {
   ACCEPTED_FILES,
   IngestError,
   ingestFile,
   ingestText,
+  ingestTranscript,
   ingestUrl,
+  type VideoInfo,
 } from "@/lib/sources/ingest";
+import { SOURCE_EXTENSIONS } from "@/lib/sources/formats";
+import { pastedTitle } from "@/lib/sources/pasted-title";
+import { youTubeId } from "@/lib/sources/youtube";
 import { CloudBrowser } from "@/components/storage/cloud-browser";
 import { storageIds } from "@/lib/storage/catalog";
 import { storageClient } from "@/lib/storage/clients";
 import { googlePicker } from "@/lib/storage/clients/google-drive";
 import { isStorageReady, useStorageSettings } from "@/lib/storage/settings";
 import { cn } from "@/lib/utils";
+import {
+  TranscriptFields,
+  emptyTranscriptDraft,
+  transcriptDraftLink,
+  transcriptDraftReady,
+  transcriptDraftText,
+} from "./transcript-fields";
+import { YouTubeGeminiCard } from "./youtube-gemini-card";
 
-type Mode = "file" | "cloud" | "url" | "text";
+type Mode = "main" | "cloud" | "media";
+
+/** What counts as a link: one web address and nothing else. */
+const WEB_ADDRESS = /^https?:\/\/\S+$/i;
 
 interface AddSourceDialogProps {
-  notebookId: string;
+  /** The notebook offered first. Without one (a vault with no notebook yet), a new one is made on Add. */
+  notebookId?: string;
+  /** The vault a notebook made here goes to, when there is no `notebookId`. */
+  vaultId?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-/** Adds sources from files, storage, a link (a web page or a YouTube video) or pasted text. */
-export function AddSourceDialog({ notebookId, open, onOpenChange }: AddSourceDialogProps) {
+/** One box for a link (a web page or a YouTube video), files or pasted text, and the notebook it goes to. */
+export function AddSourceDialog({ notebookId, vaultId, open, onOpenChange }: AddSourceDialogProps) {
   const { t } = useTranslation("sources");
   const { t: tCommon } = useTranslation();
   // Google's Picker opens over the dialog, outside it: a press or Escape there must not close it.
@@ -56,30 +85,76 @@ export function AddSourceDialog({ notebookId, open, onOpenChange }: AddSourceDia
     >
       <Dialog.Content size="lg" closeLabel={tCommon("actions.close")}>
         <Dialog.Header title={t("addDialog.title")} description={t("addDialog.description")} />
-        <AddSourceForm notebookId={notebookId} onDone={() => onOpenChange(false)} />
+        <AddSourceForm
+          notebookId={notebookId}
+          vaultId={vaultId}
+          onDone={() => onOpenChange(false)}
+        />
       </Dialog.Content>
     </Dialog>
   );
 }
 
-function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () => void }) {
+function AddSourceForm({
+  notebookId,
+  vaultId,
+  onDone,
+}: {
+  notebookId?: string;
+  vaultId?: string;
+  onDone: () => void;
+}) {
   const { t } = useTranslation("sources");
   const { t: tCommon } = useTranslation();
+  const { t: tHome } = useTranslation("home");
   const formId = useId();
-  const urlId = useId();
-  const titleId = useId();
-  const textId = useId();
+  const sourceId = useId();
+  const whereId = useId();
+  const whyId = useId();
   const fileInput = useRef<HTMLInputElement>(null);
-  const [mode, setMode] = useState<Mode>("file");
-  const [url, setUrl] = useState("");
-  const [title, setTitle] = useState("");
-  const [text, setText] = useState("");
+  const field = useRef<HTMLTextAreaElement>(null);
+  const [mode, setMode] = useState<Mode>("main");
+  const [source, setSource] = useState("");
+  const [target, setTarget] = useState(notebookId ?? "");
+  // With no notebook yet, the name of the one Add makes is asked for at once (it may stay empty).
+  const [creating, setCreating] = useState(!notebookId);
+  const [focusName, setFocusName] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+  // A link that could not be read: why, and what to do instead.
+  const [linkFailure, setLinkFailure] = useState<{ host: string; reason: string }>();
+  const [transcript, setTranscript] = useState(emptyTranscriptDraft);
+  const [transcribing, setTranscribing] = useState(false);
+  // A YouTube video without captions: Gemini can write its transcript instead.
+  const [uncaptioned, setUncaptioned] = useState<VideoInfo>();
+  const [geminiBusy, setGeminiBusy] = useState(false);
+  const notebooks = useNotebooks();
   // "From storage" appears once a storage service is connected (Settings → Storage).
   const storage = useStorageSettings();
   const hasStorage = storage ? storageIds.some((id) => isStorageReady(storage, id)) : false;
+
+  const trimmed = source.trim();
+  const kind =
+    trimmed === ""
+      ? "empty"
+      : WEB_ADDRESS.test(trimmed)
+        ? youTubeId(trimmed)
+          ? "video"
+          : "link"
+        : "text";
+  const choices = useMemo(() => {
+    const current = notebooks?.find((notebook) => notebook.id === notebookId);
+    const vault = current ? vaultOf(current) : vaultId;
+    const sameVault = (notebooks ?? []).filter((notebook) => !vault || vaultOf(notebook) === vault);
+    const others = sameVault.filter((notebook) => notebook.id !== notebookId);
+    const picked = others.find((notebook) => notebook.id === target);
+    const rest = others.filter((notebook) => notebook.id !== target);
+    return [...(current ? [current] : []), ...(picked ? [picked] : []), ...rest];
+  }, [notebooks, notebookId, vaultId, target]);
+  const targetTitle = choices.find((notebook) => notebook.id === target)?.title ?? "";
+  const locked = busy || geminiBusy;
 
   function describe(error: unknown): string {
     if (error instanceof IngestError) {
@@ -91,10 +166,34 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
   }
 
   /** Runs the adds, reports what happened and closes when everything worked. */
-  async function run(tasks: (() => Promise<unknown>)[]) {
+  /** Where things go: the chosen notebook, or, in a vault with none, a new one named as typed. */
+  async function ensureTarget(): Promise<string> {
+    if (target) return target;
+    const id = await createNotebook(newTitle.trim() || tHome("untitled"), notebookVault());
+    setTarget(id);
+    setCreating(false);
+    setNewTitle("");
+    return id;
+  }
+
+  function notebookVault() {
+    const current = notebooks?.find((notebook) => notebook.id === notebookId);
+    if (current) return { vaultId: current.vaultId };
+    return vaultId && vaultId !== DEFAULT_VAULT ? { vaultId } : {};
+  }
+
+  async function run(tasks: ((notebook: string) => Promise<unknown>)[]) {
     setBusy(true);
     setErrors([]);
-    const results = await Promise.allSettled(tasks.map((task) => task()));
+    let notebook: string;
+    try {
+      notebook = await ensureTarget();
+    } catch (error) {
+      setBusy(false);
+      setErrors([describe(error)]);
+      return;
+    }
+    const results = await Promise.allSettled(tasks.map((task) => task(notebook)));
     setBusy(false);
     const added = results.filter((result) => result.status === "fulfilled").length;
     const failed = results.flatMap((result) =>
@@ -105,76 +204,109 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
     else onDone();
   }
 
-  function addFiles(files: FileList | File[]) {
-    const list = [...files];
-    if (list.length > 0) void run(list.map((file) => () => ingestFile(notebookId, file)));
+  /** A link: a page's text, or a video's captions; a video without them offers Gemini. */
+  async function addLink(address: string) {
+    setBusy(true);
+    setErrors([]);
+    setLinkFailure(undefined);
+    setUncaptioned(undefined);
+    try {
+      await ingestUrl(await ensureTarget(), address);
+      toast.success(t("added", { count: 1 }));
+      onDone();
+    } catch (error) {
+      if (error instanceof IngestError && error.reason === "noCaptions" && error.video)
+        setUncaptioned(error.video);
+      else {
+        let host = address;
+        try {
+          host = new URL(address).host;
+        } catch {
+          // keep the address as typed
+        }
+        setLinkFailure({ host, reason: describe(error) });
+      }
+    } finally {
+      setBusy(false);
+    }
   }
 
+  function addFiles(files: FileList | File[]) {
+    const list = [...files];
+    if (list.length > 0) void run(list.map((file) => (notebook) => ingestFile(notebook, file)));
+  }
+
+  async function makeNotebook() {
+    const title = newTitle.trim();
+    if (!title) return;
+    const id = await createNotebook(title, notebookVault());
+    setTarget(id);
+    setCreating(false);
+    setNewTitle("");
+  }
+
+  const canSubmit =
+    !locked &&
+    (mode === "media"
+      ? !transcribing && transcriptDraftReady(transcript)
+      : kind !== "empty" && !uncaptioned);
+
   function submit() {
-    if (mode === "url") {
-      const address = url.trim();
-      if (!/^https?:\/\/\S+$/i.test(address)) {
-        setErrors([t("errors.url")]);
-        return;
-      }
-      void run([() => ingestUrl(notebookId, address)]);
-    } else if (mode === "text" && text.trim()) {
+    if (!canSubmit) return;
+    if (mode === "media") {
       void run([
-        () => ingestText(notebookId, title.trim() || t("addDialog.textTitlePlaceholder"), text),
+        (notebook) =>
+          ingestTranscript(notebook, {
+            title: transcript.title.trim(),
+            text: transcriptDraftText(transcript),
+            link: transcriptDraftLink(transcript),
+          }),
       ]);
+    } else if (kind === "text") {
+      const firstLine = pastedTitle(trimmed);
+      void run([
+        (notebook) =>
+          ingestText(notebook, firstLine || t("addDialog.textTitlePlaceholder"), source),
+      ]);
+    } else {
+      void addLink(trimmed);
+    }
+  }
+
+  function onSourceKey(event: KeyboardEvent) {
+    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+      event.preventDefault();
+      submit();
     }
   }
 
   const onDrop = (event: DragEvent) => {
     event.preventDefault();
     setDragging(false);
-    addFiles(event.dataTransfer.files);
+    if (mode === "main" && !locked) addFiles(event.dataTransfer.files);
   };
 
-  const video = mode === "url" ? youTubeId(url) : null;
-
-  const canSubmit =
-    !busy && (mode === "url" ? url.trim() !== "" : mode === "text" ? text.trim() !== "" : false);
+  const why = busy
+    ? t("addDialog.why.busy")
+    : mode === "media"
+      ? t("addDialog.why.media")
+      : uncaptioned
+        ? t("addDialog.why.captions")
+        : kind === "empty"
+          ? t("addDialog.why.empty")
+          : t("addDialog.why.ready");
 
   return (
     <>
-      <Dialog.Body>
-        <Segmented<Mode>
-          aria-label={t("addDialog.title")}
-          value={mode}
-          onValueChange={(next) => {
-            setMode(next);
-            setErrors([]);
-          }}
-          className="w-full *:flex-1"
-          options={[
-            {
-              value: "file",
-              label: t("addDialog.tabs.file"),
-              icon: <Icon icon={CloudUploadIcon} size={16} />,
-            },
-            ...(hasStorage
-              ? [
-                  {
-                    value: "cloud" as const,
-                    label: t("addDialog.tabs.cloud"),
-                    icon: <Icon icon={CloudServerIcon} size={16} />,
-                  },
-                ]
-              : []),
-            {
-              value: "url",
-              label: t("addDialog.tabs.url"),
-              icon: <Icon icon={Link01Icon} size={16} />,
-            },
-            {
-              value: "text",
-              label: t("addDialog.tabs.text"),
-              icon: <Icon icon={TextIcon} size={16} />,
-            },
-          ]}
-        />
-
+      <Dialog.Body
+        onDragOver={(event: DragEvent) => {
+          event.preventDefault();
+          if (mode === "main") setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={onDrop}
+        className={cn("transition-colors", dragging && "bg-info/5 ring-1 ring-info")}
+      >
         {mode === "cloud" && storage ? (
           <CloudBrowser
             mode="sources"
@@ -184,139 +316,291 @@ function AddSourceForm({ notebookId, onDone }: { notebookId: string; onDone: () 
               const client = storageClient(service, storage[service]);
               return run(
                 files.map(
-                  (file) => async () => ingestFile(notebookId, await client.download(file)),
+                  (file) => async (notebook) => ingestFile(notebook, await client.download(file)),
                 ),
               );
             }}
           />
-        ) : mode === "file" ? (
-          <div
-            onDragOver={(event) => {
-              event.preventDefault();
-              setDragging(true);
-            }}
-            onDragLeave={() => setDragging(false)}
-            onDrop={onDrop}
-            className={cn(
-              "flex flex-col items-center justify-center gap-3 rounded-3xl border border-dashed px-6 py-10 text-center transition-colors",
-              dragging && "border-info bg-info/5",
-            )}
-          >
-            <span className="flex size-12 items-center justify-center rounded-full bg-muted">
-              <Icon
-                icon={busy ? Loading03Icon : CloudUploadIcon}
-                size={22}
-                className={busy ? "animate-spin" : undefined}
-              />
-            </span>
-            <p className="text-sm font-medium">
-              {busy ? t("addDialog.adding") : t("addDialog.drop")}
-            </p>
-            <Button
-              type="button"
-              variant="outline"
-              shape="pill"
-              size="sm"
-              disabled={busy}
-              onClick={() => fileInput.current?.click()}
-            >
-              {t("addDialog.choose")}
-            </Button>
-            <p className="text-xs text-muted-foreground">{t("addDialog.fileTypes")}</p>
-            <input
-              ref={fileInput}
-              type="file"
-              multiple
-              accept={ACCEPTED_FILES}
-              className="hidden"
-              onChange={(event) => {
-                if (event.target.files) addFiles(event.target.files);
-                event.target.value = "";
-              }}
-            />
-          </div>
         ) : (
           <form
             id={formId}
             className="flex flex-col gap-4"
+            aria-busy={busy}
             onSubmit={(event) => {
               event.preventDefault();
               submit();
             }}
           >
-            {mode === "url" ? (
-              <Field
-                label={t("addDialog.urlLabel")}
-                htmlFor={urlId}
-                hint={video ? t("addDialog.youtubeHint") : t("addDialog.urlHint")}
-              >
-                <Input.Group>
-                  <Input.Addon>
-                    <Icon
-                      icon={video ? YoutubeIcon : Globe02Icon}
-                      size={16}
-                      className={video ? "text-foreground" : undefined}
-                    />
-                  </Input.Addon>
-                  <Input
-                    id={urlId}
-                    type="url"
-                    inputMode="url"
-                    autoFocus
-                    placeholder={t("addDialog.urlPlaceholder")}
-                    value={url}
-                    onChange={(event) => setUrl(event.target.value)}
-                  />
-                  {video ? (
-                    <Input.Addon align="end">
-                      <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
-                        {t("formats.youtube")}
-                      </span>
-                    </Input.Addon>
-                  ) : null}
-                </Input.Group>
-              </Field>
+            {mode === "media" ? (
+              <TranscriptFields
+                nested
+                draft={transcript}
+                onChange={setTranscript}
+                disabled={busy}
+                onBusyChange={setTranscribing}
+              />
             ) : (
               <>
-                <Field label={t("addDialog.textTitle")} htmlFor={titleId}>
-                  <Input
-                    id={titleId}
-                    placeholder={t("addDialog.textTitlePlaceholder")}
-                    value={title}
-                    onChange={(event) => setTitle(event.target.value)}
+                <div className="flex items-start gap-2 rounded-xl border bg-background px-3 py-2 shadow-xs focus-within:border-ring focus-within:ring-1 focus-within:ring-ring">
+                  <Icon
+                    icon={kind === "video" ? YoutubeIcon : Link01Icon}
+                    size={16}
+                    className={cn(
+                      "mt-2",
+                      kind === "video" ? "text-foreground" : "text-muted-foreground",
+                    )}
                   />
-                </Field>
-                <Field label={t("addDialog.textLabel")} htmlFor={textId}>
+                  <label htmlFor={sourceId} className="sr-only">
+                    {t("addDialog.inputLabel")}
+                  </label>
                   <Textarea
-                    id={textId}
-                    minRows={6}
-                    maxRows={14}
-                    placeholder={t("addDialog.textPlaceholder")}
-                    value={text}
-                    onChange={(event) => setText(event.target.value)}
+                    ref={field}
+                    id={sourceId}
+                    variant="ghost"
+                    autoFocus
+                    minRows={1}
+                    maxRows={8}
+                    disabled={locked}
+                    placeholder={t("addDialog.placeholder")}
+                    value={source}
+                    onKeyDown={onSourceKey}
+                    onChange={(event) => {
+                      setSource(event.target.value);
+                      setUncaptioned(undefined);
+                      setLinkFailure(undefined);
+                      setErrors([]);
+                    }}
+                    className="min-w-0 flex-1 px-0"
                   />
-                </Field>
+                  {/* Once something is typed or pasted, the file button folds to its icon so the text has room. */}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size={source ? "icon-sm" : "sm"}
+                    disabled={locked}
+                    aria-label={source ? t("addDialog.choose") : undefined}
+                    title={source ? t("addDialog.choose") : undefined}
+                    onClick={() => fileInput.current?.click()}
+                  >
+                    <Icon icon={CloudUploadIcon} size={16} />
+                    {source ? null : t("addDialog.choose")}
+                  </Button>
+                  <input
+                    ref={fileInput}
+                    type="file"
+                    multiple
+                    accept={ACCEPTED_FILES}
+                    className="hidden"
+                    onChange={(event) => {
+                      if (event.target.files) addFiles(event.target.files);
+                      event.target.value = "";
+                    }}
+                  />
+                </div>
+
+                {kind === "empty" && !busy ? (
+                  <p className="text-sm text-muted-foreground">
+                    {t("addDialog.takes")} · {t("addDialog.fileTypes")}
+                  </p>
+                ) : null}
+
+                {kind !== "empty" && !busy && !linkFailure && !uncaptioned ? (
+                  <p className="text-sm text-muted-foreground">{t(`addDialog.kind.${kind}`)}</p>
+                ) : null}
+
+                {busy ? (
+                  <p
+                    role="status"
+                    className="flex items-center gap-2 text-sm text-muted-foreground"
+                  >
+                    <Icon icon={Loading03Icon} size={16} className="animate-spin" />
+                    {t("addDialog.reading", { name: targetTitle })}
+                  </p>
+                ) : null}
+
+                {uncaptioned ? (
+                  <YouTubeGeminiCard
+                    notebookId={target}
+                    video={uncaptioned}
+                    onBusyChange={setGeminiBusy}
+                    onAdded={() => {
+                      toast.success(t("added", { count: 1 }));
+                      onDone();
+                    }}
+                  />
+                ) : null}
+
+                {linkFailure ? (
+                  // Panel's inline error (design-system §7): the cause, then the fixes as buttons.
+                  <Alert tone="destructive" variant="plain" className="rounded-xl">
+                    <Alert.Icon>
+                      <Icon icon={AlertCircleIcon} size={16} />
+                    </Alert.Icon>
+                    <Alert.Title>{t("addDialog.failed.title")}</Alert.Title>
+                    <Alert.Description>
+                      {t("addDialog.failed.body", {
+                        host: linkFailure.host,
+                        reason: linkFailure.reason,
+                      })}
+                    </Alert.Description>
+                    <Alert.Actions>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="border border-input"
+                        onClick={() => {
+                          setSource("");
+                          setLinkFailure(undefined);
+                          field.current?.focus();
+                        }}
+                      >
+                        {t("addDialog.failed.paste")}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => void addLink(trimmed)}
+                      >
+                        {t("addDialog.failed.retry")}
+                      </Button>
+                    </Alert.Actions>
+                  </Alert>
+                ) : null}
               </>
             )}
+
+            {errors.length > 0 ? (
+              <ul role="alert" className="flex flex-col gap-1 text-sm text-destructive">
+                {errors.map((error, at) => (
+                  <li key={at}>{error}</li>
+                ))}
+              </ul>
+            ) : null}
           </form>
         )}
 
-        {errors.length > 0 ? (
-          <ul role="alert" className="flex flex-col gap-1 text-sm text-destructive">
-            {errors.map((error, at) => (
-              <li key={at}>{error}</li>
-            ))}
-          </ul>
-        ) : null}
+        {/* Where it goes: a field of its own, so a long notebook name stays on one line. */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 pt-4">
+          <span id={whereId} className="text-sm text-muted-foreground">
+            {t("addDialog.goesTo")}
+          </span>
+          {creating ? (
+            <Input
+              autoFocus={focusName}
+              size="sm"
+              value={newTitle}
+              aria-label={t("addDialog.newNotebookLabel")}
+              // With no notebook yet, Add makes this one: an empty name keeps the default.
+              placeholder={target ? t("addDialog.newNotebookPlaceholder") : tHome("untitled")}
+              onChange={(event) => setNewTitle(event.target.value)}
+              onBlur={() => {
+                if (!newTitle.trim() && target) setCreating(false);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void makeNotebook();
+                } else if (event.key === "Escape" && target) {
+                  event.stopPropagation();
+                  setCreating(false);
+                }
+              }}
+              className="min-w-0 flex-1"
+            />
+          ) : (
+            <>
+              <Select
+                items={choices.map(({ id, title }) => ({ value: id, label: title }))}
+                value={target}
+                onValueChange={(value) => typeof value === "string" && setTarget(value)}
+                disabled={locked}
+              >
+                <Select.Trigger size="sm" aria-labelledby={whereId} className="min-w-0 flex-1">
+                  <Select.Value className="truncate" />
+                </Select.Trigger>
+                <Select.Content className="max-w-(--anchor-width)">
+                  {choices.map((notebook) => (
+                    <Select.Item
+                      key={notebook.id}
+                      value={notebook.id}
+                      description={notebook.id === notebookId ? t("addDialog.current") : undefined}
+                    >
+                      {notebook.title}
+                    </Select.Item>
+                  ))}
+                </Select.Content>
+              </Select>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={locked}
+                onClick={() => {
+                  setFocusName(true);
+                  setCreating(true);
+                }}
+              >
+                <Icon icon={Add01Icon} size={14} />
+                {t("addDialog.newNotebook")}
+              </Button>
+            </>
+          )}
+        </div>
+        {/* The other ways in: a transcript or a recording, and files in connected storage. */}
+        <div className="-mx-2 flex flex-wrap gap-1 pt-1">
+          {mode === "main" ? (
+            <>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setMode("media")}>
+                <Icon icon={PodcastIcon} size={16} />
+                {t("addDialog.tabs.media")}
+              </Button>
+              {hasStorage ? (
+                <Button type="button" variant="ghost" size="sm" onClick={() => setMode("cloud")}>
+                  <Icon icon={CloudServerIcon} size={16} />
+                  {t("addDialog.tabs.cloud")}
+                </Button>
+              ) : null}
+            </>
+          ) : (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={transcribing || geminiBusy}
+              onClick={() => {
+                setMode("main");
+                setErrors([]);
+              }}
+            >
+              <Icon icon={ArrowLeft01Icon} size={16} className="rtl:rotate-180" />
+              {t("addDialog.back")}
+            </Button>
+          )}
+        </div>
       </Dialog.Body>
       <Dialog.Footer>
         <Dialog.Close render={<Button variant="secondary" />}>
           {tCommon("actions.cancel")}
         </Dialog.Close>
-        {mode !== "file" ? (
-          <Button type="submit" form={formId} disabled={!canSubmit} loading={busy}>
-            {t("addDialog.submit")}
-          </Button>
+        {mode !== "cloud" ? (
+          <>
+            <Button
+              type="submit"
+              form={formId}
+              disabled={!canSubmit}
+              loading={busy}
+              aria-describedby={whyId}
+            >
+              {t("addDialog.submit")}
+            </Button>
+            {/* The body already says what is missing; this tells a screen reader why Add waits. */}
+            <span id={whyId} className="sr-only">
+              {why}
+            </span>
+          </>
         ) : null}
       </Dialog.Footer>
     </>

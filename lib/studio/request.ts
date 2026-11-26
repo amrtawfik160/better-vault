@@ -1,7 +1,7 @@
 import type { Effort, ModelRef, ProviderCredentials } from "@/lib/ai/catalog";
 import {
-  activeModel,
-  availableModels,
+  modelFor,
+  resolveModel,
   contextCharsFor,
   credentialsFor,
   effortFor,
@@ -49,17 +49,17 @@ export async function modelRequestFor(
   sourceIds: readonly string[],
   query: string,
   budget?: number,
-  /** A model chosen for this output; the prompt bar's when it is gone or not given. */
+  /** A model chosen for this output; the prompt bar's when no model was chosen. */
   preferred?: ModelRef | null,
 ): Promise<ModelRequest> {
   const settings = await getSettings();
-  const usable = preferred
-    ? availableModels(settings).find(
-        (model) => model.provider === preferred.provider && model.modelId === preferred.modelId,
-      )
-    : undefined;
-  const model = usable ?? activeModel(settings);
-  if (!model) throw new NoModelError();
+  // A tool's own model (the audio overview's writer) thinks at its provider's effort.
+  const writer = preferred ? resolveModel(settings, preferred) : null;
+  const choice = preferred
+    ? writer && { model: writer, effort: effortFor(settings, writer.provider) }
+    : modelFor(settings, "studio");
+  if (!choice) throw new NoModelError();
+  const { model, effort } = choice;
   const sources = await getSources(sourceIds);
   const chunks = await getChunks(sources.map((source) => source.id));
   const limit = contextCharsFor(settings, model.provider);
@@ -73,7 +73,7 @@ export async function modelRequestFor(
   return {
     model,
     credentials: credentialsFor(settings, model.provider),
-    effort: effortFor(settings, model.provider),
+    effort,
     passages,
   };
 }

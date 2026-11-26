@@ -277,6 +277,41 @@ html[data-window-controls]
   .markdown td {
     @apply border-b px-3 py-2 align-top;
   }
+  .study-math .katex {
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
+  .study-math .katex-display {
+    @apply max-w-full overflow-x-auto overflow-y-hidden py-1;
+    direction: ltr;
+  }
+  .study-math .katex-display > .katex {
+    width: max-content;
+    min-width: 100%;
+  }
+
+  /* The passage a selection menu is about, kept marked while the menu has focus. */
+  ::highlight(study-selection),
+  ::highlight(text-selection) {
+    background-color: color-mix(in oklab, var(--primary) 18%, transparent);
+  }
+
+  .markdown.study-reading-text h1 {
+    font-size: 1.33em;
+    line-height: 1.33;
+  }
+  .markdown.study-reading-text h2 {
+    font-size: 1.11em;
+    line-height: 1.4;
+  }
+  .markdown.study-reading-text :is(h3, h4) {
+    font-size: 0.89em;
+    line-height: 1.5;
+  }
+  .markdown.study-reading-text :is(pre, table) {
+    font-size: 0.78em;
+    line-height: 1.7;
+  }
 
   /* A report read as a document: larger section headings and roomier text. */
   .markdown-document {

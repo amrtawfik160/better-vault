@@ -1,4 +1,21 @@
 import type {
+  StudyBook,
+  StudyBookTextWrite,
+  StudyBookWrite,
+  StudyDocumentRecovery,
+  StudyOcrDraftWrite,
+  StudyOcrWrite,
+  StudyOcrWriteResult,
+  StudyRecord,
+  StudyReviewItemWrite,
+  StudyReviewWrite,
+  StudyThreadWrite,
+  StudyWordResult,
+  StudyWordWrite,
+} from "@/lib/study/records";
+import type { StudyDocument } from "@/lib/study/book-deletion";
+import type { StudioPracticeChange, StudioPracticeUpdate } from "@/studio/shared/practice";
+import type {
   Chunk,
   Conversation,
   Folder,
@@ -15,7 +32,15 @@ import type {
   BotMessage,
   Plugin,
   VaultFile,
+  SourceSummary,
 } from "./types";
+
+type DocumentRename = {
+  kind: "source" | "book";
+  id: string;
+  title: string;
+  updatedAt: number;
+};
 
 /**
  * Where notebooks are stored. The web app keeps them in IndexedDB (Dexie); the
@@ -94,7 +119,7 @@ export interface Backend {
   deleteFolder(id: string): Promise<void>;
 
   /** Adds a source with its passages and moves its notebook to the top. */
-  addSource(source: Source, chunks: Chunk[], now: number): Promise<void>;
+  addSource(source: Source, chunks: Chunk[], now: number, original?: StoredBlob): Promise<void>;
   getSource(id: string): Promise<Source | undefined>;
   /** The sources that exist among `ids`, in the order given. */
   getSources(ids: string[]): Promise<Source[]>;
@@ -102,7 +127,15 @@ export interface Backend {
   listSources(notebookId: string): Promise<Source[]>;
   /** Every source of every notebook, for the search index. */
   listAllSources(): Promise<Source[]>;
+  /** Every source of every notebook without its text, for lists (the Study Library, the notes' links). */
+  listSourceSummaries(): Promise<SourceSummary[]>;
   patchSource(id: string, patch: Partial<Source>): Promise<void>;
+  /**
+   * Renames a document: its source and the Study book reading it, whichever
+   * is named, and its notebook when the notebook is named after its only
+   * source (`notebookFollowsDocument`).
+   */
+  renameDocument(change: DocumentRename): Promise<void>;
   patchNotebookSources(notebookId: string, patch: Partial<Source>): Promise<void>;
   /** Deletes a source with its passages. */
   deleteSource(id: string): Promise<void>;
@@ -133,6 +166,8 @@ export interface Backend {
   patchOutput(id: string, patch: Partial<StudioOutput>): Promise<void>;
   /** Changes a ready output's data. False when it is gone or not ready. */
   patchReadyOutput(id: string, patch: Partial<StudioOutput>): Promise<boolean>;
+  /** Applies a practice action only to the revision displayed to the learner. */
+  saveStudioPractice(id: string, change: StudioPracticeChange): Promise<StudioPracticeUpdate | undefined>;
   /** Marks outputs still generating, except `running`, as failed. */
   interruptOutputs(running: string[], error: string): Promise<void>;
   /** Deletes an output with its files. */
@@ -141,13 +176,56 @@ export interface Backend {
   putBlob(blob: StoredBlob): Promise<void>;
   getBlob(id: string): Promise<StoredBlob | undefined>;
 
+  listStudy(): Promise<StudyRecord[]>;
+  getStudy(id: string): Promise<StudyRecord | undefined>;
+  /** The Study book reading a notebook source. A source has at most one. */
+  getStudyBookForSource(notebookId: string, sourceId: string): Promise<StudyBook | undefined>;
+  /** Adds or replaces rows. Fails on a book for a source another book already reads. */
+  putStudy(rows: StudyRecord[]): Promise<void>;
+  /** Adds the rows whose id is new, and no book for a source another book already reads. Returns how many. */
+  insertStudy(rows: StudyRecord[]): Promise<number>;
+  /** Adds the book for its source, or returns the one that already reads it. */
+  attachStudyBook(book: StudyBook): Promise<StudyBook | undefined>;
+  patchStudyBook(write: StudyBookWrite): Promise<void>;
+  patchStudyThread(write: StudyThreadWrite): Promise<boolean>;
+  writeStudyDocumentDraft(row: StudyDocumentRecovery, replaces?: string): Promise<boolean>;
+  writeStudyOcrDraft(write: StudyOcrDraftWrite): Promise<boolean>;
+  writeStudyVocabulary(write: StudyWordWrite): Promise<StudyWordResult>;
+  patchStudyReviewItem(write: StudyReviewItemWrite): Promise<boolean>;
+  applyStudyReview(write: StudyReviewWrite): Promise<boolean>;
+  replaceStudyText(
+    write: StudyBookTextWrite,
+    sourceText: string,
+    chunks: Chunk[],
+  ): Promise<boolean>;
+  saveStudyOcrPages(write: StudyOcrWrite): Promise<StudyOcrWriteResult>;
+  deleteStudy(id: string): Promise<void>;
+  /**
+   * "Delete document": deletes a notebook source with its passages and files,
+   * and its Study book with its highlights, drafts and pictures, keeping the
+   * cards, words and conversations made from it in their vault. The notebook
+   * goes too when nothing else is left there (`lib/study/book-deletion.ts`).
+   * Works on a book whose source is already gone, and on a source without a book.
+   */
+  deleteStudyDocument(document: StudyDocument): Promise<void>;
+  /**
+   * "Remove reading progress": forgets a book's reading place and bookmarks
+   * and deletes its highlights. The book keeps its text, and the source stays.
+   * False when the book is gone.
+   */
+  resetStudyBook(id: string, updatedAt: number): Promise<boolean>;
+
   getSetting(key: string): Promise<unknown>;
   putSetting(key: string, value: unknown): Promise<void>;
   clearSettings(): Promise<void>;
 
   /** Every vault, note, skill, plugin, bot, folder, notebook, source, conversation, message, output and file. */
   exportAll(): Promise<StoreContent>;
-  /** Adds content, replacing rows with the same id and the passages of its sources. */
+  /**
+   * Adds content, replacing rows with the same id and the passages of its
+   * sources, then merges Study books that read the same source, as the
+   * schema upgrade does (`studyBookMerge`).
+   */
   importAll(content: StoreContent, chunks: Chunk[]): Promise<void>;
   /** Deletes every vault, note, skill, plugin, bot, folder and notebook and everything in them. Settings are kept. */
   clearAll(): Promise<void>;
@@ -156,6 +234,7 @@ export interface Backend {
 }
 
 export interface StoreContent {
+  study: StudyRecord[];
   calendar: CalendarEntry[];
   vaults: Vault[];
   notes: Note[];
@@ -191,6 +270,7 @@ export const tableNames = [
   "outputs",
   "blobs",
   "settings",
+  "study",
 ] as const;
 
 export type TableName = (typeof tableNames)[number];
@@ -205,6 +285,7 @@ export const writes = {
   addNotebook: ["notebooks"],
   patchNotebook: ["notebooks"],
   deleteNotebook: [
+    "study",
     "notebooks",
     "sources",
     "chunks",
@@ -215,7 +296,7 @@ export const writes = {
   ],
   saveCalendar: ["calendar"],
   putVault: ["vaults"],
-  deleteVault: ["vaults"],
+  deleteVault: ["vaults", "study"],
   putNote: ["notes"],
   putNotes: ["notes"],
   deleteNote: ["notes"],
@@ -231,22 +312,40 @@ export const writes = {
   addFolder: ["folders"],
   patchFolder: ["folders"],
   deleteFolder: ["folders", "notebooks", "files"],
-  addSource: ["sources", "chunks", "notebooks"],
+  addSource: ["sources", "chunks", "notebooks", "blobs"],
   patchSource: ["sources"],
+  renameDocument: ["sources", "study", "notebooks"],
   patchNotebookSources: ["sources"],
-  deleteSource: ["sources", "chunks", "blobs"],
+  deleteSource: ["sources", "chunks", "blobs", "study"],
   saveChat: ["messages", "conversations", "notebooks"],
   patchConversation: ["conversations"],
   deleteConversation: ["conversations", "messages"],
   addOutput: ["outputs", "notebooks"],
   patchOutput: ["outputs"],
   patchReadyOutput: ["outputs"],
+  saveStudioPractice: ["outputs"],
   interruptOutputs: ["outputs"],
   deleteOutput: ["outputs", "blobs"],
   putBlob: ["blobs"],
+  putStudy: ["study"],
+  insertStudy: ["study"],
+  attachStudyBook: ["study"],
+  patchStudyBook: ["study"],
+  patchStudyThread: ["study"],
+  writeStudyDocumentDraft: ["study"],
+  writeStudyOcrDraft: ["study"],
+  writeStudyVocabulary: ["study"],
+  patchStudyReviewItem: ["study"],
+  applyStudyReview: ["study"],
+  replaceStudyText: ["study", "sources", "chunks", "notebooks"],
+  saveStudyOcrPages: ["study", "sources", "chunks", "notebooks"],
+  deleteStudy: ["study"],
+  deleteStudyDocument: ["study", "notebooks", "sources", "chunks", "blobs"],
+  resetStudyBook: ["study"],
   putSetting: ["settings"],
   clearSettings: ["settings"],
   importAll: [
+    "study",
     "calendar",
     "vaults",
     "notes",
@@ -265,6 +364,7 @@ export const writes = {
     "blobs",
   ],
   clearAll: [
+    "study",
     "calendar",
     "vaults",
     "notes",
@@ -329,7 +429,9 @@ export const backendMethods = [
   "getSources",
   "listSources",
   "listAllSources",
+  "listSourceSummaries",
   "patchSource",
+  "renameDocument",
   "patchNotebookSources",
   "deleteSource",
   "getChunks",
@@ -345,10 +447,29 @@ export const backendMethods = [
   "addOutput",
   "patchOutput",
   "patchReadyOutput",
+  "saveStudioPractice",
   "interruptOutputs",
   "deleteOutput",
   "putBlob",
   "getBlob",
+  "listStudy",
+  "getStudy",
+  "getStudyBookForSource",
+  "putStudy",
+  "insertStudy",
+  "attachStudyBook",
+  "patchStudyBook",
+  "patchStudyThread",
+  "writeStudyDocumentDraft",
+  "writeStudyOcrDraft",
+  "writeStudyVocabulary",
+  "patchStudyReviewItem",
+  "applyStudyReview",
+  "replaceStudyText",
+  "saveStudyOcrPages",
+  "deleteStudy",
+  "deleteStudyDocument",
+  "resetStudyBook",
   "getSetting",
   "putSetting",
   "clearSettings",

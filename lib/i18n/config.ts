@@ -33,6 +33,8 @@ export const namespaces = [
   "chat",
   "sources",
   "bot",
+  "onboarding",
+  "shell",
 ] as const;
 
 export type Namespace = (typeof namespaces)[number];

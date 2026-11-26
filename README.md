@@ -31,7 +31,7 @@ Chat with your sources, and turn them into reports, flashcards, quizzes, tables 
 
 ## ✨ What it does
 
-better-vault is a free, open-source alternative to Google NotebookLM (now Gemini Notebook). It is a research notebook: you add **sources** such as PDFs, web pages, notes and text files to a **notebook**, and work with them using the AI model you choose.
+better-vault is a free, open-source alternative to Google NotebookLM (now Gemini Notebook). It is a research and study notebook: you add **sources** such as PDFs, web pages, notes and text files to a **notebook**, and work with them using the AI model you choose.
 
 **Chat with your sources** and get answers that cite the passages they came from. Switch to **Web** mode to let the model search the internet with its provider's built-in search.
 
@@ -72,7 +72,7 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:3000>, then **Settings → AI providers** and paste an API key, or point it at a local model. No `.env` file is needed.
+Open <http://localhost:3000> and choose **Use without an account**. The welcome screens ask you to connect your AI: sign in with ChatGPT, Claude or another plan you already pay for. You can do this later in **Settings → AI → AI subscriptions**, or add an API key or a local model in **Settings → AI → AI providers**.
 
 ### Production build
 
@@ -84,25 +84,54 @@ npm start
 ### Local models (Ollama, LM Studio)
 
 1. Install [Ollama](https://ollama.com) or [LM Studio](https://lmstudio.ai) and download a model (for example `ollama pull llama3.2`).
-2. In better-vault, open **Settings → AI providers**, enable Ollama or LM Studio and check the address (`http://localhost:11434` for Ollama, `http://localhost:1234` for LM Studio).
+2. In better-vault, open **Settings → AI → AI providers**, enable Ollama or LM Studio and check the address (`http://localhost:11434` for Ollama, `http://localhost:1234` for LM Studio).
 3. Pick the model in the prompt bar.
 
 Local models work when better-vault runs on the same machine as the model server. Web search is only available with providers that have it built in (OpenAI, Anthropic, Google).
 
+### Study
+
+Open **Study** in the vault sidebar to import PDF, EPUB, Markdown, and text documents. From a notebook, use **Notebook options → Study documents** to see its reading material. Study documents have a linked notebook for Chat and Studio. Study saves your place, bookmarks, highlights, vocabulary, flashcards, review schedule, and activity locally. To ask about a passage, a chapter, or the whole book, open **Ask AI** in the reader. Its panel keeps your earlier conversations about that document, and **Open in notebook chat** asks the document's notebook instead. The **Practice** tab holds spoken exercises (teach it back, a meeting simulation, a technical interview, and language practice) together with your past sessions and conversations.
+
+Select a passage to highlight it, ask for an explanation, practice explaining it yourself, or make a flashcard. **More passage actions** includes editable AI card drafts, Notes, translation, and vocabulary. Saved cards link back to their source. Upload a PDF, EPUB, or Markdown file in **Add sources** to use it in notebook Chat and Studio. Open the source and choose **Read in Study** to read it with its original layout or formatting.
+
+Filter or select flashcards or highlights to review a subset. Choose **Practice now** to rehearse the selection ahead of schedule. During a session, write an answer or pick a quiz choice, then reveal the saved answer to compare. **Get AI feedback** opens an editable message with your response and the original study material in scope. Use **Back to review** to pick up where you left off, or **Continue AI feedback** to reopen your draft or conversation. If you choose Again or Hard, your response is saved locally so you can ask about it later from **Today → Needs more practice**. After a Studio quiz, you can add the questions you missed to review.
+
+For scanned PDFs, choose **Recognize page text** in the reader and review the result before saving. Use **Recognize multiple pages** to process a range. You can close the dialog and pick up your corrections and approvals under **Continue scan review**. The pages you save become searchable in Study and join the notebook source. Recognition runs on your computer in the desktop app or on localhost. Install [Tesseract](https://tesseract-ocr.github.io/tessdoc/Installation) and its language data, then make the executable available on `PATH` or set `DEEPLE_TESSERACT_BIN` to its absolute path.
+
+Choose **Discuss in Study** on a note to get answers that cite it. Session reports can save corrections as flashcards and suggested terms to Vocabulary. Reading, reviewing, and speaking time appear in Today. The local library and review work without an account. AI requests use the model you choose in the model picker: a connected AI subscription, an API key, or a local provider when you want to work without one.
+
+When you choose **Draft cards from this answer** during flashcard practice, the draft can use the original card and the available source passages behind it. Links the model cites appear on the draft for you to check before you save. Open **View flashcards** to see the cards from that answer, or choose **Save and review** to review the cards you just saved. **Back to conversation** reopens the answer.
+
+For voice practice in the desktop app or on localhost, install [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and place its [multilingual tiny model](https://huggingface.co/ggerganov/whisper.cpp/blob/main/ggml-tiny.bin) at `~/.cache/deeple/whisper/ggml-tiny.bin`. better-vault looks for `whisper-cli` on your system path, including the standard Homebrew locations on macOS. You can also set `DEEPLE_WHISPER_BIN` and `DEEPLE_WHISPER_MODEL` to absolute paths before launching. **Dictate** adds a transcript to your draft. **Speak your answer** sends the transcript to your selected model and uses an installed system voice to read its reply. Use a local AI model as well to keep the entire conversation on your computer.
+
+Temporary voice turns clear after a report or when you leave the conversation. Enable transcript retention or select a default correction mode under **Study → Practice → Practice preferences**.
+
+The study workflows were adapted from [MemoFlash](https://github.com/amrtawfik160/memoflash).
+
+### Connect an AI subscription
+
+Open **Settings → AI → AI subscriptions**, choose a provider, and approve the sign-in in your browser. ChatGPT, Claude, Antigravity, Grok, both Kimi portals, Devin, and Muse Code are available. When a provider shows a one-time code, enter it in the provider's sign-in page. Connected models appear in the Chat, Bots, and Studio model pickers.
+
+The desktop installer includes CLIProxyAPI. A web app started on loopback with `npm run dev` or `npm start` installs the pinned, checksum-verified proxy on first use. The app starts and restarts it automatically. The proxy keeps credentials under `~/.better-vault/cliproxyapi` by default. The app sends relevant notebook context through the proxy to the provider you select.
+
+Use **Reconnect** or **Disconnect** beside an account to manage it.
+
 ## 🔐 Where your data lives
 
-Notebooks, sources, chats, Studio outputs and API keys stay on your device: in your browser's IndexedDB in the web app, or in `better-vault.sqlite` in the app's data folder in the desktop app. **Settings → Data** exports and imports notebooks as a JSON file, which also moves them between the two.
+Notebooks, sources, chats, Studio outputs and API keys stay on your device: in your browser's IndexedDB in the web app, or in `better-vault.sqlite` in the app's data folder in the desktop app. **Settings → Storage and data** exports and imports notebooks as a JSON file, which also moves them between the two.
 
 Each request sends your key to the app's own API route, which passes it to the provider and never stores or logs it. If you host better-vault for other people, they use their own keys in their own browsers.
 
 ### Hosting for others
 
-Two optional environment variables tighten a public deployment:
+These environment variables control how a self-hosted app reaches other services.
 
-| Variable                             | Default | Effect                                                                                                                  |
-| ------------------------------------ | ------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `BETTER_VAULT_ALLOW_LOCAL_PROVIDERS` | `true`  | Set to `false` to turn off Ollama and LM Studio, whose address comes from the user and would make the server fetch it.  |
-| `BETTER_VAULT_ALLOW_PRIVATE_URLS`    | `false` | Set to `true` to let web-page sources point at private or local network addresses (only for trusted, private installs). |
+| Variable                             | Default                 | Effect                                                                                                                  |
+| ------------------------------------ | ----------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `BETTER_VAULT_ALLOW_LOCAL_PROVIDERS` | `true`                  | Set to `false` to turn off Ollama, LM Studio and CLIProxyAPI on a public server.                                        |
+| `BETTER_VAULT_CLIPROXYAPI_URL`       | `http://127.0.0.1:8317` | Address of the trusted CLIProxyAPI instance used by the better-vault server.                                            |
+| `BETTER_VAULT_ALLOW_PRIVATE_URLS`    | `false`                 | Set to `true` to let web-page sources point at private or local network addresses (only for trusted, private installs). |
 
 ## 🧱 Tech stack
 
@@ -147,6 +176,7 @@ Please search existing issues first, and **never paste API keys** into an issue.
 - [Anatomy](https://skills.wheresryan.sh/anatomy) by Ryan, whose MIT drawing kit draws the anatomy figures.
 - [Hugeicons](https://hugeicons.com) for icons.
 - [Excalidraw](https://excalidraw.com), whose whiteboard inspired ours, for Excalifont (SIL Open Font License 1.1); [Rough.js](https://roughjs.com) and [perfect-freehand](https://github.com/steveruizok/perfect-freehand) draw the sketchy shapes and pen strokes.
+- [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) (Apache-2.0), run in the app with [kokoro-js](https://github.com/hexgrad/kokoro) and [Transformers.js](https://huggingface.co/docs/transformers.js), reads English aloud; its pronunciation comes from [eSpeak NG](https://github.com/espeak-ng/espeak-ng) (GPL-3.0), through [phonemizer](https://github.com/xenova/phonemizer.js).
 - Inspired by Google's NotebookLM.
 
 ## 📄 License

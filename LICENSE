@@ -29,3 +29,7 @@ Third-party code included in this repository keeps its own license:
   the file, and studio/tools/anatomy/anatomy.css uses the kit's CSS.
 - public/fonts/excalifont/: Excalifont, the hand-drawn font of Excalidraw,
   SIL Open Font License 1.1 (public/fonts/excalifont/OFL.txt).
+
+Third-party packages installed from npm keep their own licenses. Among them,
+the reading voice (lib/speech/) uses kokoro-js (Apache-2.0) and phonemizer,
+which bundles eSpeak NG (GPL-3.0-or-later, https://github.com/espeak-ng/espeak-ng).

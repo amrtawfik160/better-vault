@@ -1,6 +1,8 @@
 import {
   convertToModelMessages,
   createUIMessageStreamResponse,
+  getToolName,
+  isToolUIPart,
   stepCountIs,
   streamText,
   tool,
@@ -9,26 +11,19 @@ import {
   type ToolSet,
 } from "ai";
 import { z } from "zod";
-import { sourceFormats, sourceKinds } from "@/lib/sources/formats";
 import { providers } from "@/lib/ai/catalog";
+import { rejectCliProxyRequest } from "@/lib/ai/cliproxyapi";
 import { describeError } from "@/lib/ai/errors";
 import { chatSystemPrompt } from "@/lib/ai/prompts";
 import { createLanguageModel, createWebSearchTools } from "@/lib/ai/providers";
+import { createChatActionTools } from "../chat-action-tools";
 import { createVisualTools } from "../visual-tools";
 import { credentialsSchema, effortSchema, modelRefSchema } from "@/lib/ai/request";
+import { quotedForModel } from "@/lib/chat/quote";
 import type { ChatMessage, ChatMessageMetadata, TokenUsage } from "@/lib/chat/types";
 import { toPassageRefs, stripCitations, type Passage } from "@/lib/grounding/passages";
 import { createFileDescription, createFileInput } from "@/lib/files/tools";
-
-const passageSchema = z.object({
-  n: z.number().int().positive(),
-  chunkId: z.string(),
-  sourceId: z.string(),
-  title: z.string(),
-  kind: z.enum(sourceKinds),
-  format: z.enum(sourceFormats).optional(),
-  text: z.string(),
-});
+import { passageSchema } from "@/lib/grounding/passage-schema";
 
 const bodySchema = z.object({
   messages: z
@@ -68,6 +63,29 @@ function withoutOldCitations(messages: ChatMessage[]): ChatMessage[] {
   );
 }
 
+/**
+ * Tool calls this chat can't make, such as a conversation begun beside the
+ * reader that read the book: providers refuse calls to tools they weren't given.
+ */
+function withoutOtherTools(messages: ChatMessage[], tools: ToolSet | undefined): ChatMessage[] {
+  return messages.map((message) => ({
+    ...message,
+    parts: message.parts.filter(
+      (part) => !isToolUIPart(part) || (tools !== undefined && getToolName(part) in tools),
+    ),
+  }));
+}
+
+/** A passage the user selected goes before the question it was asked with. */
+function withQuotes(messages: ChatMessage[]): ChatMessage[] {
+  return messages.map((message) => {
+    const quote = message.role === "user" ? message.metadata?.quote : undefined;
+    return quote
+      ? { ...message, parts: [{ type: "text" as const, text: quotedForModel(quote) }, ...message.parts] }
+      : message;
+  });
+}
+
 function textLength(message: ChatMessage): number {
   return message.parts.reduce(
     (sum, part) => sum + (part.type === "text" ? part.text.length : 0),
@@ -89,6 +107,8 @@ export async function POST(request: Request) {
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Invalid request." }, { status: 400 });
   const { mode, model, credentials, effort } = parsed.data;
+  const denied = rejectCliProxyRequest(request, model.provider);
+  if (denied) return denied;
   const messages = parsed.data.messages as unknown as ChatMessage[];
   const passages = parsed.data.passages as Passage[];
 
@@ -106,23 +126,29 @@ export async function POST(request: Request) {
     return Response.json({ error: describeError(error) }, { status: 400 });
   }
 
-  // Local models often can't call tools, so they answer in text only.
-  const visuals = parsed.data.visuals && !providers[model.provider].local;
+  // Local models often can't call tools: they answer in text, and "/" makes things.
+  const actions = !providers[model.provider].local;
+  const visuals = parsed.data.visuals && actions;
   const searchTools = mode === "web" ? createWebSearchTools(model, credentials) : undefined;
   // Files are made in the page, after the user's OK: the tool has no `execute` here.
-  const fileTools: ToolSet = providers[model.provider].local
-    ? {}
-    : { create_file: tool({ description: createFileDescription, inputSchema: createFileInput }) };
-  const tools = visuals
-    ? { ...searchTools, ...createVisualTools(), ...fileTools }
-    : { ...searchTools, ...fileTools };
-  const options = { skills: parsed.data.skills, visuals };
+  const fileTools: ToolSet = actions
+    ? { create_file: tool({ description: createFileDescription, inputSchema: createFileInput }) }
+    : {};
+  const tools = actions
+    ? {
+        ...searchTools,
+        ...(visuals ? createVisualTools() : {}),
+        ...createChatActionTools(),
+        ...fileTools,
+      }
+    : searchTools;
+  const options = { skills: parsed.data.skills, visuals, actions };
   const system = chatSystemPrompt(mode, passages, options);
   const instructions = chatSystemPrompt(mode, [], options).length;
   const result = streamText({
     model: languageModel,
     system,
-    messages: await convertToModelMessages(withoutOldCitations(messages), {
+    messages: await convertToModelMessages(withQuotes(withoutOtherTools(withoutOldCitations(messages), tools)), {
       ignoreIncompleteToolCalls: true,
     }),
     tools,

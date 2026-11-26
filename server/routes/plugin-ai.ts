@@ -1,5 +1,6 @@
 import { generateText, jsonSchema, Output } from "ai";
 import { z } from "zod";
+import { rejectCliProxyRequest } from "@/lib/ai/cliproxyapi";
 import { describeError } from "@/lib/ai/errors";
 import { createLanguageModel } from "@/lib/ai/providers";
 import { credentialsSchema, effortSchema, modelRefSchema } from "@/lib/ai/request";
@@ -22,6 +23,8 @@ export async function POST(request: Request) {
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Invalid request." }, { status: 400 });
   const { prompt, system, schema, model, credentials, effort } = parsed.data;
+  const denied = rejectCliProxyRequest(request, model.provider);
+  if (denied) return denied;
   try {
     const languageModel = await createLanguageModel(model, credentials, effort);
     const result = await generateText({

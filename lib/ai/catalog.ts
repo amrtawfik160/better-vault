@@ -9,6 +9,7 @@ export const providerIds = [
   "anthropic",
   "google",
   "opencode",
+  "cliproxyapi",
   "ollama",
   "lmstudio",
   "deepseek",
@@ -83,6 +84,7 @@ export const chatProviderIds = [
   "anthropic",
   "google",
   "opencode",
+  "cliproxyapi",
   "ollama",
   "lmstudio",
   "deepseek",
@@ -198,6 +200,21 @@ export const providers: Record<ProviderId, ProviderInfo> = {
     contextTokens: 200_000,
     imageModels: [],
     efforts: ["provider-default", "none", "low", "medium", "high"],
+  },
+  cliproxyapi: {
+    id: "cliproxyapi",
+    kind: "chat",
+    name: "AI subscriptions",
+    local: false,
+    needsKey: false,
+    webSearch: false,
+    suggestedModels: [],
+    // Subscription models (GPT, Claude, Gemini, Grok, Kimi) all read at least 200k tokens.
+    contextChars: 300_000,
+    contextTokens: 200_000,
+    imageModels: [],
+    // Sent as `reasoning_effort`; the proxy maps it to each subscription. ChatGPT refuses `minimal`.
+    efforts: ["provider-default", "none", "low", "medium", "high", "xhigh", "max"],
   },
   ollama: {
     id: "ollama",

@@ -6,7 +6,7 @@ import { Button } from "@/components/panelui/button";
 import { Select } from "@/components/panelui/select";
 import { useWorkspace } from "@/components/workspace/workspace-context";
 import { modelKey, parseModelKey, providers, type ImageProviderId } from "@/lib/ai/catalog";
-import { activeModel, availableImageModels, useSettings } from "@/lib/db/settings";
+import { modelFor, availableImageModels, useSettings } from "@/lib/db/settings";
 import { ChoiceField, FocusField, OptionCards } from "@/studio/shared/fields";
 import type { ToolFormProps } from "@/studio/shared/form";
 import {
@@ -27,7 +27,7 @@ export function InfographicForm({
   const settings = useSettings();
   const id = useId();
   const models = useMemo(() => (settings ? availableImageModels(settings) : []), [settings]);
-  const chat = settings ? activeModel(settings) : null;
+  const chat = settings ? (modelFor(settings, "studio")?.model ?? null) : null;
   const chosen = value.imageModel;
   const chosenAvailable = chosen
     ? models.some((model) => modelKey(model) === modelKey(chosen))

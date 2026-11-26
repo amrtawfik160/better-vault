@@ -1,4 +1,5 @@
 {
+  "placeholderQuote": "Ask about the selected text…",
   "placeholder": {
     "sources": "Ask about your sources…",
     "web": "Ask anything. The model can search the web…"
@@ -17,7 +18,8 @@
   "menu": "More",
   "addSource": "Add a source",
   "setup": {
-    "banner": "Add an API key or a local model to start.",
+    "banner": "Connect an AI subscription, add an API key, or use a local model.",
+    "choose": "The model you chose isn't available. Choose another model below.",
     "action": "Set up"
   },
   "noSources": "Select a source, or switch to Web.",
@@ -28,6 +30,7 @@
   },
   "empty": {
     "title": "Ask your sources",
+    "titleScope": "Ask about {{scope}}",
     "body_one": "Answers come from your selected source, with citations.",
     "body_other": "Answers come from your {{count}} selected sources, with citations.",
     "noSources": "Add a source to begin, or switch to Web to ask anything.",
@@ -36,7 +39,8 @@
       "questions": "What questions do these sources answer?",
       "terms": "Explain the most important terms",
       "plan": "Make a study plan from these sources"
-    }
+    },
+    "noSourcesLocal": "Add or select a source to begin."
   },
   "sources": {
     "title": "References",
@@ -58,10 +62,51 @@
     "label": "Message actions",
     "copy": "Copy",
     "copied": "Copied",
+    "listen": "Listen",
+    "noVoice": "No voice on this device can read this answer aloud.",
+    "flashcards": "Make flashcards",
     "retry": "Try again"
   },
   "error": "The answer could not be completed: {{error}}",
+  "errorTitle": "Ask couldn't answer",
+  "errorLine": "{{error}} Your question is kept above; try again or choose another model.",
+  "answerUnavailable": "This notebook answer is no longer available.",
   "newChat": "New chat",
+  "book": {
+    "nouns": {
+      "page": "Page",
+      "chapter": "Chapter",
+      "section": "Section"
+    },
+    "nounsInline": {
+      "page": "page",
+      "chapter": "chapter",
+      "section": "section"
+    },
+    "reading": "Reading {{noun}} {{section}}…",
+    "searching": "Searching the book for “{{query}}”…",
+    "contents": "Looking at the contents…",
+    "read": "Read",
+    "open": "Open {{noun}} {{section}}"
+  },
+  "reader": {
+    "title": "Ask about this book",
+    "body": "I can see {{noun}} {{section}}, and I can read or search the rest of the book when your question needs it.",
+    "placeholder": "Ask about this {{noun}} or the whole document…",
+    "placeholderQuote": "Ask about this passage…",
+    "onScreen": "{{noun}} {{section}}",
+    "removeQuote": "Remove passage",
+    "history": "Conversations",
+    "notebookConversations": "This notebook's chats",
+    "noConversations": "No conversations yet",
+    "tutorSessions": "Tutor sessions",
+    "suggestions": {
+      "summary": "Summarize this {{noun}}",
+      "explain": "Explain the hardest idea here simply",
+      "quiz": "Quiz me on this {{noun}}",
+      "connect": "How does this connect to the rest of the document?"
+    }
+  },
   "history": {
     "open": "History",
     "title": "History",
@@ -132,6 +177,90 @@
     "attached_one": "{{count}} skill",
     "attached_other": "{{count}} skills",
     "clear": "Remove skills from this chat"
+  },
+  "noSourcesLocal": "Select or add a source to ask a question.",
+  "make": {
+    "menu": {
+      "label": "Actions",
+      "busy": "Wait for the answer to finish first."
+    },
+    "commands": {
+      "cards": {
+        "name": "Flashcards",
+        "detail": "Adds cards to this notebook's deck"
+      },
+      "report": {
+        "name": "Report",
+        "detail": "A briefing doc of the main points"
+      },
+      "quiz": {
+        "name": "Quiz",
+        "detail": "Questions to test yourself"
+      },
+      "mind-map": {
+        "name": "Mind map",
+        "detail": "How the ideas connect"
+      },
+      "data-table": {
+        "name": "Data table",
+        "detail": "The facts in rows and columns"
+      },
+      "slide-deck": {
+        "name": "Slide deck",
+        "detail": "Slides to present"
+      },
+      "anatomy": {
+        "name": "Anatomy",
+        "detail": "A labelled figure of how it works"
+      },
+      "infographic": {
+        "name": "Infographic",
+        "detail": "A picture; asks first, as it uses your image model"
+      },
+      "audio-overview": {
+        "name": "Audio Overview",
+        "detail": "Two hosts talk it through; asks first"
+      }
+    },
+    "cards": {
+      "writing": "Writing flashcards…",
+      "count_one": "{{count}} card",
+      "count_other": "{{count}} cards",
+      "addedTo": "added to {{notebook}}",
+      "removed_one": "{{count}} card removed.",
+      "removed_other": "{{count}} cards removed."
+    },
+    "output": {
+      "starting": "Starting the {{tool}}…",
+      "making": "is being made. You can keep chatting.",
+      "ready": "is ready in Studio.",
+      "failed": "didn't work: {{error}}",
+      "removed": "{{tool}} removed.",
+      "gone": "{{tool}} was deleted."
+    },
+    "confirm": {
+      "title": "Make an {{tool}}?",
+      "from_one": "From {{count}} selected source",
+      "from_other": "From {{count}} selected sources",
+      "imageCost": "About a minute · uses your {{provider}} key, which is charged for the picture",
+      "audioCost": "A few minutes · uses your ElevenLabs key; you choose the voices next",
+      "make": "Make it",
+      "chooseVoices": "Choose voices",
+      "cancel": "Not now",
+      "addKey": "Add a key",
+      "cancelled": "{{tool}} not made.",
+      "opened": "Opened the {{tool}} options."
+    },
+    "open": "Open",
+    "undo": "Undo",
+    "retry": "Try again",
+    "stopped": "This stopped before it finished.",
+    "errors": {
+      "noSources": "Select a source to make it from.",
+      "noCards": "No flashcards were written. Try again, or say what to make them about.",
+      "noImageModel": "Add a key for an image model in Settings first.",
+      "invalid": "The request couldn't be read. Try asking again."
+    }
   },
   "files": {
     "title": "File",

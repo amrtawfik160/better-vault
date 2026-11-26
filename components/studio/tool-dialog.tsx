@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { AIModelPicker } from "@/components/ai/ai-model-picker";
 import { Icon } from "@/components/icon";
 import { Button } from "@/components/panelui/button";
 import { Dialog } from "@/components/panelui/dialog";
 import { useSources } from "@/lib/db/sources";
+import { sourceHasText } from "@/lib/db/source-text";
 import { cn } from "@/lib/utils";
 import { toolClients } from "@/studio/client";
 import { toolDefinitions } from "@/studio/definitions";
@@ -15,11 +17,13 @@ import { useStudioRunner } from "./studio-runner";
 interface ToolDialogProps {
   notebookId: string;
   toolId: StudioToolId | null;
+  /** Sources to start with instead of the notebook's selection (a tool opened for one Study book). */
+  initialSourceIds?: string[] | null;
   onClose: () => void;
 }
 
 /** A Studio tool's options, opened from its tile: its own fields, then language and sources. */
-export function ToolDialog({ notebookId, toolId, onClose }: ToolDialogProps) {
+export function ToolDialog({ notebookId, toolId, initialSourceIds, onClose }: ToolDialogProps) {
   const { t: tCommon } = useTranslation();
   const client = toolId ? toolClients[toolId] : undefined;
   return (
@@ -30,7 +34,13 @@ export function ToolDialog({ notebookId, toolId, onClose }: ToolDialogProps) {
         className={cn(client?.wide && "max-w-2xl")}
       >
         {toolId ? (
-          <ToolForm key={toolId} notebookId={notebookId} toolId={toolId} onDone={onClose} />
+          <ToolForm
+            key={toolId}
+            notebookId={notebookId}
+            toolId={toolId}
+            initialSourceIds={initialSourceIds ?? null}
+            onDone={onClose}
+          />
         ) : null}
       </Dialog.Content>
     </Dialog>
@@ -40,16 +50,18 @@ export function ToolDialog({ notebookId, toolId, onClose }: ToolDialogProps) {
 function ToolForm({
   notebookId,
   toolId,
+  initialSourceIds,
   onDone,
 }: {
   notebookId: string;
   toolId: StudioToolId;
+  initialSourceIds: string[] | null;
   onDone: () => void;
 }) {
   const { t } = useTranslation("studio");
   const { t: tCommon } = useTranslation();
   const runner = useStudioRunner();
-  const sources = useSources(notebookId);
+  const sources = useSources(notebookId)?.filter(sourceHasText);
   const definition = toolDefinitions[toolId];
   const client = toolClients[toolId];
   const tool = studioTools[toolId];
@@ -57,10 +69,11 @@ function ToolForm({
   const [options, setOptions] = useState<unknown>(definition?.defaults);
   const [focus, setFocus] = useState("");
   const [language, setLanguage] = useState("auto");
-  // Starts with the sources selected in the notebook.
-  const [sourceIds, setSourceIds] = useState<string[] | null>(null);
-  const chosen =
-    sourceIds ?? sources?.filter((source) => source.selected).map((source) => source.id) ?? [];
+  // Starts with the sources it was opened for, else those selected in the notebook.
+  const [sourceIds, setSourceIds] = useState<string[] | null>(initialSourceIds);
+  const chosen = sourceIds
+    ? sourceIds.filter((id) => sources?.some((source) => source.id === id))
+    : sources?.filter((source) => source.selected).map(({ id }) => id) ?? [];
   const [busy, setBusy] = useState(false);
 
   if (!definition || !client) return null;
@@ -115,6 +128,10 @@ function ToolForm({
         ) : null}
       </Dialog.Body>
       <Dialog.Footer>
+        {/* Tools that choose their own writer (the audio overview) show it in their form. */}
+        {toolDefinitions[toolId]?.textModel ? null : (
+          <AIModelPicker use="studio" appearance="outline" className="sm:me-auto" />
+        )}
         <Dialog.Close render={<Button variant="secondary" />}>
           {tCommon("actions.cancel")}
         </Dialog.Close>

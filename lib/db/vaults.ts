@@ -1,11 +1,14 @@
 import { generateId } from "ai";
 import { useSyncExternalStore } from "react";
+import { clearReviewCheckpoint } from "@/lib/study/review-session";
+import { clearDocumentRecoveries, clearDocumentRecovery, studyDocumentDraftId } from "@/lib/study/document-drafts";
+import { clearFlashcardDrafts } from "@/lib/study/flashcard-draft-recovery";
+import { DEFAULT_VAULT, studyVaultIndex } from "@/lib/study/vault";
 import { useStoreQuery } from "./live";
 import { store } from "./store";
 import type { Folder, Notebook, Vault } from "./types";
 
-/** The vault notebooks and folders saved before vaults belong to. It can't be deleted. */
-export const DEFAULT_VAULT = "default";
+export { DEFAULT_VAULT } from "@/lib/study/vault";
 
 const defaultVault = (): Vault => ({
   id: DEFAULT_VAULT,
@@ -60,22 +63,44 @@ export async function updateVault(id: string, look: VaultLook) {
 }
 
 /**
- * Deletes a vault with every notebook, folder, note and skill in it, and
+ * Deletes a vault with every notebook, folder, note, skill and study record in it, and
  * everything in those. The default vault stays.
  */
 export async function deleteVault(id: string) {
   if (id === DEFAULT_VAULT) return;
-  const notebooks = (await store().listNotebooks()).filter((item) => vaultOf(item) === id);
-  for (const notebook of notebooks) await store().deleteNotebook(notebook.id);
+  const backend = store();
+  const [notebooks, notes, rows, vaults] = await Promise.all([
+    backend.listNotebooks(),
+    backend.listNotes(),
+    backend.listStudy(),
+    listVaults(),
+  ]);
+  const scope = studyVaultIndex({ rows, notebooks, notes, vaults, defaultVaultId: DEFAULT_VAULT });
+  const deletingNotebooks = new Set(
+    notebooks.filter((item) => vaultOf(item) === id).map(({ id }) => id),
+  );
+  for (const row of rows) {
+    if (scope.owner(row) === id && !deletingNotebooks.has(row.notebookId ?? ""))
+      await backend.deleteStudy(row.id);
+  }
+  for (const notebookId of deletingNotebooks) await backend.deleteNotebook(notebookId);
   const folders = (await store().listFolders()).filter((item) => vaultOf(item) === id);
   for (const folder of folders) await store().deleteFolder(folder.id);
-  for (const note of (await store().listNotes()).filter((item) => item.vaultId === id))
-    await store().deleteNote(note.id);
+  for (const note of notes) {
+    if (scope.noteOwner(note.id) === id) await backend.deleteNote(note.id);
+  }
   for (const skill of (await store().listSkills()).filter((item) => item.vaultId === id))
     await store().deleteSkill(skill.id);
   for (const file of (await store().listFiles()).filter((item) => item.vaultId === id))
     await store().deleteFile(file.id);
   await store().deleteVault(id);
+  clearFlashcardDrafts(id);
+  clearDocumentRecovery(studyDocumentDraftId({ vaultId: id }));
+  for (const row of rows) {
+    if (row.kind === "book" && scope.owner(row) === id)
+      clearDocumentRecoveries(`document-draft:book:${row.id}:`);
+  }
+  clearReviewCheckpoint(id);
   if (currentVaultId() === id) setCurrentVault(DEFAULT_VAULT);
 }
 

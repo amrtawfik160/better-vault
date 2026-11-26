@@ -1,5 +1,6 @@
 import {
   ArrowDown01Icon,
+  Book02Icon,
   Delete02Icon,
   GridViewIcon,
   NoteAddIcon,
@@ -11,6 +12,7 @@ import { useTranslation } from "react-i18next";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { RenameDialog } from "@/components/common/rename-dialog";
 import { Icon } from "@/components/icon";
+import { Button } from "@/components/panelui/button";
 import { Menu } from "@/components/panelui/menu";
 import { NotebookDialog } from "@/components/home/notebook-dialog";
 import { useFolders } from "@/lib/db/folders";
@@ -18,6 +20,7 @@ import { createNotebook, deleteNotebook, renameNotebook } from "@/lib/db/noteboo
 import { notebookIcon } from "@/lib/notebooks/icons";
 import { useWorkspace } from "./workspace-context";
 import { routes } from "@/lib/routes";
+import { studyHref } from "@/lib/study/links";
 
 /** The notebook's name, opening a menu to switch, rename or delete it. */
 export function NotebookMenu() {
@@ -35,7 +38,13 @@ export function NotebookMenu() {
       <Menu>
         <Menu.Trigger
           aria-label={t("notebookMenu")}
-          className="flex max-w-full min-w-0 cursor-pointer items-center gap-1 rounded-lg px-2 py-1.5 text-start outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+          title={notebook.title}
+          render={
+            <Button
+              variant="ghost"
+              className="h-auto max-w-full min-w-0 shrink justify-start gap-1 rounded-lg px-2 py-1.5 text-start active:not-disabled:scale-100 max-sm:min-h-11"
+            />
+          }
         >
           <Icon
             icon={notebookIcon(notebook.icon)}
@@ -53,6 +62,10 @@ export function NotebookMenu() {
           <Menu.Item onClick={() => setCreating(true)}>
             <Icon icon={NoteAddIcon} />
             {t("newNotebook")}
+          </Menu.Item>
+          <Menu.Item onClick={() => navigate(studyHref("library", { notebook: notebook.id }))}>
+            <Icon icon={Book02Icon} />
+            {t("studyDocuments")}
           </Menu.Item>
           <Menu.Separator />
           <Menu.Item onClick={() => setRenaming(true)}>

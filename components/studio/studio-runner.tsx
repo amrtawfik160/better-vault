@@ -10,7 +10,7 @@ import {
   markInterruptedOutputs,
   restartOutput,
 } from "@/lib/db/outputs";
-import { activeModel, getSettings } from "@/lib/db/settings";
+import { modelFor, getSettings } from "@/lib/db/settings";
 import { store } from "@/lib/db/store";
 import {
   imageCredentialsFor,
@@ -29,8 +29,8 @@ import type { SavedOptions } from "@/studio/types";
 const running = new Set<string>();
 
 interface StudioRunner {
-  /** Starts a new output with these options. */
-  create: (toolId: StudioToolId, options: SavedOptions) => Promise<void>;
+  /** Starts a new output with these options and returns its id. */
+  create: (toolId: StudioToolId, options: SavedOptions) => Promise<string>;
   /** Runs a failed output again with its saved options. */
   retry: (output: StudioOutput) => Promise<void>;
   /** Saves an output made in the browser (a local tool) and returns its id. */
@@ -130,7 +130,7 @@ export function StudioRunnerProvider({
     return {
       create: async (toolId, options) => {
         const settings = await getSettings();
-        const model = activeModel(settings);
+        const model = modelFor(settings, "studio")?.model;
         if (!model) throw new Error(t("errors.noModel"));
         const id = await createOutput({
           notebookId,
@@ -141,6 +141,7 @@ export function StudioRunnerProvider({
           model,
         });
         void run(id, toolId, options);
+        return id;
       },
       createLocal: async (toolId, input) => {
         const definition = toolDefinitions[toolId];

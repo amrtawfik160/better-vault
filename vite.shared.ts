@@ -51,5 +51,7 @@ export function appConfig(): UserConfig {
     plugins: [react(), tailwindcss(), themeBeforePaint()],
     resolve: { alias: { "@": appRoot } },
     define: appDefine,
+    // The on-device voice's worker (lib/speech) loads its parts as modules.
+    worker: { format: "es" },
   };
 }

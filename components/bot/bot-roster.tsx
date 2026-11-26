@@ -1,4 +1,4 @@
-import { Add01Icon, Search01Icon } from "@hugeicons/core-free-icons";
+import { Search01Icon } from "@hugeicons/core-free-icons";
 import { useState, type CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
 import { Icon } from "@/components/icon";
@@ -9,10 +9,8 @@ import { cn } from "@/lib/utils";
 import { BotAvatar, type BotMood } from "./bot-avatar";
 import { useBotActivity, type BotActivity } from "./bot-runtime";
 
-/** The character is filled with what it sits on; a chosen row is a shade lighter than the card. */
-const selectedSurface = {
-  "--bot-surface": "color-mix(in oklab, var(--foreground) 10%, var(--card))",
-} as CSSProperties;
+/** The character is filled with what it sits on; a chosen row is muted. */
+const selectedSurface = { "--bot-surface": "var(--muted)" } as CSSProperties;
 
 const moodOf = (state: BotActivity): BotMood =>
   state === "thinking"
@@ -28,12 +26,10 @@ export function BotRoster({
   bots,
   selected,
   onSelect,
-  onCreate,
 }: {
   bots: Bot[];
   selected: string | null;
   onSelect: (id: string) => void;
-  onCreate: () => void;
 }) {
   const { t } = useTranslation("bot");
   const [query, setQuery] = useState("");
@@ -48,23 +44,8 @@ export function BotRoster({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* A window bar on macOS: it moves the window and leaves room for its buttons. */}
-      <div
-        data-window-bar
-        className="flex min-h-14 shrink-0 items-center gap-1 border-b py-3 ps-4 pe-3"
-      >
-        <h2 className="min-w-0 flex-1 truncate text-base font-semibold">{t("roster.label")}</h2>
-        <button
-          type="button"
-          aria-label={t("roster.newBot")}
-          title={t("roster.newBot")}
-          onClick={onCreate}
-          className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-foreground text-background outline-none hover:bg-foreground/85 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
-        >
-          <Icon icon={Add01Icon} size={17} />
-        </button>
-      </div>
-      <div className="border-b p-3">
+      {/* The page's ToolHeader (bot-view.tsx) holds the title and New bot. */}
+      <div className="px-3 pt-3 pb-2">
         <Input.Group size="sm">
           <Input.Addon>
             <Icon icon={Search01Icon} size={14} />
@@ -72,10 +53,10 @@ export function BotRoster({
           <Input
             size="sm"
             type="search"
-            aria-label={t("roster.search")}
-            placeholder={t("roster.searchPlaceholder")}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            placeholder={t("roster.searchPlaceholder")}
+            aria-label={t("roster.search")}
           />
         </Input.Group>
       </div>
@@ -109,6 +90,9 @@ export function BotRoster({
           ) : null}
         </nav>
       </ScrollArea>
+      <p className="border-t px-5 pt-3 pb-4 text-xs text-pretty text-muted-foreground">
+        {t("roster.note")}
+      </p>
     </div>
   );
 }
@@ -132,7 +116,7 @@ function PinnedTile({
       title={bot.title || bot.name}
       className={cn(
         "flex cursor-pointer flex-col items-center gap-1.5 rounded-2xl px-1 pt-2 pb-2.5 transition-colors outline-none hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring",
-        selected && "bg-foreground/10 hover:bg-foreground/10",
+        selected && "bg-muted shadow-[inset_0_0_0_1px_var(--color-border)] hover:bg-muted",
       )}
     >
       <BotAvatar avatar={bot.avatar} size={72} mood={moodOf(state)} followPointer />
@@ -165,8 +149,8 @@ function BotRow({
       style={selected ? selectedSurface : undefined}
       onClick={onSelect}
       className={cn(
-        "flex w-full cursor-pointer items-center gap-3 rounded-xl px-2 py-2 text-start transition-colors outline-none hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring",
-        selected && "bg-foreground/10 hover:bg-foreground/10",
+        "flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-start transition-colors outline-none hover:bg-foreground/5 focus-visible:ring-2 focus-visible:ring-ring",
+        selected && "bg-muted shadow-[inset_0_0_0_1px_var(--color-border)] hover:bg-muted",
       )}
     >
       <BotAvatar avatar={bot.avatar} size={48} mood={moodOf(state)} followPointer />

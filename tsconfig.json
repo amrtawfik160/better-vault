@@ -19,5 +19,5 @@
     "allowImportingTsExtensions": true
   },
   "include": ["**/*.ts", "**/*.tsx", "**/*.mts"],
-  "exclude": ["node_modules", "dist", "site", "desktop"]
+  "exclude": ["node_modules", "dist", "site", "desktop", ".claude"]
 }

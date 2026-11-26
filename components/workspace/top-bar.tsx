@@ -1,103 +1,122 @@
-import {
-  Add01Icon,
-  Book02Icon,
-  BubbleChatIcon,
-  DashboardSquare01Icon,
-  Settings01Icon,
-} from "@hugeicons/core-free-icons";
+import { Add01Icon, LayoutRightIcon } from "@hugeicons/core-free-icons";
 import { useTranslation } from "react-i18next";
 import { Icon } from "@/components/icon";
-import { Tabs } from "@/components/panelui/tabs";
-import { SettingsSheet } from "@/components/settings/settings-sheet";
-import { StudioSheet } from "@/components/studio/studio-sheet";
 import { Button } from "@/components/panelui/button";
-import { ButtonGroup } from "@/components/panelui/button-group";
-import { HistorySheet } from "@/components/chat/history-sheet";
+import { Tooltip } from "@/components/panelui/tooltip";
+import { SettingsSheet } from "@/components/settings/settings-sheet";
+import { SidebarMenuButton } from "@/components/shell/sidebar-state";
 import { useSources } from "@/lib/db/sources";
+import { selectedTextSource } from "@/lib/db/source-text";
+import { cn } from "@/lib/utils";
 import { NotebookMenu } from "./notebook-menu";
 import { useWorkspace } from "./workspace-context";
 
 /**
- * Top left: Settings and Create (which opens the Studio sheet), and on the
- * Chat tab, History. Top centre: the notebook's name. Top right: the tabs
- * that switch the main view.
+ * The notebook's one header: the sidebar's menu button on phones, the
+ * notebook's name with its menu, then Add, Practise this (the page's one
+ * filled button, with its reason) and the companion's toggle. The app sidebar
+ * beside it holds the way back to the notebooks and Settings.
  */
 export function TopBar() {
   const { t } = useTranslation("workspace");
-  const { t: tSettings } = useTranslation("settings");
-  const { t: tChat } = useTranslation("chat");
-  const { notebook, tab, studioOpen, setStudioOpen, settingsOpen, setSettingsOpen } =
-    useWorkspace();
+  const {
+    notebook,
+    settingsOpen,
+    settingsPage,
+    setSettingsOpen,
+    setAddSourceOpen,
+    companion,
+    setCompanion,
+  } = useWorkspace();
   const sources = useSources(notebook.id);
-  const selected = sources?.filter((source) => source.selected).length ?? 0;
+  const readable = sources?.filter(selectedTextSource).length ?? 0;
+  const practising = companion === "practise";
+  const reason = readable
+    ? t("header.practiseReason", { count: readable })
+    : t("header.needsMaterial");
 
   return (
-    // Three columns: the sides share what is left equally, so the name sits in
-    // the middle; on a narrow screen it gives way first and is shortened.
     <header
       data-window-bar
       data-bv="notebook-topbar"
-      className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 pt-3 pb-2 sm:grid-cols-[1fr_minmax(0,auto)_1fr] sm:gap-3 sm:px-4"
+      className="flex min-h-14 shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b px-3 py-2 sm:px-4"
     >
-      <div className="flex items-center justify-self-start">
-        {/* Panel's ButtonGroup: Settings and Create share a track; on the Chat
-            tab, History follows, split off and filled. */}
-        <ButtonGroup aria-label={t("toolbar")}>
-          <ButtonGroup aria-label={t("toolbar")}>
-            <SettingsSheet
-              open={settingsOpen}
-              onOpenChange={setSettingsOpen}
-              trigger={
-                <Button variant="outline" size="sm" title={tSettings("title")}>
-                  <Icon icon={Settings01Icon} size={16} />
-                  <span className="max-sm:sr-only">{tSettings("title")}</span>
-                </Button>
-              }
-            />
-            <StudioSheet
-              open={studioOpen}
-              onOpenChange={setStudioOpen}
-              trigger={
-                <Button variant="outline" size="sm" title={t("openStudio")}>
-                  <Icon icon={Add01Icon} size={16} />
-                  <span className="max-sm:sr-only">{t("create")}</span>
-                </Button>
-              }
-            />
-          </ButtonGroup>
-          {tab === "chat" ? (
-            // A track of its own, so it lines up with the one beside it.
-            <ButtonGroup aria-label={tChat("history.title")}>
-              <HistorySheet
-                trigger={
-                  <Button size="sm" title={tChat("history.title")}>
-                    <Icon icon={BubbleChatIcon} size={16} />
-                    <span className="max-sm:sr-only">{tChat("history.open")}</span>
-                  </Button>
-                }
-              />
-            </ButtonGroup>
-          ) : null}
-        </ButtonGroup>
+      {/* Settings opens from the sidebar; this sheet is the one the page's own links (Add a key…) open. */}
+      <SettingsSheet
+        open={settingsOpen}
+        page={settingsPage}
+        onOpenChange={setSettingsOpen}
+        trigger={<button type="button" hidden aria-hidden tabIndex={-1} />}
+      />
+      <SidebarMenuButton className="-ms-2" />
+      <nav
+        aria-label={t("header.breadcrumb")}
+        className="flex min-w-0 flex-1 items-center gap-1 text-sm"
+      >
+        <div className="min-w-0">
+          <NotebookMenu />
+        </div>
+      </nav>
+      <div className="flex items-center gap-2">
+        {/* On phones Add lives in the sidebar drawer and the prompt's menu, so the name keeps room to be read. */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="max-sm:hidden"
+          onClick={() => setAddSourceOpen(true)}
+        >
+          <Icon icon={Add01Icon} size={16} />
+          {t("header.add")}
+        </Button>
+        {/*
+          Practise this carries its reason under the label from 1280px; narrower,
+          the reason is a tooltip and stays the button's description. Without
+          material it stays focusable and says why (aria-disabled, outline).
+        */}
+        <Tooltip>
+          <Tooltip.Trigger
+            render={
+              <Button
+                size="sm"
+                // While the Practise tab is open, its Start is the filled button.
+                variant={practising || !readable ? "outline" : "default"}
+                aria-disabled={!readable || undefined}
+                aria-describedby="practise-reason"
+                className={cn(
+                  "max-sm:h-11 xl:h-auto xl:min-h-10 xl:flex-col xl:items-start xl:gap-0 xl:rounded-xl xl:py-1 xl:ps-3 xl:pe-4",
+                  !readable &&
+                    "cursor-not-allowed text-muted-foreground shadow-none hover:not-disabled:bg-background hover:not-disabled:text-muted-foreground active:not-disabled:scale-100 dark:hover:not-disabled:bg-input/30",
+                )}
+                onClick={() => {
+                  if (readable) setCompanion("practise");
+                }}
+              >
+                <span className="xl:text-[0.8125rem] xl:leading-4 xl:font-semibold">
+                  {t("header.practise")}
+                </span>
+                <span
+                  id="practise-reason"
+                  className="sr-only text-xs leading-4 font-normal opacity-75 xl:not-sr-only"
+                >
+                  {reason}
+                </span>
+              </Button>
+            }
+          />
+          <Tooltip.Content className="xl:hidden">{reason}</Tooltip.Content>
+        </Tooltip>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={t("header.companion")}
+          aria-expanded={companion !== null}
+          aria-controls="companion"
+          className={cn("max-sm:size-11", companion !== null && "bg-accent")}
+          onClick={() => setCompanion(companion ? null : "ask")}
+        >
+          <Icon icon={LayoutRightIcon} size={16} />
+        </Button>
       </div>
-      <div className="flex max-w-[min(24rem,50vw)] min-w-0 justify-center max-sm:max-w-none">
-        <NotebookMenu />
-      </div>
-      <Tabs.List aria-label={t("tabs.label")} className="justify-self-end">
-        <Tabs.Trigger value="chat">
-          <Icon icon={BubbleChatIcon} size={16} />
-          <span className="max-sm:sr-only">{t("tabs.chat")}</span>
-        </Tabs.Trigger>
-        <Tabs.Trigger value="sources">
-          <Icon icon={Book02Icon} size={16} />
-          <span className="max-sm:sr-only">{t("tabs.sources")}</span>
-          {sources && sources.length > 0 ? <Tabs.Badge>{selected}</Tabs.Badge> : null}
-        </Tabs.Trigger>
-        <Tabs.Trigger value="studio">
-          <Icon icon={DashboardSquare01Icon} size={16} />
-          <span className="max-sm:sr-only">{t("tabs.studio")}</span>
-        </Tabs.Trigger>
-      </Tabs.List>
     </header>
   );
 }

@@ -1,62 +1,22 @@
-import { useMemo, type ReactNode } from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
+import { lazy, Suspense, useMemo, type ReactNode } from "react";
+import ReactMarkdown, { type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Root, Element, ElementContent } from "hast";
+import { Link, useLocation } from "react-router";
+import { studyReturnState } from "@/lib/study/return-links";
 import { useTranslation } from "react-i18next";
 import type { NoteLink } from "@/lib/db/types";
+import { noteMarkdown } from "@/lib/notes/markdown";
 import { resolveLink, type LinkWorld } from "@/lib/notes/resolve";
-import {
-  LINK,
-  blockOf,
-  maskIgnored,
-  parseLinkInner,
-  readFrontmatter,
-  sectionOf,
-} from "@/lib/notes/syntax";
+import { noteEditorText } from "@/lib/notes/search-match";
+import { blockOf, parseLinkInner, readFrontmatter, sectionOf } from "@/lib/notes/syntax";
+import { isStudyHref } from "@/lib/study/links";
+import { containsStudyMath } from "@/lib/study/markdown-math";
+import { rehypeDirection } from "@/lib/text/rehype-direction";
 import { cn } from "@/lib/utils";
+import { rehypeNotePositions } from "./note-reading-selection";
 
-/** Rewrites matches outside code and comments, leaving the rest of the text as it is. */
-function outsideCode(text: string, pattern: RegExp, replace: (match: RegExpMatchArray) => string) {
-  const masked = maskIgnored(text);
-  let out = "";
-  let last = 0;
-  for (const match of masked.matchAll(pattern)) {
-    const start = match.index ?? 0;
-    const original = text.slice(start, start + match[0].length);
-    const real = original.match(new RegExp(pattern.source, pattern.flags.replace("g", "")));
-    if (!real) continue;
-    out += text.slice(last, start) + replace(real);
-    last = start + match[0].length;
-  }
-  return out + text.slice(last);
-}
-
-const encode = (value: string) => encodeURIComponent(value);
-
-/**
- * Obsidian syntax turned into plain Markdown links with private schemes,
- * which the components below draw: `wl:` links, `embed:` embeds, `tag:`
- * tags and `hl:` highlights.
- */
-function toMarkdown(body: string): string {
-  let text = body.replace(/%%[\s\S]*?%%/g, "");
-  text = outsideCode(text, LINK, (match) => {
-    const link = parseLinkInner(match[2], match[1] === "!");
-    const label =
-      (link.alias ?? [link.target, link.heading].filter(Boolean).join(" › ")) || match[2];
-    const safe = label.replace(/[[\]]/g, "");
-    return match[1] === "!"
-      ? `[${safe}](embed:${encode(match[2])})`
-      : `[${safe}](wl:${encode(match[2])})`;
-  });
-  text = outsideCode(text, /==([^=\n]+)==/g, (match) => `[${match[1]}](hl:)`);
-  text = outsideCode(
-    text,
-    /(^|[\s([{,;])#([\p{L}\p{N}_\-/]*[\p{L}_\-/][\p{L}\p{N}_\-/]*)/gu,
-    (match) => `${match[1]}[#${match[2]}](tag:${encode(match[2])})`,
-  );
-  return text;
-}
+const NoteMathMarkdown = lazy(() => import("./note-math-markdown"));
 
 const textOf = (node: ElementContent): string =>
   node.type === "text"
@@ -130,8 +90,10 @@ export function NoteReader({
   className,
 }: NoteReaderProps) {
   const { t } = useTranslation("notes");
-  const { data, content } = useMemo(() => readFrontmatter(body), [body]);
-  const markdown = useMemo(() => toMarkdown(content), [content]);
+  const { state } = useLocation();
+  const { data, content } = useMemo(() => readFrontmatter(noteEditorText(body)), [body]);
+  const markdown = useMemo(() => noteMarkdown(content).text, [content]);
+  const formulas = containsStudyMath(markdown);
 
   const components = useMemo<Components>(
     () => ({
@@ -182,15 +144,21 @@ export function NoteReader({
             </Embed>
           );
         }
+        if (isStudyHref(href))
+          return (
+            <Link to={href} state={studyReturnState(state)}>
+              {children}
+            </Link>
+          );
         return (
           <a href={href} target="_blank" rel="noreferrer noopener">
             {children}
           </a>
         );
       },
-      blockquote: ({ node, children }) => {
+      blockquote: ({ node, children, dir }) => {
         const callout = node?.properties?.dataCallout as string | undefined;
-        if (!callout) return <blockquote>{children}</blockquote>;
+        if (!callout) return <blockquote dir={dir}>{children}</blockquote>;
         const tone = /warn|caution|danger|error|bug|fail/.test(callout)
           ? "border-warning bg-warning/10"
           : /tip|success|check|done/.test(callout)
@@ -199,6 +167,7 @@ export function NoteReader({
         return (
           <div
             data-callout={callout}
+            dir={dir}
             className={cn(
               "rounded-lg border-s-4 px-4 py-2 not-italic [&_[data-callout-title]]:font-semibold",
               tone,
@@ -209,14 +178,26 @@ export function NoteReader({
         );
       },
     }),
-    [world, vaultId, depth, onOpenLink, onTag],
+    [world, vaultId, depth, onOpenLink, onTag, state],
   );
 
   const properties = Object.entries(data).filter(
     ([, value]) => value !== null && value !== undefined,
   );
+  const options: Options = {
+    remarkPlugins: [remarkGfm],
+    rehypePlugins: [
+      rehypeCallouts,
+      ...(depth === 0 ? [rehypeNotePositions] : []),
+      rehypeDirection,
+    ],
+    urlTransform: (url) => url,
+    components,
+    children: markdown,
+  };
+  const standard = <ReactMarkdown {...options} />;
   return (
-    <div className={cn("markdown", className)}>
+    <div className={cn("markdown", formulas && "study-math", className)}>
       {properties.length > 0 && depth === 0 ? (
         <dl className="not-prose mb-4 grid grid-cols-[minmax(6rem,auto)_1fr] gap-x-4 gap-y-1 rounded-xl border p-3 text-sm">
           <dt className="col-span-2 pb-1 text-xs font-medium text-muted-foreground">
@@ -227,14 +208,11 @@ export function NoteReader({
           ))}
         </dl>
       ) : null}
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeCallouts]}
-        urlTransform={(url) => url}
-        components={components}
-      >
-        {markdown}
-      </ReactMarkdown>
+      {formulas ? (
+        <Suspense fallback={standard}>
+          <NoteMathMarkdown {...options} />
+        </Suspense>
+      ) : standard}
     </div>
   );
 }

@@ -7,7 +7,7 @@
     <true/>
     <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
     <true/>
-    <!-- The microphone, for voice input (the whiteboard's Ask AI). -->
+    <!-- The microphone, for voice input (the whiteboard's Ask AI, Study's voice practice). -->
     <key>com.apple.security.device.audio-input</key>
     <true/>
   </dict>

@@ -4,6 +4,9 @@ import type { ModelRef } from "@/lib/ai/catalog";
 import type { ChatMessage } from "@/lib/chat/types";
 import type { PluginManifest, PluginPermission } from "@/lib/plugins/manifest";
 import type { SourceFormat, SourceKind } from "@/lib/sources/formats";
+import type { PdfOcrSource } from "@/lib/study/records";
+import type { FlashcardPractice } from "@/studio/tools/flashcards/practice";
+import type { QuizAttempt } from "@/studio/tools/quiz/attempt";
 
 export interface Notebook {
   id: string;
@@ -241,6 +244,7 @@ export interface StoredBlob {
   createdAt: number;
 }
 
+export { sourceKinds } from "@/lib/sources/formats";
 export type { SourceFormat, SourceKind };
 
 export interface Source {
@@ -254,8 +258,12 @@ export interface Source {
   fileName?: string;
   /** What the file or page was (CSV, Word document, YouTube video…), for its icon and label. */
   format?: SourceFormat;
+  /** The uploaded file itself (a PDF, EPUB or Markdown file), kept as a blob for Study's reader. */
+  originalFileId?: string;
   /** The source as plain text. */
   text: string;
+  studyRevision?: number;
+  pdfOcr?: PdfOcrSource;
   /**
    * Pictures taken from a PDF, in reading order, kept as files (`blobs`).
    * Each sits after the character `at` of `text`: the end of its page.
@@ -265,6 +273,19 @@ export interface Source {
   /** Only selected sources are given to the model. */
   selected: boolean;
   createdAt: number;
+}
+
+/** A source without its text, for lists: the notes' links and the Study Library. */
+export interface SourceSummary {
+  id: string;
+  notebookId: string;
+  title: string;
+  kind: SourceKind;
+  createdAt: number;
+  /** It has text (`sourceHasText`). */
+  hasText: boolean;
+  /** It can be read in Study: it has text, or a PDF or EPUB original (`sourceIsReadable`). */
+  readable: boolean;
 }
 
 export interface SourceImage {
@@ -317,6 +338,8 @@ export interface StudioOutput {
   sourceIds: string[];
   /** The tool's output, shaped by its schema. Set when `status` is `ready`. */
   data?: unknown;
+  quizAttempt?: QuizAttempt;
+  flashcardPractice?: FlashcardPractice;
   error?: string;
   model?: ModelRef;
   createdAt: number;

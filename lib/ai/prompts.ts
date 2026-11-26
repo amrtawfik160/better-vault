@@ -2,6 +2,14 @@ import type { ChatMode } from "@/lib/chat/types";
 import { VISUALS_PROMPT } from "@/lib/chat/visuals";
 import { formatPassages, type Passage } from "@/lib/grounding/passages";
 
+/** With tools: the chat makes what it is asked for instead of writing it out. */
+const ACTIONS_PROMPT = `When the user asks you to make flashcards or cards, call add_cards with the cards. When they ask for a report, quiz, mind map, data table, slide deck, anatomy figure, infographic or audio overview, call make. Call the tool at once, with at most one short sentence before it: the page shows what was made, so do not describe it afterwards.`;
+
+const SHOW_NOT_KEEP = `show_flashcards only shows cards to look at; use add_cards whenever the user wants to keep or study them.`;
+
+/** Without tools: the "/" menu makes things instead. */
+const SLASH_PROMPT = `You cannot make flashcards or Studio outputs yourself. When the user asks for flashcards, a quiz, a mind map, a report or another Studio output, tell them in one sentence to type /cards (or /quiz, /mind-map, /report…) in the prompt to make it, and answer the rest of their message as usual.`;
+
 const STYLE = `Write in the language of the user's latest message. Use Markdown: short paragraphs, lists where they help, and **bold** for key terms. Do not start with a heading unless asked.`;
 
 export interface ChatSkill {
@@ -14,7 +22,11 @@ export interface ChatSkill {
 export function chatSystemPrompt(
   mode: ChatMode,
   passages: readonly Passage[],
-  { skills = [], visuals = false }: { skills?: readonly ChatSkill[]; visuals?: boolean } = {},
+  {
+    skills = [],
+    visuals = false,
+    actions = false,
+  }: { skills?: readonly ChatSkill[]; visuals?: boolean; actions?: boolean } = {},
 ): string {
   const rules =
     mode === "sources"
@@ -42,7 +54,8 @@ export function chatSystemPrompt(
 
   return `You are better-vault, a research assistant inside the user's notebook.
 ${rules}${empty}
-${STYLE}${visuals ? `\n${VISUALS_PROMPT}` : ""}${skillText}
+${STYLE}${visuals ? `\n${VISUALS_PROMPT}` : ""}
+${actions ? `${ACTIONS_PROMPT}${visuals ? ` ${SHOW_NOT_KEEP}` : ""}` : SLASH_PROMPT}${skillText}
 
 ${formatPassages(passages)}`;
 }

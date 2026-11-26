@@ -15,11 +15,24 @@ better-vault is an open-source, bring-your-own-model alternative to Google's Not
 | **Bot**              | A persona drawn as better-vault's own character (`components/bot/character/`: a superellipsoid head projected to SVG, a deterministic pose model and accessories in slots, ids in `lib/bot/look.ts`), with one ongoing thread (`lib/db/bots.ts`, `components/bot/`). `/api/bot` only declares its tools (`lib/bot/tools.ts`); the page runs them on the user's data (`lib/bot/run-tool.ts`): reads at once, writes after a "Needs your OK" card, and `ask_bot` hands a task to another bot (one level, no loops).                                                             |
 | **Plugin**           | Panels and themes made by the user or an agent (`lib/plugins/`, `components/plugins/`): a manifest with permissions and a few text files. Panels run sandboxed in `public/plugin-host.html` (no `allow-same-origin`, a CSP that loads nothing) and reach data only through the bridge (`lib/plugins/bridge.ts`), checked against what the user granted. Themes set only colour tokens. They arrive turned off. **Creator mode**: agents build them over MCP (`describe_app`, `install_plugin`).                                                                               |
 | **Desktop app**      | The same app inside Electron (`desktop/`) for macOS, Windows and Linux. It runs the app's API in Electron's main process and stores data in SQLite instead of IndexedDB; the interface is identical.                                                                                                                                                                                                                                                                                                                                                                          |
-| **Provider / model** | Where a request goes: OpenAI, Anthropic, Google, OpenRouter, Kimi, DeepSeek, OpenCode, Ollama or LM Studio, plus a model id; ElevenLabs only speaks (Audio Overviews). Chosen in the prompt bar; keys are entered in Settings.                                                                                                                                                                                                                                                                                                                                                |
+| **Study**            | Reading and remembering (`lib/study/`, `components/study/`, rows in the `study` table through `lib/db/study.ts`): a reader for PDF, EPUB and Markdown sources (their original file is kept, `Source.originalFileId`) with highlights, bookmarks, vocabulary, translation and Ask AI; Today, Practice (spoken and written exercises), Review (spaced repetition) and the Library. One Study book per notebook source.                                                                                                                                                          |
+| **AI subscription**  | A plan the user already pays for (ChatGPT, Claude, Antigravity, Grok, Kimi, Devin, Muse Code) reached through a local [CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI): the `cliproxyapi` provider (`lib/ai/cliproxyapi*.ts`, `server/routes/cliproxyapi.ts`, sign-in in `components/settings/cliproxyapi-sign-in.tsx`). The desktop app bundles the proxy (`desktop/electron-builder.config.mjs`); a web app on loopback installs the pinned, checksum-checked proxy on first use. Credentials stay with the proxy, never in the page.                            |
+| **Provider / model** | Where a request goes: OpenAI, Anthropic, Google, OpenRouter, Kimi, DeepSeek, OpenCode, Ollama, LM Studio or an AI subscription (`cliproxyapi`), plus a model id; ElevenLabs only speaks (Audio Overviews). Chosen in the model picker; each AI feature remembers its own model (`AppSettings.modelChoices`); keys are entered in Settings → AI.                                                                                                                                                                                                                               |
 
 ## Interface
 
 The repository holds the app, the website and a desktop shell. The **app** is the root project, a Vite + React single-page app with a small Hono API: notebooks at `/`, a notebook at `/notebook/:id` (paths from `lib/routes.ts`, routes in `src/router.tsx`); people run it themselves, and nothing hosts it for them. The **desktop app** (`desktop/`, its own npm project) packages that same app with Electron; see "Desktop app" below. The **website** (landing page and Fumadocs docs, deployed at better-vault.dev) is its own Next.js project in `site/`, with its own `package.json`, lockfile and checks; it never links into a running app. The rest of this section describes the app.
+
+The redesign (rationale in `design-brief.md`, `design-system.md`, `ux-brief.md` and `ui-progress.md`; follow `design-system.md` for new screens) gives every page one frame:
+
+- **App sidebar** (`components/shell/app-sidebar.tsx`, items in `nav-model.ts`): the vault switcher (`vault-switcher.tsx`), Study (Today, Practice, Review, Library), Notebooks, Notes, Tools (Calendar, Bot, Skills) and Settings. Pages sit in `components/shell/app-frame.tsx`.
+- **Notebook page:** an overview (where you left off, cards, documents, outputs; `components/workspace/notebook-overview.tsx`) and a companion with **Ask · Practise · Make** (`companion.tsx`), docked from 1280px.
+- **Add box** (`components/sources/add-source-dialog.tsx`): one box for links, files and pasted text, with a row choosing the notebook they go to.
+- **Settings** in seven groups (`components/settings/settings-sheet.tsx`): AI, Reading and voice, Account and plan, Storage and data, Appearance and language, Tools (calendar, MCP, plugins), About and updates.
+- **Onboarding** (`components/onboarding/`): a first run that connects an AI, and a one-time upgrade notice.
+- **The chat acts** (`lib/chat/actions.ts`, `server/chat-action-tools.ts`): "make flashcards" adds cards, "make a quiz" starts a Studio output, each with a result row (Open, Undo); "/" lists every action.
+
+The notebook screen's older parts below still hold inside it:
 
 - **Top left:** Panel's `ButtonGroup` (small buttons): **Settings** (opens the Settings sheet, whose rows open nested sheets with `Sheet.Next`) and **Create** (opens the **Studio sheet**: tools grid and outputs list) share a track; on the Chat tab, the white **History** button follows in a track of its own and opens the History sheet (the notebook's chats).
 - **Top centre:** the notebook's name, opening a menu to switch, create, rename or delete notebooks.
@@ -90,16 +103,24 @@ server/                   the API (Hono): app.ts mounts the routes; node.ts serv
   routes/skills-fetch     SKILL.md files from a GitHub repo (what npx skills add from skills.sh installs)
   routes/studio           one Studio generation, validated against the tool's schema
   routes/models           list a provider's models with the user's key
-  routes/sources-parse    PDF / web page → plain text
+  routes/sources-parse    PDF / web page / Office / EPUB / YouTube captions → plain text
+  routes/sources-youtube  a YouTube video's transcript by Gemini, for videos without captions
+  routes/cliproxyapi      AI subscription sign-in and accounts through the local CLIProxyAPI
+  routes/study*           Study: tutor, practice, OCR (Tesseract) and voice (whisper.cpp) on the user's computer
 vite.config.ts            the web app's Vite config (dev server serves the API too); vite.shared.ts is shared with desktop
 components/panelui        Panel UI (vendored registry code)
 components/kloq           kloq, the calendar (vendored registry code; icons drawn with Hugeicons)
 components/ui             shadcn fallbacks (vendored)
 components/providers      app-wide providers (theme, i18n, Sheet.Stage)
-components/workspace      the notebook screen: top bar, sheets, tabs, prompt, views
+components/shell          the app frame: sidebar, vault switcher, page frame
+components/workspace      the notebook screen: overview, companion, top bar, sheets, prompt, views
+components/study          Study: reader, Today, Library, Practice, Review
 components/bot            the Bot section: roster, thread, approval cards, the runtime that runs bots' tools, and character/ (the bot character)
 studio/                   Studio tools: registry, shared dialog fields, one folder per tool
-lib/ai                    providers, model catalog, web-search tools, prompts
+lib/ai                    providers, model catalog, web-search tools, prompts; cliproxyapi* (AI subscriptions)
+lib/study                 Study: reading places, passages, review schedule, practice, OCR, voice
+lib/speech                the reading voice: Kokoro on the device (kokoro-js, eSpeak NG via phonemizer) and system voices
+lib/chat                  chat types and the chat's actions
 lib/bot                   bot tools (schemas and the in-page runner), access, looks and colours, starter bots
 lib/db                    data functions and hooks; Backend interface; Dexie (web) and SQLite (desktop) stores
 lib/desktop               the bridge type the desktop preload puts on window.betterVault

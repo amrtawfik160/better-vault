@@ -3,10 +3,10 @@ import {
   AiBrain02Icon,
   Book02Icon,
   BubbleChatIcon,
+  Cards01Icon,
   Calendar03Icon,
   CloudIcon,
   ComputerIcon,
-  Database01Icon,
   DashboardSquare01Icon,
   FileAddIcon,
   Folder01Icon,
@@ -14,12 +14,15 @@ import {
   InformationCircleIcon,
   LanguageSkillIcon,
   Moon02Icon,
+  Note01Icon,
   Notebook01Icon,
   PaintBoardIcon,
+  PlugSocketIcon,
   QuoteDownIcon,
   SparklesIcon,
   Sun03Icon,
   UserIcon,
+  AiVoiceIcon as VoiceIcon,
 } from "@hugeicons/core-free-icons";
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -36,6 +39,7 @@ import { notebookIcon } from "@/lib/notebooks/icons";
 import { shortcutKeys } from "@/lib/platform";
 import { routes } from "@/lib/routes";
 import { readCatalogue, searchIndex, type Catalogue, type Hit } from "@/lib/search/index";
+import { originHref } from "@/lib/study/links";
 
 interface Action {
   id: string;
@@ -76,41 +80,40 @@ function Marked({ text, terms }: { text: string; terms: string[] }) {
 
 /**
  * The command palette (⌘K, or Ctrl K on Windows and Linux): search every
- * notebook, source and output, including the text inside PDFs, and run
+ * notebook, note, source, Studio output, and saved Study item, and run
  * actions or open a settings page. Mounted once, around every page.
  */
 export function CommandPalette() {
   const { t } = useTranslation();
   const { t: tHome } = useTranslation("home");
+  const { t: tNotes } = useTranslation("notes");
   const { t: tSettings } = useTranslation("settings");
   const navigate = useNavigate();
   const inNotebook = useMatch(routes.notebook(":id"));
   const notebookId = inNotebook?.params.id;
   const { setTheme } = useTheme();
-  const [open, setOpen] = useState(false);
-  const [started, setStarted] = useState(false);
+  const [opening, setOpening] = useState<symbol | null>(null);
   const [search, setSearch] = useState("");
   const [settingsPage, setSettingsPage] = useState<SettingsPage | null>(null);
   const [, setVersion] = useState(0);
   const keys = shortcutKeys("k");
 
-  /** Opens or closes it; the first opening starts the index, and closing clears the search. */
   const changeOpen = (next: boolean) => {
-    setOpen(next);
-    if (next) setStarted(true);
-    else setSearch("");
+    setOpening((current) => (next ? (current ?? Symbol()) : null));
+    if (!next) setSearch("");
   };
   useEffect(() => onOpenCommandPalette(() => changeOpen(true)), []);
   useEffect(() => searchIndex.subscribe(() => setVersion((n) => n + 1)), []);
 
-  const catalogue = useStoreQuery<Catalogue | null>(
-    async () => (started ? readCatalogue() : null),
-    [started],
-    ["vaults", "folders", "notebooks", "sources", "outputs"],
+  const result = useStoreQuery<{ opening: symbol; catalogue: Catalogue } | null>(
+    async () => (opening ? { opening, catalogue: await readCatalogue() } : null),
+    [opening],
+    ["vaults", "folders", "notebooks", "sources", "outputs", "study", "notes"],
   );
-  // The index is built on first opening and follows every change after.
+  // A live query can still hold results from the previous opening while it refreshes.
+  const catalogue = result && result.opening === opening ? result.catalogue : null;
   useEffect(() => {
-    if (catalogue) void searchIndex.sync(catalogue);
+    if (catalogue && !searchIndex.isCurrent(catalogue)) void searchIndex.sync(catalogue);
   }, [catalogue]);
   const notebookTitle = new Map(catalogue?.notebooks.map((nb) => [nb.id, nb.title]) ?? []);
   const vaultName = (id: string) => {
@@ -129,6 +132,29 @@ export function CommandPalette() {
         icon: Home01Icon,
         keywords: ["notebooks", "vault", "home"],
         run: () => go(routes.home),
+      },
+      {
+        id: "study",
+        label: tHome("vaults.study"),
+        icon: Notebook01Icon,
+        keywords: [
+          "review",
+          "flashcards",
+          "library",
+          "vocabulary",
+          "practice",
+          "tutor",
+          "reading",
+          "epub",
+          "pdf",
+        ],
+        run: () => go(routes.study),
+      },
+      {
+        id: "notes",
+        label: tNotes("title"),
+        icon: Note01Icon,
+        run: () => go(`${routes.home}?view=notes`),
       },
       {
         id: "calendar",
@@ -205,24 +231,56 @@ export function CommandPalette() {
     return list;
     // `go` and `setTheme` are stable enough; the list follows the page and language.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notebookId, t, tHome, tSettings]);
+  }, [notebookId, t, tHome, tNotes, tSettings]);
 
-  const settingsActions: Action[] = [
-    { page: "providers", icon: AiBrain02Icon, keywords: ["ai", "model", "key", "api", "effort"] },
-    { page: "appearance", icon: PaintBoardIcon, keywords: ["theme", "colour", "color", "dark"] },
-    { page: "calendar", icon: Calendar03Icon, keywords: ["calendar", "google", "outlook", "ics"] },
-    { page: "storage", icon: CloudIcon, keywords: ["drive", "google", "s3", "backup"] },
-    { page: "account", icon: UserIcon, keywords: ["profile", "name"] },
-    { page: "language", icon: LanguageSkillIcon, keywords: ["language", "translate"] },
-    { page: "data", icon: Database01Icon, keywords: ["backup", "export", "import", "delete"] },
-    { page: "about", icon: InformationCircleIcon, keywords: ["version", "update"] },
-  ].map(({ page, icon, keywords }) => ({
-    id: `settings-${page}`,
-    label: tSettings(`rows.${page as SettingsPage}`),
+  // The Settings sheet's seven groups, named as the sheet names them; each opens on its first page.
+  const settingsActions: Action[] = (
+    [
+      {
+        group: "ai",
+        page: "providers",
+        icon: AiBrain02Icon,
+        keywords: [
+          "model",
+          "key",
+          "api",
+          "provider",
+          "subscription",
+          "connect",
+          "chatgpt",
+          "claude",
+          "studio",
+        ],
+      },
+      { group: "reading", page: "voice", icon: VoiceIcon, keywords: ["voice", "speech", "listen"] },
+      { group: "account", page: "account", icon: UserIcon, keywords: ["profile", "name", "plan", "subscription", "sync", "billing"] },
+      {
+        group: "storage",
+        page: "storage",
+        icon: CloudIcon,
+        keywords: ["drive", "google", "s3", "backup", "export", "import", "delete"],
+      },
+      {
+        group: "appearance",
+        page: "appearance",
+        icon: PaintBoardIcon,
+        keywords: ["theme", "colour", "color", "dark", "translate", "font", "character"],
+      },
+      {
+        group: "tools",
+        page: "calendar",
+        icon: PlugSocketIcon,
+        keywords: ["calendar", "outlook", "ics", "mcp", "skills", "plugins", "agents"],
+      },
+      { group: "about", page: "about", icon: InformationCircleIcon, keywords: ["version", "update"] },
+    ] as const
+  ).map(({ group, page, icon, keywords }) => ({
+    id: `settings-${group}`,
+    label: tSettings(`groups.${group}.label`),
     icon,
-    keywords: ["settings", ...keywords],
+    keywords: ["settings", tSettings(`groups.${group}.detail`), ...keywords],
     kind: tSettings("title"),
-    run: () => openSettings(page as SettingsPage),
+    run: () => openSettings(page),
   }));
 
   const vaultActions: Action[] = (catalogue?.vaults ?? []).map((vault) => ({
@@ -238,7 +296,8 @@ export function CommandPalette() {
   }));
 
   const query = search.trim();
-  const hits = query ? searchIndex.search(query) : [];
+  const ready = searchIndex.isCurrent(catalogue);
+  const hits = query && ready ? searchIndex.search(query) : [];
   const recent = [...(catalogue?.notebooks ?? [])]
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, 5);
@@ -255,6 +314,18 @@ export function CommandPalette() {
         );
       case "output":
         return go(`${routes.notebook(hit.notebookId!)}?output=${hit.outputId}`);
+      case "note":
+        if (hit.noteId) {
+          setCurrentVault(hit.vaultId ?? DEFAULT_VAULT);
+          navigate(originHref({ kind: "note", noteId: hit.noteId }), {
+            state: hit.noteMatch ? { noteMatch: hit.noteMatch } : undefined,
+          });
+        }
+        return;
+      case "study-passage":
+      case "study":
+        if (hit.study) return go(hit.study.href);
+        return;
       case "folder":
         setCurrentVault(hit.vaultId ?? DEFAULT_VAULT);
         return go(`${routes.home}?folder=${hit.folderId}`);
@@ -279,12 +350,64 @@ export function CommandPalette() {
 
   const groups: { kind: Hit["kind"]; heading: string }[] = [
     { kind: "notebook", heading: t("command.groups.notebooks") },
+    { kind: "note", heading: tNotes("title") },
     { kind: "source", heading: t("command.groups.sources") },
+    { kind: "study", heading: tHome("vaults.study") },
+    { kind: "study-passage", heading: t("command.groups.studyPassages") },
     { kind: "passage", heading: t("command.groups.passages") },
     { kind: "output", heading: t("command.groups.outputs") },
     { kind: "folder", heading: t("command.groups.folders") },
     { kind: "vault", heading: t("command.groups.vaults") },
   ];
+
+  const studyIcons = {
+    book: Book02Icon,
+    card: Cards01Icon,
+    highlight: QuoteDownIcon,
+    passage: QuoteDownIcon,
+    word: LanguageSkillIcon,
+    thread: BubbleChatIcon,
+    message: BubbleChatIcon,
+    report: Notebook01Icon,
+  };
+  const renderStudyHit = (hit: Hit, study: NonNullable<Hit["study"]>) => {
+    const kind = t(`command.study.${study.type}`);
+    const snippet = hit.snippet && <Marked text={hit.snippet} terms={hit.terms} />;
+    const location = [study.context, vaultName(hit.vaultId ?? DEFAULT_VAULT)]
+      .filter(Boolean)
+      .join(" · ");
+    return (
+      <Command.Item
+        key={hit.id}
+        value={hit.id}
+        icon={<Icon icon={studyIcons[study.type]} size={18} />}
+        subtitle={hit.title && snippet ? snippet : location}
+        kind={kind}
+        textValue={hit.title || hit.snippet || kind}
+        onSelect={() => openHit(hit)}
+      >
+        {hit.title ? <Marked text={hit.title} terms={hit.terms} /> : snippet || kind}
+      </Command.Item>
+    );
+  };
+
+  const renderNoteHit = (hit: Hit) => (
+    <Command.Item
+      key={hit.id}
+      value={hit.id}
+      icon={<Icon icon={Note01Icon} size={18} />}
+      subtitle={
+        hit.snippet
+          ? <Marked text={hit.snippet} terms={hit.terms} />
+          : hit.notebookId && notebookTitle.get(hit.notebookId)
+      }
+      kind={vaultName(hit.vaultId ?? DEFAULT_VAULT)}
+      textValue={hit.title}
+      onSelect={() => openHit(hit)}
+    >
+      <Marked text={hit.title} terms={hit.terms} />
+    </Command.Item>
+  );
 
   const renderAction = (action: Action) => (
     <Command.Item
@@ -313,7 +436,7 @@ export function CommandPalette() {
   return (
     <>
       <Command.Dialog
-        open={open}
+        open={opening !== null}
         onOpenChange={changeOpen}
         hotkey="mod+k"
         label={t("command.label")}
@@ -327,35 +450,41 @@ export function CommandPalette() {
                 if (items.length === 0) return null;
                 return (
                   <Command.Group key={kind} heading={heading}>
-                    {items.map((hit) => (
-                      <Command.Item
-                        key={hit.id}
-                        value={hit.id}
-                        icon={<Icon icon={hitIcon(hit)} size={18} />}
-                        subtitle={
-                          hit.kind === "passage" || hit.kind === "vault"
-                            ? undefined
-                            : hit.snippet
-                              ? hit.snippet && <Marked text={hit.snippet} terms={hit.terms} />
-                              : hit.kind !== "notebook" && hit.notebookId
-                                ? notebookTitle.get(hit.notebookId)
-                                : vaultName(hit.vaultId ?? DEFAULT_VAULT)
-                        }
-                        kind={hit.kind === "passage" ? hit.title : undefined}
-                        textValue={hit.title}
-                        onSelect={() => openHit(hit)}
-                      >
-                        {hit.kind === "passage" && hit.snippet ? (
-                          <span className="font-normal">
-                            <Marked text={hit.snippet} terms={hit.terms} />
-                          </span>
-                        ) : hit.kind === "vault" ? (
-                          vaultName(hit.vaultId ?? DEFAULT_VAULT)
-                        ) : (
-                          hit.title
-                        )}
-                      </Command.Item>
-                    ))}
+                    {items.map((hit) =>
+                      hit.kind === "note" ? (
+                        renderNoteHit(hit)
+                      ) : hit.study ? (
+                        renderStudyHit(hit, hit.study)
+                      ) : (
+                        <Command.Item
+                          key={hit.id}
+                          value={hit.id}
+                          icon={<Icon icon={hitIcon(hit)} size={18} />}
+                          subtitle={
+                            hit.kind === "passage" || hit.kind === "vault"
+                              ? undefined
+                              : hit.snippet
+                                ? hit.snippet && <Marked text={hit.snippet} terms={hit.terms} />
+                                : hit.kind !== "notebook" && hit.notebookId
+                                  ? notebookTitle.get(hit.notebookId)
+                                  : vaultName(hit.vaultId ?? DEFAULT_VAULT)
+                          }
+                          kind={hit.kind === "passage" ? hit.title : undefined}
+                          textValue={hit.title}
+                          onSelect={() => openHit(hit)}
+                        >
+                          {hit.kind === "passage" && hit.snippet ? (
+                            <span className="font-normal">
+                              <Marked text={hit.snippet} terms={hit.terms} />
+                            </span>
+                          ) : hit.kind === "vault" ? (
+                            vaultName(hit.vaultId ?? DEFAULT_VAULT)
+                          ) : (
+                            hit.title
+                          )}
+                        </Command.Item>
+                      ),
+                    )}
                   </Command.Group>
                 );
               })
@@ -391,7 +520,7 @@ export function CommandPalette() {
             ) : null}
             {nothing ? (
               <Command.Empty>
-                {searchIndex.ready ? t("command.empty", { query }) : t("command.indexing")}
+                {ready ? t("command.empty", { query }) : t("command.indexing")}
               </Command.Empty>
             ) : null}
           </Command.List>

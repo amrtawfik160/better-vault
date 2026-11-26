@@ -1,8 +1,9 @@
 import { useMemo } from "react";
-import ReactMarkdown, { type Components } from "react-markdown";
+import ReactMarkdown, { type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { PassageRef } from "@/lib/chat/types";
 import { linkCitations } from "@/lib/grounding/passages";
+import { rehypeDirection } from "@/lib/text/rehype-direction";
 import { cn } from "@/lib/utils";
 import { Citation } from "./citation";
 
@@ -32,6 +33,9 @@ interface MarkdownProps {
   bare?: boolean;
   /** Give "##" and "###" headings ids (see `headingsOf`), for a table of contents. */
   anchorHeadings?: boolean;
+  plugins?: Pick<Options, "remarkPlugins" | "rehypePlugins">;
+  staticContent?: boolean;
+  imageAltOnly?: boolean;
 }
 
 /** A heading's id: the line it starts on, which adding citation links never changes. */
@@ -63,6 +67,9 @@ export function Markdown({
   className,
   bare = false,
   anchorHeadings = false,
+  plugins,
+  staticContent = false,
+  imageAltOnly = false,
 }: MarkdownProps) {
   const byN = useMemo(
     () => new Map((passages ?? []).map((passage) => [passage.n, passage])),
@@ -77,15 +84,20 @@ export function Markdown({
     () => ({
       ...(anchorHeadings
         ? {
-            h2: ({ node, children }) => (
-              <h2 id={headingId(node?.position?.start.line)}>{children}</h2>
+            h2: ({ node, children, dir }) => (
+              <h2 id={headingId(node?.position?.start.line)} dir={dir}>
+                {children}
+              </h2>
             ),
-            h3: ({ node, children }) => (
-              <h3 id={headingId(node?.position?.start.line)}>{children}</h3>
+            h3: ({ node, children, dir }) => (
+              <h3 id={headingId(node?.position?.start.line)} dir={dir}>
+                {children}
+              </h3>
             ),
           }
         : {}),
       a: ({ href, children }) => {
+        if (staticContent) return <span>{children}</span>;
         const cite = href?.match(/^#cite-([\d-]+)$/);
         if (cite) {
           const numbers = cite[1].split("-").map(Number);
@@ -98,12 +110,17 @@ export function Markdown({
           </a>
         );
       },
+      ...(staticContent || imageAltOnly ? { img: ({ alt }) => <span>{alt}</span> } : {}),
     }),
-    [byN, onCite, anchorHeadings],
+    [byN, onCite, anchorHeadings, staticContent, imageAltOnly],
   );
 
   const blocks = (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm, ...(plugins?.remarkPlugins ?? [])]}
+      rehypePlugins={[rehypeDirection, ...(plugins?.rehypePlugins ?? [])]}
+      components={components}
+    >
       {source}
     </ReactMarkdown>
   );

@@ -1,5 +1,6 @@
 import { Output, stepCountIs, streamText, type ModelMessage } from "ai";
 import { z } from "zod";
+import { rejectCliProxyRequest } from "@/lib/ai/cliproxyapi";
 import { describeError } from "@/lib/ai/errors";
 import { providers } from "@/lib/ai/catalog";
 import { createLanguageModel, createWebSearchTools } from "@/lib/ai/providers";
@@ -54,6 +55,8 @@ export async function POST(request: Request) {
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Invalid request." }, { status: 400 });
   const { question, board, selection, model, credentials, effort } = parsed.data;
+  const denied = rejectCliProxyRequest(request, model.provider);
+  if (denied) return denied;
   const passages = parsed.data.passages as Passage[];
 
   let languageModel;

@@ -1,3 +1,4 @@
+import { SettingsSection } from "./settings-section";
 import { FileImportIcon, Loading03Icon, Search01Icon } from "@hugeicons/core-free-icons";
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -7,7 +8,6 @@ import { openPluginDialog } from "@/components/plugins/plugin-dialog";
 import { PluginCard } from "@/components/plugins/plugin-card";
 import { Button } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
-import { Sheet } from "@/components/panelui/sheet";
 import { Tabs } from "@/components/panelui/tabs";
 import { usePlugins } from "@/lib/db/plugins";
 import { useRegistry } from "@/lib/plugins/directory";
@@ -34,8 +34,7 @@ export function PluginsPanel() {
 
   return (
     <>
-      <Sheet.Header title={t("plugins.title")} description={t("plugins.description")} />
-      <Sheet.Body>
+      <SettingsSection title={t("plugins.title")} description={t("plugins.description")}>
         <div className="flex flex-col gap-4 pb-4">
           <Tabs value={tab} onValueChange={(value) => setTab(value as typeof tab)}>
             <Tabs.List aria-label={t("plugins.title")} className="w-full">
@@ -72,7 +71,7 @@ export function PluginsPanel() {
 
           <p className="px-1 text-xs text-muted-foreground">{t("plugins.safety")}</p>
         </div>
-      </Sheet.Body>
+      </SettingsSection>
     </>
   );
 }

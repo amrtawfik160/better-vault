@@ -7,6 +7,8 @@ import tseslint from "typescript-eslint";
 
 export default defineConfig([
   globalIgnores([
+    // Agent worktrees: their own checkouts of this repository.
+    ".claude/**",
     "dist/**",
     "coverage/**",
     // The website is its own project, with its own lint config.

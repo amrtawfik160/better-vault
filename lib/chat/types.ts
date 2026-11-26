@@ -1,6 +1,7 @@
 import type { UIMessage } from "ai";
 import type { ModelRef } from "@/lib/ai/catalog";
 import type { SourceFormat, SourceKind } from "@/lib/db/database";
+import type { ChatQuote } from "./quote";
 
 /**
  * `sources`: answer only from the notebook's selected sources.
@@ -34,6 +35,8 @@ export interface ChatMessageMetadata {
   usage?: TokenUsage;
   /** In a bot's thread: the bot that sent this message (a task handed over), not the user. */
   from?: string;
+  /** The passage the user selected to ask about: from the book beside Ask AI, or from an answer. */
+  quote?: ChatQuote;
 }
 
 export interface PromptSize {

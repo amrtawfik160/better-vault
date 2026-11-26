@@ -1,5 +1,6 @@
 import { sourceFormatOf, type SourceFormat } from "@/lib/sources/formats";
 import { generateId } from "ai";
+import { clearFlashcardDraftsFrom } from "@/lib/study/flashcard-draft-recovery";
 import { useStoreQuery } from "./live";
 import { store } from "./store";
 import type { Notebook } from "./types";
@@ -37,6 +38,7 @@ export async function touchNotebook(id: string) {
 /** Deletes a notebook with its sources, chats and Studio outputs. */
 export async function deleteNotebook(id: string) {
   await store().deleteNotebook(id);
+  clearFlashcardDraftsFrom(({ notebookId }) => notebookId === id);
 }
 
 /** All notebooks, most recently changed first. `undefined` while loading. */

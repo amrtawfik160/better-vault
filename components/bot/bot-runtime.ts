@@ -11,7 +11,7 @@ import { runBotTool, type ToolContext } from "@/lib/bot/run-tool";
 import { botWriteTools, isBotTool, type BotToolName } from "@/lib/bot/tools";
 import type { ChatMessage } from "@/lib/chat/types";
 import { getBot, listBots, loadBotThread, saveBotThread } from "@/lib/db/bots";
-import { activeModel, credentialsFor, effortFor, getSettings } from "@/lib/db/settings";
+import { credentialsFor, getSettings, modelFor } from "@/lib/db/settings";
 import { store } from "@/lib/db/store";
 import type { Vault } from "@/lib/db/types";
 import { currentVaultId, DEFAULT_VAULT } from "@/lib/db/vaults";
@@ -149,8 +149,9 @@ async function requestBody(botId: string, messages: ChatMessage[]) {
     vaultList(),
   ]);
   if (!bot) throw new Error("This bot was deleted.");
-  const model = bot.model ?? activeModel(settings);
-  if (!model) throw new NoModelError();
+  const choice = modelFor(settings, `bot:${bot.id}`, bot.model);
+  if (!choice) throw new NoModelError();
+  const { model, effort } = choice;
   const delegatorId = delegatorOf(messages);
   const delegator = delegatorId ? bots.find((each) => each.id === delegatorId) : undefined;
   const current = currentVaultId();
@@ -161,7 +162,7 @@ async function requestBody(botId: string, messages: ChatMessage[]) {
     messages: messages.slice(-HISTORY),
     model,
     credentials: credentialsFor(settings, model.provider),
-    effort: effortFor(settings, model.provider),
+    effort,
     bot: { name: bot.name, title: bot.title, instructions: bot.instructions },
     tools: botToolsFor(bot, { handedOver: Boolean(delegatorId) }),
     // A task handed over is not handed on: one level, so bots never loop.

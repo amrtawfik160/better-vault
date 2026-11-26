@@ -8,6 +8,7 @@ import {
   type WebFrameMain,
 } from "electron";
 import path from "node:path";
+import { stopCliProxy } from "@/lib/ai/cliproxyapi-runtime";
 import { openDatabase } from "./database";
 import { startMcp } from "./mcp";
 import { startAccount } from "./account";
@@ -192,5 +193,6 @@ app.on("window-all-closed", () => {
 });
 
 app.on("will-quit", () => {
+  stopCliProxy();
   closeDatabase?.();
 });

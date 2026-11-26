@@ -1,6 +1,12 @@
 import { generateText, Output } from "ai";
 import { z } from "zod";
-import { clean, seededRandom, studioSystem, type Generator } from "@/studio/server/shared";
+import {
+  clean,
+  seededRandom,
+  studioSourceRefs,
+  studioSystem,
+  type Generator,
+} from "@/studio/server/shared";
 import { quizCounts, type QuizData, type QuizOptions, type QuizQuestion } from "./definition";
 
 const LEVEL = {
@@ -18,6 +24,7 @@ const schema = z.object({
       answer: z.number().int().describe("Index (0 to 3) of the correct option"),
       explanation: z.string().describe("Why the correct option is right, one or two sentences"),
       hint: z.string().describe("A short hint that does not give the answer away"),
+      citations: z.array(z.number()).describe("Numbers of the passages supporting the answer"),
     }),
   ),
 });
@@ -47,25 +54,34 @@ export const generateQuiz: Generator<QuizOptions, QuizData> = async ({
     model,
     output: Output.object({ schema }),
     system: studioSystem(
-      `Create a multiple-choice quiz of ${count} questions about the sources. ${LEVEL[options.difficulty]} Each question has exactly four options and one correct answer.`,
+      `Create a multiple-choice quiz of ${count} questions about the sources. ${LEVEL[options.difficulty]} Each question has exactly four options and one correct answer. Use $...$ for inline equations and $$ on separate lines for display equations. Put multiline code in fenced code blocks. Escape literal dollar amounts in Markdown. Cite up to three numbered passages that support each answer in citations.`,
       args,
     ),
     prompt: `Create the ${count} questions now.`,
     abortSignal,
   });
   const random = seededRandom(output.title + output.questions.length);
-  const questions = output.questions
-    .map((q) => ({
-      question: clean(q.question),
-      options: q.options.map(clean).filter(Boolean),
-      answer: q.answer,
-      explanation: clean(q.explanation),
-      hint: clean(q.hint),
-    }))
-    .filter(
-      (q) => q.question && q.options.length >= 2 && q.answer >= 0 && q.answer < q.options.length,
-    )
-    .map((q) => shuffleOptions(q, random));
+  const questions = output.questions.flatMap((q) => {
+    const question = q.question.trim();
+    const options = q.options
+      .map((option, index) => ({ text: option.trim(), index }))
+      .filter((option) => option.text);
+    const answer = options.findIndex((option) => option.index === q.answer);
+    if (!question || options.length < 2 || answer < 0) return [];
+    return [
+      shuffleOptions(
+        {
+          question,
+          options: options.map((option) => option.text),
+          answer,
+          explanation: q.explanation.trim(),
+          hint: q.hint.trim(),
+          sources: studioSourceRefs(args.passages, q.citations),
+        },
+        random,
+      ),
+    ];
+  });
   if (questions.length === 0) throw new Error("The model returned no usable questions.");
   return { title: clean(output.title) || "Quiz", data: { questions } };
 };

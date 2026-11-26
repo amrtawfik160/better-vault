@@ -1,0 +1,49 @@
+.study-pdf-text {
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  overflow: hidden;
+  line-height: 1;
+  direction: ltr;
+  text-align: start;
+  text-size-adjust: none;
+  user-select: text;
+}
+
+.study-pdf-text .markedContent {
+  display: contents;
+}
+
+.study-pdf-text span:not(.markedContent),
+.study-pdf-text br {
+  position: absolute;
+  color: transparent;
+  cursor: text;
+  white-space: pre;
+  transform-origin: left top;
+  font-size: calc(var(--total-scale-factor, 1) * var(--font-height, 0px));
+  transform: rotate(var(--rotate, 0deg)) scaleX(var(--scale-x, 1));
+}
+
+.study-pdf-text ::selection {
+  background: rgb(86 126 243 / 38%);
+  color: transparent;
+}
+
+::highlight(study-yellow) {
+  background-color: rgb(245 198 46 / 40%);
+}
+::highlight(study-green) {
+  background-color: rgb(66 201 128 / 35%);
+}
+::highlight(study-blue) {
+  background-color: rgb(71 149 249 / 35%);
+}
+::highlight(study-pink) {
+  background-color: rgb(237 101 175 / 36%);
+}
+::highlight(study-purple) {
+  background-color: rgb(172 109 247 / 36%);
+}

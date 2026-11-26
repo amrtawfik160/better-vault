@@ -1,10 +1,16 @@
+import { pdfOcrSourceSchema, studyRecordSchema, type StudyRecord } from "@/lib/study/records";
+import { clearAllReviewCheckpoints } from "@/lib/study/review-session";
+import { clearAllTutorDraftRecovery } from "@/lib/study/tutor-draft-recovery";
+import { clearDocumentRecoveries } from "@/lib/study/document-drafts";
+import { clearFlashcardDrafts } from "@/lib/study/flashcard-draft-recovery";
+import { clearAllPracticeDrafts } from "@/lib/study/writing-practice-drafts";
 import { z } from "zod";
-import { chunkText } from "@/lib/grounding/chunk";
 import { conversationTitle } from "@/lib/chat/title";
 import { parsePluginBundle } from "@/lib/plugins/manifest";
+import { fromBase64, toBase64 } from "@/lib/base64";
 import { store } from "./store";
+import { chunksForSource } from "./sources";
 import type {
-  Chunk,
   Conversation,
   Folder,
   Notebook,
@@ -33,13 +39,15 @@ export type BackupBlob = Omit<StoredBlob, "data"> & { data: string };
 export interface Backup {
   app: "better-vault";
   /**
-   * 8 adds plugins; 7 added bots and their threads; 6 added notes and skills; 5 added calendar entries; 4 added vaults; 3 added folders and files; 2
+   * 10 adds Study's data; 9 added loose files in vaults; 8 added plugins; 7 added bots and their threads; 6 added notes and skills; 5 added calendar entries; 4 added vaults; 3 added folders and files; 2
    * added conversations. Older backups still import: format 1 (one chat per
    * notebook), format 2 (no folders), format 3 (no vaults: everything is in
-   * the default vault), format 4 (no calendar), format 5 (no notes or skills), format 6 (no bots)
-   * and format 7 (no plugins). Plugins in a backup are checked again and come back turned off.
+   * the default vault), format 4 (no calendar), format 5 (no notes or skills), format 6 (no bots),
+   * format 7 (no plugins), format 8 (no files) and format 9 (no Study). Plugins in a backup are
+   * checked again and come back turned off.
    */
-  format: 9;
+  format: 10;
+  study: StudyRecord[];
   exportedAt: number;
   calendar: CalendarEntry[];
   vaults: Vault[];
@@ -70,6 +78,7 @@ const backupSchema = z.object({
     z.literal(7),
     z.literal(8),
     z.literal(9),
+    z.literal(10),
   ]),
   plugins: z.array(z.object({ id: z.string() }).loose()).optional(),
   files: z
@@ -84,6 +93,8 @@ const backupSchema = z.object({
         .loose(),
     )
     .optional(),
+  // Study's own builds wrote their data as format 8, before it reached main.
+  study: z.array(studyRecordSchema).optional(),
   bots: z.array(z.object({ id: z.string(), name: z.string() }).loose()).optional(),
   botMessages: z
     .array(z.object({ id: z.string(), botId: z.string(), createdAt: z.number() }).loose())
@@ -103,7 +114,17 @@ const backupSchema = z.object({
   vaults: z.array(z.object({ id: z.string(), name: z.string() }).loose()).optional(),
   folders: z.array(z.object({ id: z.string(), name: z.string() }).loose()).optional(),
   notebooks: z.array(z.object({ id: z.string(), title: z.string() }).loose()),
-  sources: z.array(z.object({ id: z.string(), notebookId: z.string(), text: z.string() }).loose()),
+  sources: z.array(
+    z
+      .object({
+        id: z.string(),
+        notebookId: z.string(),
+        text: z.string(),
+        studyRevision: z.number().int().nonnegative().optional(),
+        pdfOcr: pdfOcrSourceSchema.optional(),
+      })
+      .loose(),
+  ),
   conversations: z.array(z.object({ id: z.string(), notebookId: z.string() }).loose()).optional(),
   messages: z.array(z.object({ id: z.string(), notebookId: z.string() }).loose()),
   outputs: z.array(z.object({ id: z.string(), notebookId: z.string() }).loose()),
@@ -120,7 +141,7 @@ export async function exportBackup(): Promise<Backup> {
   const { blobs, ...content } = await store().exportAll();
   return {
     app: "better-vault",
-    format: 9,
+    format: 10,
     exportedAt: Date.now(),
     ...content,
     blobs: blobs.map((blob) => ({ ...blob, data: toBase64(blob.data) })),
@@ -132,17 +153,10 @@ export async function importBackup(raw: unknown): Promise<number> {
   const parsed = backupSchema.safeParse(raw);
   if (!parsed.success) throw new Error("invalid-backup");
   const backup = upgradeBackup(parsed.data as unknown as OldBackup);
-  const chunks: Chunk[] = backup.sources.flatMap((source) =>
-    chunkText(source.text).map((text, index) => ({
-      id: `${source.id}:${index}`,
-      notebookId: source.notebookId,
-      sourceId: source.id,
-      index,
-      text,
-    })),
-  );
+  const chunks = backup.sources.flatMap(chunksForSource);
   await store().importAll(
     {
+      study: backup.study,
       calendar: backup.calendar,
       vaults: backup.vaults,
       notes: backup.notes,
@@ -167,6 +181,7 @@ export async function importBackup(raw: unknown): Promise<number> {
 type OldBackup = Omit<
   Backup,
   | "format"
+  | "study"
   | "conversations"
   | "folders"
   | "blobs"
@@ -179,9 +194,10 @@ type OldBackup = Omit<
   | "bots"
   | "botMessages"
 > & {
-  format: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+  format: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
   plugins?: unknown[];
   files?: VaultFile[];
+  study?: StudyRecord[];
   bots?: Bot[];
   botMessages?: BotMessage[];
   notes?: Note[];
@@ -222,7 +238,8 @@ function upgradeBackup(backup: OldBackup): Backup {
   }
   return {
     ...backup,
-    format: 9,
+    format: 10,
+    study: backup.study ?? [],
     calendar: backup.calendar ?? [],
     files: backup.files ?? [],
     plugins: (backup.plugins ?? []).flatMap(restorePlugin),
@@ -264,18 +281,9 @@ function restorePlugin(raw: unknown): Plugin[] {
 /** Deletes every notebook, note, skill, plugin, bot, source, chat and output. Settings and keys are kept. */
 export async function deleteAllData() {
   await store().clearAll();
-}
-
-function toBase64(bytes: Uint8Array): string {
-  let text = "";
-  for (let at = 0; at < bytes.length; at += 0x8000)
-    text += String.fromCharCode(...bytes.subarray(at, at + 0x8000));
-  return btoa(text);
-}
-
-function fromBase64(text: string): Uint8Array {
-  const binary = atob(text);
-  const bytes = new Uint8Array(binary.length);
-  for (let at = 0; at < binary.length; at++) bytes[at] = binary.charCodeAt(at);
-  return bytes;
+  clearAllTutorDraftRecovery();
+  clearDocumentRecoveries();
+  clearFlashcardDrafts();
+  clearAllReviewCheckpoints();
+  clearAllPracticeDrafts();
 }

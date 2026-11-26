@@ -1,3 +1,4 @@
+import { SettingsSection } from "./settings-section";
 import {
   CloudIcon,
   FlashIcon,
@@ -12,7 +13,6 @@ import { Logo } from "@/components/brand/logo";
 import { Icon, type IconSvgElement } from "@/components/icon";
 import { Button } from "@/components/panelui/button";
 import { Select } from "@/components/panelui/select";
-import { Sheet } from "@/components/panelui/sheet";
 import { Switch } from "@/components/panelui/switch";
 import {
   openPortal,
@@ -66,8 +66,7 @@ export function SubscriptionPanel() {
 
   return (
     <>
-      <Sheet.Header title={t("subscription.title")} description={t("subscription.description")} />
-      <Sheet.Body>
+      <SettingsSection title={t("subscription.title")} description={t("subscription.description")}>
         <div className="flex flex-col gap-5 pb-4">
           {plan && account ? (
             <CurrentPlan account={account} plan={plan} busy={busy} run={run} />
@@ -175,7 +174,7 @@ export function SubscriptionPanel() {
 
           <p className="text-xs text-muted-foreground">{t("subscription.keysStay")}</p>
         </div>
-      </Sheet.Body>
+      </SettingsSection>
     </>
   );
 }

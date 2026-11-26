@@ -1,15 +1,16 @@
+import { SettingsSection } from "./settings-section";
 import { ComputerIcon, Moon02Icon, Sun03Icon, Tick02Icon } from "@hugeicons/core-free-icons";
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Field } from "@/components/common/field";
 import { Segmented } from "@/components/common/segmented";
+import { onRadioKeys } from "@/components/common/roving";
 import { Icon } from "@/components/icon";
 import { BotAvatar } from "@/components/bot/bot-avatar";
 import { GraphLookPicker } from "@/components/notes/graph-look-picker";
 import { LookPicker } from "@/components/bot/look-picker";
 import { Button } from "@/components/panelui/button";
-import { Sheet } from "@/components/panelui/sheet";
 import { Switch } from "@/components/panelui/switch";
 import { useTheme, type Theme } from "@/components/providers/theme-provider";
 import { defaultAnswerAvatar, updateSettings, useSettings } from "@/lib/db/settings";
@@ -24,8 +25,7 @@ export function AppearancePanel() {
 
   return (
     <>
-      <Sheet.Header title={t("appearance.title")} />
-      <Sheet.Body>
+      <SettingsSection title={t("appearance.title")}>
         <div className="flex flex-col gap-5 pb-4">
           <Field label={t("appearance.theme")}>
             <Segmented<Theme>
@@ -66,6 +66,8 @@ export function AppearancePanel() {
                     type="button"
                     role="radio"
                     aria-checked={chosen}
+                    tabIndex={chosen ? 0 : -1}
+                    onKeyDown={(event) => onRadioKeys(event, accents, accent, setAccent)}
                     aria-label={t(`appearance.accents.${value}`)}
                     title={t(`appearance.accents.${value}`)}
                     onClick={() => setAccent(value)}
@@ -96,7 +98,7 @@ export function AppearancePanel() {
           </Field>
           <AnswerAvatarField />
         </div>
-      </Sheet.Body>
+      </SettingsSection>
     </>
   );
 }

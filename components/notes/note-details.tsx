@@ -4,6 +4,7 @@ import { Segmented } from "@/components/common/segmented";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Note } from "@/lib/db/types";
 import { backlinksOf, unlinkedMentionsOf, type LinkWorld } from "@/lib/notes/resolve";
+import { noteEditorText } from "@/lib/notes/search-match";
 import { extractHeadings } from "@/lib/notes/syntax";
 import { cn } from "@/lib/utils";
 
@@ -48,11 +49,11 @@ export function NoteDetails({
   const [pane, setPane] = useState<Pane>("backlinks");
   const linked = useMemo(() => backlinksOf(note, world), [note, world]);
   const unlinked = useMemo(() => unlinkedMentionsOf(note, world), [note, world]);
-  const headings = useMemo(() => extractHeadings(note.body), [note.body]);
+  const headings = useMemo(() => extractHeadings(noteEditorText(note.body)), [note.body]);
   const names = [note.title, ...note.aliases];
 
   return (
-    <aside aria-label={t("panes.label")} className="flex min-h-0 flex-col">
+    <aside aria-label={t("panes.label")} className="flex min-h-0 flex-1 flex-col">
       <div className="px-3 pt-3 pb-2">
         <Segmented<Pane>
           aria-label={t("panes.label")}
@@ -136,7 +137,7 @@ export function NoteDetails({
                   onClick={() => onHeading(heading.from)}
                   style={{ paddingInlineStart: `${(heading.level - 1) * 0.75 + 0.5}rem` }}
                   className={cn(
-                    "cursor-pointer truncate rounded-md py-1 pe-2 text-start text-sm outline-none hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring",
+                    "min-h-10 cursor-pointer truncate rounded-md py-1 pe-2 text-start text-sm outline-none hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring lg:min-h-0",
                     heading.level > 2 && "text-muted-foreground",
                   )}
                 >

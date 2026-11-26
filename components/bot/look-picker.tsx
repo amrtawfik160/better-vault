@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
+import { onRadioKeys } from "@/components/common/roving";
 import { botColor, botColorKeys } from "@/lib/bot/colors";
 import { botLook, faceItems, headItems, neckItems } from "@/lib/bot/look";
 import type { BotAvatar as BotLook } from "@/lib/db/types";
@@ -49,6 +50,12 @@ export function LookPicker({
                 type="button"
                 role="radio"
                 aria-checked={avatar.color === color}
+                tabIndex={avatar.color === color ? 0 : -1}
+                onKeyDown={(event) =>
+                  onRadioKeys(event, botColorKeys, avatar.color, (next) =>
+                    onChange({ ...avatar, color: next }),
+                  )
+                }
                 aria-label={t(`colors.${color}`)}
                 title={t(`colors.${color}`)}
                 onClick={() => onChange({ ...avatar, color })}
@@ -101,6 +108,8 @@ function LookRow<Item extends string>({
               type="button"
               role="radio"
               aria-checked={current === item}
+              tabIndex={current === item ? 0 : -1}
+              onKeyDown={(event) => onRadioKeys(event, items, current as Item, onChoose)}
               aria-label={t(`look.items.${item}` as "look.items.none")}
               title={t(`look.items.${item}` as "look.items.none")}
               onClick={() => onChoose(item)}

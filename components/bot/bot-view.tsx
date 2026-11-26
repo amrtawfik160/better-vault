@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router";
+import { Add01Icon } from "@hugeicons/core-free-icons";
+import { ToolHeader, useScopeName } from "@/components/common/tool-header";
+import { Icon } from "@/components/icon";
+import { Button } from "@/components/panelui/button";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
 import { useVaultName } from "@/components/home/vault-name";
+import { subscriptionConnectionsAllowed } from "@/lib/ai/cliproxyapi-client";
 import { SettingsSheet } from "@/components/settings/settings-sheet";
 import { botAccess, canCreateBots, fullAccess } from "@/lib/bot/access";
 import { starterBots } from "@/lib/bot/starters";
@@ -40,6 +45,7 @@ const blank: BotDetails = {
 export default function BotView() {
   const { t } = useTranslation("bot");
   const vaultName = useVaultName();
+  const scope = useScopeName();
   const bots = useBots();
   const [params, setParams] = useSearchParams();
   const [editing, setEditing] = useState<{ mode: "create" } | { mode: "edit"; bot: Bot } | null>(
@@ -78,11 +84,17 @@ export default function BotView() {
   if (!bots) return null;
 
   return (
-    // Two cards, like the Skills page: the roster, and the open bot's thread.
-    <div className="flex h-full min-h-0 gap-2">
+    <div className="flex h-full min-h-0 flex-col">
+      <ToolHeader title={t("title")} detail={t("header.scope", { vault: scope })}>
+        <Button type="button" size="sm" onClick={() => setEditing({ mode: "create" })}>
+          <Icon icon={Add01Icon} size={16} />
+          <span className="max-sm:sr-only">{t("roster.newBot")}</span>
+        </Button>
+      </ToolHeader>
+      <div className="flex min-h-0 flex-1">
       <aside
         className={cn(
-          "min-h-0 w-full shrink-0 overflow-hidden rounded-3xl bg-card ring-1 ring-border md:block md:w-72",
+          "min-h-0 w-full shrink-0 border-e border-border md:block md:w-72",
           selected ? "hidden" : "block",
         )}
       >
@@ -90,15 +102,9 @@ export default function BotView() {
           bots={bots}
           selected={shown?.id ?? null}
           onSelect={select}
-          onCreate={() => setEditing({ mode: "create" })}
         />
       </aside>
-      <section
-        className={cn(
-          "min-h-0 min-w-0 flex-1 overflow-hidden rounded-3xl bg-card ring-1 ring-border md:block",
-          selected ? "block" : "hidden",
-        )}
-      >
+      <section className={cn("min-h-0 min-w-0 flex-1 md:block", selected ? "block" : "hidden")}>
         {shown ? (
           <BotThread
             key={`${shown.id}:${resets}`}
@@ -116,6 +122,7 @@ export default function BotView() {
           </div>
         )}
       </section>
+      </div>
 
       <BotEditorDialog
         open={editing !== null}
@@ -169,6 +176,7 @@ export default function BotView() {
       {/* Opened by the prompt's "Set up"; the sidebar has the visible button. */}
       <SettingsSheet
         open={settingsOpen}
+        page={subscriptionConnectionsAllowed() ? "subscriptions" : "providers"}
         onOpenChange={setSettingsOpen}
         trigger={<button type="button" hidden aria-hidden tabIndex={-1} />}
       />

@@ -13,23 +13,23 @@ import { getToolName } from "ai";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { ComposerModelPicker } from "@/components/chat/composer-model-picker";
-import { EffortMenu } from "@/components/chat/effort-menu";
 import { Markdown } from "@/components/chat/markdown";
 import { UsageRing } from "@/components/chat/usage-ring";
 import { isVisualPart, VisualPart } from "@/components/chat/visual/visual-part";
 import { FileApprovalCard } from "@/components/files/file-approval-card";
 import { Icon } from "@/components/icon";
+import { Button } from "@/components/panelui/button";
 import { Menu } from "@/components/panelui/menu";
 import { Message } from "@/components/panelui/message";
 import { Prompt, type PromptState } from "@/components/panelui/prompt";
+import { AIModelPicker } from "@/components/ai/ai-model-picker";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { providers } from "@/lib/ai/catalog";
 import { accessSummary, botAccess } from "@/lib/bot/access";
 import { botWriteTools, isBotTool } from "@/lib/bot/tools";
 import type { ChatMessage } from "@/lib/chat/types";
 import { updateBot } from "@/lib/db/bots";
-import { activeModel, availableModels, useSettings } from "@/lib/db/settings";
+import { modelFor, useSettings } from "@/lib/db/settings";
 import type { Bot } from "@/lib/db/types";
 import { cn } from "@/lib/utils";
 import { AnswerAvatar } from "./answer-avatar";
@@ -109,31 +109,29 @@ function ThreadHeader({
   const { t } = useTranslation("bot");
   const state = useBotActivity(bot.id);
   return (
-    <div
-      data-window-bar
-      className="grid min-h-14 shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 py-3"
-    >
-      <div>
-        <button
-          type="button"
-          onClick={onBack}
-          aria-label={t("thread.back")}
-          title={t("thread.back")}
-          className="flex size-8 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring md:hidden"
-        >
-          <Icon icon={ArrowLeft01Icon} size={18} />
-        </button>
-      </div>
-      <div className="flex min-w-0 items-center gap-2 rounded-full bg-muted/60 py-1 ps-1.5 pe-3.5">
-        <BotAvatar avatar={bot.avatar} size={28} mood={moodOf(state)} followPointer />
-        <span className="truncate text-sm font-medium">{bot.name}</span>
-      </div>
-      <div className="flex justify-end">
+    <div className="flex min-h-13 shrink-0 items-center gap-2 border-b ps-4 pe-2">
+      <Button
+        type="button"
+        size="icon-sm"
+        variant="ghost"
+        onClick={onBack}
+        aria-label={t("thread.back")}
+        title={t("thread.back")}
+        className="text-muted-foreground max-md:size-11 md:hidden"
+      >
+        <Icon icon={ArrowLeft01Icon} size={18} className="rtl:rotate-180" />
+      </Button>
+      <BotAvatar avatar={bot.avatar} size={24} mood={moodOf(state)} followPointer />
+      <h2 className="truncate text-[0.8125rem] leading-5 font-medium">{bot.name}</h2>
+      {bot.title ? (
+        <span className="hidden truncate text-xs text-muted-foreground sm:inline">{bot.title}</span>
+      ) : null}
+      <div className="ms-auto flex justify-end">
         <Menu>
           <Menu.Trigger
             aria-label={t("menu.label")}
             title={t("menu.label")}
-            className="flex size-8 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-popup-open:bg-accent"
+            className="flex size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-popup-open:bg-muted data-popup-open:text-foreground max-md:size-11"
           >
             <Icon icon={MoreHorizontalIcon} size={18} />
           </Menu.Trigger>
@@ -197,13 +195,7 @@ function ThreadBody({
   const [draft, setDraft] = useState("");
   const end = useRef<HTMLDivElement>(null);
 
-  const models = settings ? availableModels(settings) : [];
-  const appModel = settings ? activeModel(settings) : null;
-  const model =
-    bot.model &&
-    models.some((ref) => ref.provider === bot.model?.provider && ref.modelId === bot.model.modelId)
-      ? bot.model
-      : appModel;
+  const model = settings ? (modelFor(settings, `bot:${bot.id}`, bot.model)?.model ?? null) : null;
   const busy = status === "submitted" || status === "streaming";
   const promptStatus: PromptState = status === "ready" || status === "error" ? "idle" : status;
   const local = model ? providers[model.provider].local : false;
@@ -290,19 +282,20 @@ function ThreadBody({
           ))}
           {typing ? <TypingIndicator bot={bot} /> : null}
           {errorText ? (
-            <p className="text-sm text-destructive">
-              {t("thread.error", { error: errorText })}{" "}
-              <button
-                type="button"
-                className="cursor-pointer underline underline-offset-4"
+            <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-destructive">
+              <span className="min-w-0">{t("thread.error", { error: errorText })}</span>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="border border-input text-foreground"
                 onClick={() => {
                   clearError();
                   void regenerate();
                 }}
               >
                 {t("thread.retry")}
-              </button>
-            </p>
+              </Button>
+            </div>
           ) : null}
           <div ref={end} />
         </div>
@@ -347,13 +340,12 @@ function ThreadBody({
                       {t("menu.clear")}
                     </Menu.Item>
                   </Prompt.Menu>
-                  {model && settings ? (
-                    <ComposerModelPicker
-                      settings={settings}
-                      model={model}
-                      onChange={(next) => void updateBot(bot.id, { model: next })}
-                    />
-                  ) : null}
+                  <AIModelPicker
+                    use={`bot:${bot.id}`}
+                    fallback={bot.model}
+                    className="max-w-48"
+                    onModelChange={(next) => void updateBot(bot.id, { model: next })}
+                  />
                 </Prompt.Tools>
                 <Prompt.Submit sendLabel={tChat("send")} stopLabel={tChat("stop")} />
               </Prompt.Footer>
@@ -369,7 +361,7 @@ function ThreadBody({
               </Prompt.ContextItem>
               {model && settings ? (
                 <span className="ms-auto flex items-center gap-3">
-                  <EffortMenu settings={settings} provider={model.provider} />
+                  {/* Effort is chosen in the model picker, with the model. */}
                   <UsageRing messages={messages} settings={settings} model={model} busy={busy} />
                 </span>
               ) : null}

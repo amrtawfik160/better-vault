@@ -833,7 +833,8 @@ function CommandDialog({
   useEffect(() => {
     if (!hotkey) return;
     function onKeyDown(event: globalThis.KeyboardEvent) {
-      if (!hotkeyMatches(event, hotkey!)) return;
+      // The Notes editor also uses Mod+K to insert a link.
+      if (event.defaultPrevented || !hotkeyMatches(event, hotkey!)) return;
       event.preventDefault();
       setInstant(true);
       setOpen(!open);

@@ -12,7 +12,7 @@ export interface ProviderMark {
   paths: readonly string[];
 }
 
-export const providerMarks: Record<ProviderId, ProviderMark> = {
+export const providerMarks: Record<Exclude<ProviderId, "cliproxyapi">, ProviderMark> = {
   // Drawn with the app's own logo by ProviderIcon; this outline is a fallback.
   bettervault: {
     viewBox: "0 0 24 24",

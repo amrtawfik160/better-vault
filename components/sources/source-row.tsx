@@ -1,6 +1,7 @@
 import {
   ArrowUpRight01Icon,
   BookOpen01Icon,
+  Books01Icon,
   Delete02Icon,
   MoreVerticalIcon,
   PencilEdit01Icon,
@@ -14,23 +15,35 @@ import { Menu } from "@/components/panelui/menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { Source } from "@/lib/db/database";
 import { deleteSource, renameSource, setSourceSelected } from "@/lib/db/sources";
+import { sourceHasText } from "@/lib/db/source-text";
 import { countWords } from "@/lib/format";
 import { sourceFormatOf } from "@/lib/sources/formats";
 import { sourceFormatIcons } from "./source-format";
 
 /** One source: whether it is used, its kind and size, and what can be done with it. */
-export function SourceRow({ source, onRead }: { source: Source; onRead: () => void }) {
+export function SourceRow({
+  source,
+  onRead,
+  onReadInStudy,
+}: {
+  source: Source;
+  onRead: () => void;
+  /** Opens it in the Study reader; left out for a source with nothing to read. */
+  onReadInStudy?: () => void;
+}) {
   const { t, i18n } = useTranslation("sources");
   const { t: tCommon } = useTranslation();
   const [renaming, setRenaming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const words = countWords(source.text);
   const format = sourceFormatOf(source);
+  const hasText = sourceHasText(source);
 
   return (
     <div className="flex items-center gap-1 rounded-2xl ps-3 pe-1 transition-colors hover:bg-muted">
       <Checkbox
-        checked={source.selected}
+        checked={hasText && source.selected}
+        disabled={!hasText}
         onCheckedChange={(checked) => void setSourceSelected(source.id, checked)}
         aria-label={t("select", { title: source.title })}
       />
@@ -46,7 +59,9 @@ export function SourceRow({ source, onRead }: { source: Source; onRead: () => vo
           <span className="block truncate text-sm font-medium">{source.title}</span>
           <span className="block truncate text-xs text-muted-foreground">
             {t(`formats.${format}`)} ·{" "}
-            {t("words", { count: words, formattedCount: words.toLocaleString(i18n.language) })}
+            {hasText
+              ? t("words", { count: words, formattedCount: words.toLocaleString(i18n.language) })
+              : t("noSelectableText")}
           </span>
         </span>
       </button>
@@ -62,6 +77,12 @@ export function SourceRow({ source, onRead }: { source: Source; onRead: () => vo
             <Icon icon={BookOpen01Icon} />
             {t("read")}
           </Menu.Item>
+          {onReadInStudy ? (
+            <Menu.Item onClick={onReadInStudy}>
+              <Icon icon={Books01Icon} />
+              {t("openStudy")}
+            </Menu.Item>
+          ) : null}
           {source.url ? (
             <Menu.Item onClick={() => window.open(source.url, "_blank", "noopener,noreferrer")}>
               <Icon icon={ArrowUpRight01Icon} />

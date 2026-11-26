@@ -40,6 +40,7 @@
   },
   "effort": {
     "label": "Effort",
+    "reasoning": "Reasoning",
     "hint": "How much the model thinks before it answers. More effort is slower and uses more tokens; models that don't think ignore it.",
     "levels": {
       "provider-default": "Default",
@@ -60,11 +61,11 @@
   },
   "command": {
     "label": "Command menu",
-    "placeholder": "Search notebooks, sources, PDFs and settings…",
+    "placeholder": "Search notebooks, notes, sources, Study, and settings…",
     "lead": "to open anywhere",
     "open": "Open",
     "empty": "Nothing matches “{{query}}”.",
-    "indexing": "Indexing your notebooks…",
+    "indexing": "Indexing your library…",
     "home": "Go to notebooks",
     "addSource": "Add a source to this notebook",
     "chat": "Open the chat",
@@ -72,12 +73,23 @@
     "studio": "Open the Studio",
     "theme": "Theme: {{theme}}",
     "vault": "Switch to {{name}}",
+    "study": {
+      "book": "Study document",
+      "passage": "Document passage",
+      "card": "Flashcard",
+      "highlight": "Highlight",
+      "word": "Vocabulary",
+      "thread": "Study conversation",
+      "message": "Study conversation message",
+      "report": "Session report"
+    },
     "groups": {
       "recent": "Recent notebooks",
       "actions": "Actions",
       "notebooks": "Notebooks",
       "sources": "Sources",
       "passages": "In your sources",
+      "studyPassages": "In Study documents",
       "outputs": "Studio outputs",
       "folders": "Folders",
       "vaults": "Vaults"
@@ -89,15 +101,20 @@
     "label": "Welcome to better-vault",
     "next": "Continue",
     "withoutAccount": "Use without an account",
+    "skip": "Skip for now",
     "popupBlocked": "Allow pop-ups for this page to sign in.",
     "account": {
       "title": "Create an account",
-      "body": "An account is only for Better Vault AI and Cloud. Your notebooks and API keys never leave this device.",
+      "body": "Sign in or create an account to choose a username.",
       "google": "Continue with Google",
       "email": "Continue with email",
-      "keys": "Your notebooks and your own API keys never leave this device.",
-      "skip": "Skip for now",
+      "keys": "An account is optional. Everything works on this device without one.",
       "signedIn": "Signed in as {{email}}"
+    },
+    "ai": {
+      "title": "Connect your AI",
+      "body": "Sign in with a plan you already pay for, like ChatGPT or Claude. better-vault uses it to chat with your sources, make Studio outputs, and help you read and practise. No API key needed.",
+      "later": "You can connect more, or add an API key instead, in Settings."
     },
     "username": {
       "title": "Choose a username",
@@ -147,14 +164,33 @@
       "you": "You",
       "thisDevice": "On this device",
       "ask": "Ask your sources…",
-      "betterVault": "Better Vault AI",
       "ownKey": "Your own key",
       "caption": {
         "profile": "Your name and picture appear in the app.",
-        "account": "An account adds Better Vault AI and Cloud.",
+        "ai": "Connected subscriptions appear in Settings.",
+        "account": "You can use better-vault with a local profile.",
         "username": "Your username, for your account.",
         "plan": "Pro and Max add Better Vault AI to the model picker."
       }
     }
+  },
+  "speech": {
+    "downloadingTitle": "Downloading the natural voice",
+    "amount": "{{loaded}} of {{total}}",
+    "starting": "Starting…",
+    "lessThanAMinute": "less than a minute left",
+    "minutesLeft_one": "about {{count}} minute left",
+    "minutesLeft_other": "about {{count}} minutes left",
+    "meanwhile": "Your system voice reads until it’s ready.",
+    "hide": "Hide",
+    "cancel": "Cancel",
+    "ready": "The natural voice is ready",
+    "readyHint": "English now sounds natural, even offline.",
+    "listenNow": "Listen",
+    "failed": "The natural voice couldn’t download",
+    "failedHint": "Your system voice reads for now. Check your connection and try again.",
+    "retry": "Try again",
+    "preparing": "Preparing the audio…",
+    "stop": "Stop"
   }
 }

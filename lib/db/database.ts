@@ -1,4 +1,6 @@
-import Dexie, { type EntityTable } from "dexie";
+import type { StudyRecord } from "@/lib/study/records";
+import { movedStudyImageId, sameStudyImage, studyBookMerge, studyImageIdPrefix } from "@/lib/study/book-merge";
+import Dexie, { type EntityTable, type InsertType } from "dexie";
 import { conversationTitle } from "@/lib/chat/title";
 import { cleanText } from "@/lib/grounding/clean";
 import type {
@@ -44,6 +46,7 @@ export class BetterVaultDatabase extends Dexie {
   files!: EntityTable<VaultFile, "id">;
   bots!: EntityTable<Bot, "id">;
   botMessages!: EntityTable<BotMessage, "id">;
+  study!: EntityTable<StudyRecord, "id">;
   blobs!: EntityTable<StoredBlob, "id">;
 
   constructor(name = "better-vault") {
@@ -150,13 +153,49 @@ export class BetterVaultDatabase extends Dexie {
       bots: "id, order",
       botMessages: "id, botId, [botId+createdAt]",
     });
-    // Version 10: plugins.
+    // Version 10: plugins, and Study's table. Study's own builds, before it
+    // reached main, added `study` as their version 10 (and merged its books as
+    // version 11). Dexie drops any table a version step doesn't declare, so
+    // `study` is declared here, the first step such a database runs again;
+    // for every other database it is simply a new table.
     this.version(10).stores({
       plugins: "id",
+      study: "id, notebookId",
     });
     // Version 11: loose files in a vault (their bytes are blobs).
     this.version(11).stores({
       files: "id, vaultId",
     });
+    // Version 12: one Study book per notebook source. Books reading the same
+    // source are merged into the oldest, and `attachedToNotebook` is dropped.
+    // Ids are otherwise kept. SQLite migration 11 does the same. Merging twice
+    // changes nothing.
+    this.version(12).upgrade((tx) =>
+      mergeStudyBooks(
+        tx.table<StudyRecord, string, InsertType<StudyRecord, "id">>("study"),
+        tx.table<StoredBlob, string, InsertType<StoredBlob, "id">>("blobs"),
+      ),
+    );
+  }
+}
+
+/**
+ * Merges Study books that read the same source (`studyBookMerge`), and moves
+ * the pictures saved under a merged-away book's id. Run inside a transaction
+ * on both tables: the version 12 upgrade, and each backup import.
+ */
+export async function mergeStudyBooks(study: EntityTable<StudyRecord, "id">, blobs: EntityTable<StoredBlob, "id">) {
+  const plan = studyBookMerge(await study.toArray());
+  if (plan.remove.length) await study.bulkDelete(plan.remove);
+  if (plan.put.length) await study.bulkPut(plan.put);
+  if (!plan.moved.size) return;
+  for (const image of await blobs.where("id").startsWith(studyImageIdPrefix).toArray()) {
+    const id = movedStudyImageId(image.id, plan.moved);
+    if (!id) continue;
+    const existing = await blobs.get(id);
+    if (!existing) await blobs.add({ ...image, id });
+    // The kept book's own picture of the same place wins; the other stays where it was, unless it is the same picture.
+    else if (!sameStudyImage(existing, image)) continue;
+    await blobs.delete(image.id);
   }
 }

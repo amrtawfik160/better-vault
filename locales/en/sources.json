@@ -6,7 +6,7 @@
   "add": "Add source",
   "empty": {
     "title": "Add your first source",
-    "body": "Upload a document, spreadsheet, PDF or text file, add a web page or a YouTube video, or paste text."
+    "body": "Upload a document, spreadsheet, PDF, EPUB or text file, add a web page or a YouTube video, or paste text."
   },
   "formats": {
     "text": "Text",
@@ -27,11 +27,27 @@
     "pptx": "PowerPoint",
     "epub": "EPUB book"
   },
+  "kinds": {
+    "text": "Text",
+    "markdown": "Markdown",
+    "pdf": "PDF",
+    "epub": "EPUB",
+    "url": "Web page",
+    "youtube": "YouTube video"
+  },
   "words_one": "{{formattedCount}} word",
   "words_other": "{{formattedCount}} words",
+  "noSelectableText": "No selectable text",
+  "readOriginalInStudy": "Open the original in Study to read it and make image flashcards.",
   "select": "Use {{title}}",
   "menu": "Options for {{title}}",
   "read": "Read",
+  "openStudy": "Read in Study",
+  "askTutor": "Discuss in Study",
+  "citationChanged": "This citation points to a passage that has changed or moved.",
+  "unavailable": "This source is no longer available",
+  "savedStudyDescription": "You can still read the text saved in Study.",
+  "openSavedStudy": "Read saved document",
   "openPage": "Open page",
   "openVideo": "Open on YouTube",
   "playFrom": "Play from {{time}}",
@@ -41,31 +57,50 @@
   },
   "delete": {
     "title": "Delete “{{title}}”?",
-    "body": "It will be removed from this notebook. Chats and outputs made from it are kept.",
+    "body": "It will be removed from this notebook. Chats, outputs, and Study documents made from it are kept.",
     "confirm": "Delete source"
   },
   "addDialog": {
-    "title": "Add sources",
-    "description": "Sources stay in this browser. Their text is sent to your model when you ask questions or create something.",
+    "title": "Add",
+    "description": "Bring a link, a file or text into a notebook. Sources stay on this device; their text is sent to your model when you ask or create.",
     "tabs": {
-      "file": "Upload",
-      "url": "Link",
-      "text": "Paste text",
-      "cloud": "From storage"
+      "cloud": "From storage",
+      "media": "Transcript or recording"
     },
-    "drop": "Drop files here",
-    "choose": "Choose files",
-    "fileTypes": "Documents, spreadsheets, slides, PDFs, EPUBs, Markdown, CSV and other text files, up to 20 MB each.",
-    "urlLabel": "Web page or YouTube video",
-    "urlPlaceholder": "https://example.com/article or a YouTube link",
-    "urlHint": "The page's main text is saved as a source.",
-    "textTitle": "Title",
+    "choose": "Choose a file",
+    "fileTypes": "Files: documents, spreadsheets, slides, PDFs, EPUBs, Markdown, CSV and other text, up to 20 MB each.",
     "textTitlePlaceholder": "Pasted text",
-    "textLabel": "Text",
-    "textPlaceholder": "Paste notes, an article or a transcript",
     "submit": "Add",
     "adding": "Adding…",
-    "youtubeHint": "The video's transcript is saved as a source. It needs to be public and have captions."
+    "inputLabel": "Link, file or text to add",
+    "placeholder": "Paste any link, drop a file, or type text",
+    "takes": "A web page, a PDF, a YouTube video, an article or your notes",
+    "kind": {
+      "video": "YouTube video: its captions are saved as a transcript with times. It needs to be public.",
+      "link": "Web page or PDF: its main text is saved.",
+      "text": "Pasted text: saved as a document."
+    },
+    "reading": "Adding to {{name}}…",
+    "why": {
+      "empty": "Add needs a link, a file or some text.",
+      "ready": "Opens in the reader once it is added.",
+      "busy": "Working on it…",
+      "captions": "Add needs a transcript first.",
+      "media": "Saves the transcript as a document."
+    },
+    "failed": {
+      "title": "Couldn't read this link",
+      "body": "{{host}}: {{reason}} Nothing was saved. Paste the text yourself, or try the link again.",
+      "paste": "Paste the text",
+      "retry": "Try again"
+    },
+    "goesTo": "Goes to",
+    "current": "Open now",
+    "notebook": "Notebook",
+    "newNotebook": "New notebook",
+    "newNotebookLabel": "New notebook name",
+    "newNotebookPlaceholder": "Name, then Enter",
+    "back": "Back"
   },
   "added_one": "Added {{count}} source",
   "added_other": "Added {{count}} sources",
@@ -78,5 +113,65 @@
     "noCaptions": "{{name}} has no captions, so there is no transcript to add.",
     "private": "{{name}} is private or restricted. Only public videos can be added."
   },
-  "picture": "Picture from {{title}}"
+  "youtube": {
+    "noCaptions": "This video has no captions",
+    "video": "{{title}} · {{length}}",
+    "offer": "Gemini can watch it and write the transcript, with times.",
+    "cost": "It uses your Google key: about {{tokens}} tokens for this video.",
+    "costUnknown": "It uses your Google key.",
+    "noKey": "Turn on Google Gemini and add its key in Settings first.",
+    "tooLong": "This video is longer than 3 hours, more than Gemini can transcribe at once.",
+    "transcribe": "Transcribe with Gemini",
+    "otherWay": "Or add its subtitles or a recording in the Transcript tab.",
+    "working": "Gemini is watching the video. A long one takes a few minutes.",
+    "stop": "Stop",
+    "failed": "Gemini couldn't transcribe it: {{error}}"
+  },
+  "picture": "Picture from {{title}}",
+  "transcript": {
+    "open": "Add a video or podcast",
+    "title": "Add a video or podcast",
+    "description": "Save its transcript as a document you can read, highlight and practise with.",
+    "methodsLabel": "How to add it",
+    "methods": {
+      "paste": "Paste transcript",
+      "subtitles": "Subtitles",
+      "recording": "Audio or video"
+    },
+    "titleLabel": "Title",
+    "titlePlaceholder": "Lecture 3: the heart",
+    "linkLabel": "Link to the video or episode (optional)",
+    "linkPlaceholder": "https://www.youtube.com/watch?v=…",
+    "linkHint": "Kept with the transcript so you can go back to it; a YouTube link also gets the video's player. Nothing is downloaded from it.",
+    "linkInvalid": "Enter a full address starting with http:// or https://.",
+    "textLabel": "Transcript",
+    "pastePlaceholder": "Paste the transcript here",
+    "pasteTip": "On YouTube, open the video's description, choose Show transcript, then select the text and copy it. Its times become [mm:ss] marks.",
+    "subtitlesDrop": "Drop an SRT or VTT file here",
+    "subtitlesHint": "Subtitles are read on this device. Lines repeated by automatic captions are kept once.",
+    "chooseFile": "Choose file",
+    "chooseAnother": "Choose another file",
+    "recordingDrop": "Drop an audio or video file here",
+    "providerLabel": "Transcribe with",
+    "limit": "{{provider}} transcribes files up to {{size}} MB ({{formats}}).",
+    "longer": "For a longer recording, split it into parts, upload its subtitles or paste its transcript.",
+    "sentTo": "The recording is sent to {{provider}} with your API key. This app doesn't keep it.",
+    "noProvider": "To transcribe recordings, add an OpenAI or ElevenLabs API key in Settings → AI providers. You can still paste a transcript or upload subtitles.",
+    "uploading": "Uploading {{name}}…",
+    "transcribing": "Transcribing {{name}}…",
+    "takesAWhile": "This can take a few minutes for a long recording.",
+    "stop": "Stop",
+    "stopped": "Transcription stopped.",
+    "save": "Save transcript",
+    "errors": {
+      "type": "{{provider}} can't transcribe {{name}}. Use {{formats}}.",
+      "tooLarge": "{{name}} is larger than {{size}} MB. Split it into parts, or use its subtitles or transcript.",
+      "failed": "Could not transcribe {{name}}: {{error}}",
+      "empty": "No speech was found in {{name}}.",
+      "stopped": "The transcription of {{name}} stopped before it finished. Try again.",
+      "subtitles": "No subtitles were found in {{name}}.",
+      "subtitlesType": "{{name}} is not an SRT or VTT file.",
+      "subtitlesTooLarge": "{{name}} is larger than 10 MB."
+    }
+  }
 }

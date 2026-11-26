@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Key01Icon } from "@hugeicons/core-free-icons";
 import { Icon } from "@/components/icon";
+import { Button } from "@/components/panelui/button";
 import { cn } from "@/lib/utils";
 import type { StudioToolMeta } from "@/studio/tools";
 
@@ -19,15 +20,15 @@ export function ToolTile({
   const { t } = useTranslation("studio");
   const { t: tCommon } = useTranslation();
   return (
-    <button
-      type="button"
+    // Panel's button, drawn as a tile: a 56px muted block with the tool's tinted icon.
+    <Button
+      variant="secondary"
       onClick={onSelect}
       disabled={!tool.available}
       title={t(`tools.${tool.id}.description`)}
       className={cn(
-        "group relative flex h-14 cursor-pointer items-center gap-2.5 rounded-2xl bg-muted/70 px-3 text-start transition-[background-color,scale] duration-150 outline-none",
-        "hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.98]",
-        "disabled:cursor-default disabled:opacity-55 disabled:hover:bg-muted/70 disabled:active:scale-100",
+        "h-14 justify-start gap-2.5 rounded-2xl bg-muted/70 px-3 text-start hover:not-disabled:bg-muted",
+        "active:not-disabled:scale-[0.98] disabled:opacity-55",
         className,
       )}
     >
@@ -52,6 +53,6 @@ export function ToolTile({
           {tCommon("badges.new")}
         </span>
       ) : null}
-    </button>
+    </Button>
   );
 }

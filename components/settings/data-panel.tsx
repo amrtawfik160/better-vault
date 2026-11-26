@@ -1,3 +1,4 @@
+import { SettingsSection } from "./settings-section";
 import {
   CloudDownloadIcon,
   Delete02Icon,
@@ -73,8 +74,7 @@ export function DataPanel({ onDeleteAll }: { onDeleteAll: () => void }) {
 
   return (
     <>
-      <Sheet.Header title={t("data.title")} description={t("data.description")} />
-      <Sheet.Body>
+      <SettingsSection title={t("data.title")} description={t("data.description")}>
         <div className="-mx-2 flex flex-col gap-0.5 pb-4">
           <ActionRow
             icon={Download01Icon}
@@ -137,7 +137,7 @@ export function DataPanel({ onDeleteAll }: { onDeleteAll: () => void }) {
             onClick={onDeleteAll}
           />
         </div>
-      </Sheet.Body>
+      </SettingsSection>
       <Sheet.Next name="restore-cloud" closeLabel={tCommon("actions.close")}>
         <Sheet.Header title={t("data.restoreFrom")} description={t("data.restoreFromHint")} />
         <Sheet.Body>

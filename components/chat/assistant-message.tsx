@@ -1,14 +1,19 @@
-import { Globe02Icon, RepeatIcon } from "@hugeicons/core-free-icons";
+import { Cards01Icon, Globe02Icon, RepeatIcon } from "@hugeicons/core-free-icons";
 import { getToolName, isToolUIPart } from "ai";
-import { useMemo } from "react";
+import { useMemo, type Ref } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { Icon } from "@/components/icon";
 import { Message } from "@/components/panelui/message";
 import { sourceFormatIcons } from "@/components/sources/source-format";
 import { sourceFormatOf } from "@/lib/sources/formats";
+import { ListenIcon, useListen, useListenLabel } from "@/components/speech/listen";
+import { isChatActionPart } from "@/lib/chat/actions";
+import { answerFlashcardMaterial } from "@/lib/chat/study";
 import type { ChatMessage, PassageRef } from "@/lib/chat/types";
 import { cleanText } from "@/lib/grounding/clean";
 import { citedNumbers, stripCitations } from "@/lib/grounding/passages";
+import { canSpeak, warmUpSpeech } from "@/lib/speech/speak";
 
 const hostOf = (url: string) => {
   try {
@@ -20,7 +25,9 @@ const hostOf = (url: string) => {
 import { AnswerAvatar } from "@/components/bot/answer-avatar";
 import { FileApprovalCard } from "@/components/files/file-approval-card";
 import type { BotAvatar as BotLook } from "@/lib/db/types";
+import { ActionRow } from "./action-row";
 import { AnswerReferences, SearchStatus, type Reference } from "./answer-references";
+import { BookActivity, readingBook, type BookLinks } from "./book-activity";
 import { Markdown } from "./markdown";
 import { isVisualPart, VisualPart } from "./visual/visual-part";
 
@@ -38,6 +45,33 @@ interface AssistantMessageProps {
   onOpenPassage: (passage: PassageRef) => void;
   /** Makes or declines a file the AI asked to make. */
   onAnswerFile?: (toolCallId: string, approved: boolean) => Promise<void>;
+  onMakeCards: (material: ReturnType<typeof answerFlashcardMaterial>) => void;
+  focusRef?: Ref<HTMLDivElement>;
+  /** Ask AI beside the reader: the book's sections the answer read, opening in the reader. */
+  book?: BookLinks;
+}
+
+/** Reads the answer aloud, and stops it while it reads. */
+function ListenAction({ text }: { text: string }) {
+  const { t } = useTranslation("chat");
+  const { state, toggle } = useListen();
+  const label = useListenLabel(state, t("actions.listen"));
+  if (!canSpeak()) return null;
+  return (
+    <Message.Action
+      label={label}
+      aria-busy={state === "preparing" || undefined}
+      onPointerEnter={warmUpSpeech}
+      onFocus={warmUpSpeech}
+      onClick={() =>
+        void toggle(stripCitations(text)).then((spoken) => {
+          if (!spoken) toast.info(t("actions.noVoice"));
+        })
+      }
+    >
+      <ListenIcon state={state} />
+    </Message.Action>
+  );
 }
 
 /** An answer: the sources it read or searched, the text with citations, and actions. */
@@ -49,6 +83,9 @@ export function AssistantMessage({
   onRetry,
   onOpenPassage,
   onAnswerFile,
+  onMakeCards,
+  focusRef,
+  book,
 }: AssistantMessageProps) {
   const { t } = useTranslation("chat");
   const { t: tSources } = useTranslation("sources");
@@ -56,6 +93,11 @@ export function AssistantMessage({
   const text = message.parts
     .flatMap((part) => (part.type === "text" ? [part.text] : []))
     .join("\n\n");
+  const material = useMemo(
+    () => (streaming ? undefined : answerFlashcardMaterial(message)),
+    [streaming, message],
+  );
+  const canMakeCards = Boolean(material?.text || material?.cards.length);
   // Text and visuals in the order the model wrote them; runs of text join up.
   const blocks = useMemo(() => {
     const out: (
@@ -78,6 +120,8 @@ export function AssistantMessage({
   }, [message.parts]);
   const hasVisual = blocks.some((block) => block.kind === "visual");
   const files = blocks.flatMap((block) => (block.kind === "file" ? [block.part] : []));
+  // What the chat made (cards, Studio outputs), shown as rows under the answer.
+  const actions = useMemo(() => message.parts.filter(isChatActionPart), [message.parts]);
 
   const web = useMemo(() => {
     const references: Reference[] = [];
@@ -153,8 +197,21 @@ export function AssistantMessage({
     .join(" · ");
 
   const answer = (
-    <Message from="assistant" streaming={streaming && text !== ""}>
+    <Message
+      from="assistant"
+      streaming={streaming && text !== ""}
+      ref={focusRef}
+      tabIndex={focusRef ? -1 : undefined}
+      data-notebook-answer={message.id}
+      data-selection-block=""
+      className={
+        focusRef
+          ? "rounded-2xl focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
+          : undefined
+      }
+    >
       <Message.Content className="gap-3">
+        {book ? <BookActivity parts={message.parts} streaming={streaming} book={book} /> : null}
         {message.metadata?.mode === "web" && web.searching ? (
           <SearchStatus
             label={
@@ -180,7 +237,10 @@ export function AssistantMessage({
               )}
             </Message.BubbleContent>
           </Message.Bubble>
-        ) : streaming && !web.searching ? (
+        ) : streaming &&
+          actions.length === 0 &&
+          !web.searching &&
+          !(book && readingBook(message.parts)) ? (
           <Message.Status>
             {passages.length > 0 ? t("status.reading") : t("status.thinking")}
           </Message.Status>
@@ -192,21 +252,36 @@ export function AssistantMessage({
             onAnswer={(approved) => onAnswerFile?.(part.toolCallId, approved) ?? Promise.resolve()}
           />
         ))}
-        {text && (showNotebook || showWeb) ? (
+        {actions.length > 0 ? (
+          <div className="flex flex-col gap-2">
+            {actions.map((part) => (
+              <ActionRow key={part.toolCallId} part={part} live={isLast} />
+            ))}
+          </div>
+        ) : null}
+        {(text || hasVisual) && (showNotebook || showWeb) ? (
           <AnswerReferences
             notebook={showNotebook ? notebook.references : []}
             web={showWeb ? web.references : []}
             summary={summary}
           />
         ) : null}
-        {!streaming && text ? (
+        {!streaming && (text || canMakeCards) ? (
           <Message.Actions aria-label={t("actions.label")} reveal={isLast ? "always" : "hover"}>
-            <Message.Action
-              label={t("actions.copy")}
-              copiedLabel={t("actions.copied")}
-              copy={() => stripCitations(text)}
-            />
-            {isLast ? (
+            {text ? (
+              <Message.Action
+                label={t("actions.copy")}
+                copiedLabel={t("actions.copied")}
+                copy={() => stripCitations(text)}
+              />
+            ) : null}
+            {text ? <ListenAction text={text} /> : null}
+            {material && canMakeCards ? (
+              <Message.Action label={t("actions.flashcards")} onClick={() => onMakeCards(material)}>
+                <Icon icon={Cards01Icon} />
+              </Message.Action>
+            ) : null}
+            {isLast && text ? (
               <Message.Action label={t("actions.retry")} onClick={onRetry}>
                 <Icon icon={RepeatIcon} />
               </Message.Action>

@@ -1,3 +1,6 @@
+import type { FlashcardAction, FlashcardPractice } from "@/studio/tools/flashcards/practice";
+import type { QuizAction, QuizAttempt } from "@/studio/tools/quiz/attempt";
+
 /** What a tool's dialog form receives: its own options and the shared focus text. */
 export interface ToolFormProps<Options> {
   value: Options;
@@ -47,6 +50,12 @@ export interface ToolViewerProps<Data> {
   onDataChange?: (data: Data) => Promise<void>;
   /** Opens the output's picture on a new whiteboard, to draw on it. */
   onAnnotate?: () => void;
+  /** Adds missed quiz questions or flashcards to Study. */
+  onReviewMissed?: (positions: readonly number[]) => Promise<void>;
+  quizAttempt?: QuizAttempt;
+  onQuizAction?: (revision: number, action: QuizAction) => Promise<QuizAttempt | undefined>;
+  flashcardPractice?: FlashcardPractice;
+  onFlashcardAction?: (revision: number, action: FlashcardAction) => Promise<FlashcardPractice | undefined>;
   /** The element the viewer scrolls in, for parts that follow the reading. */
   scrollRef?: import("react").RefObject<HTMLElement | null>;
   /** The title and actions, for immersive viewers. */

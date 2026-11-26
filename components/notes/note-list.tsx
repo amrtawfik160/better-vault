@@ -4,6 +4,8 @@ import {
   ArrowRight01Icon,
   FileImportIcon,
   Folder01Icon,
+  HierarchyCircle01Icon,
+  MoreHorizontalIcon,
   Note01Icon,
   PinIcon,
   Search01Icon,
@@ -14,8 +16,10 @@ import { useTranslation } from "react-i18next";
 import { MenuActions } from "@/components/common/action-menu";
 import { ContextMenu, ContextMenuTrigger } from "@/components/common/context-menu";
 import { Icon } from "@/components/icon";
+import { Button } from "@/components/panelui/button";
 import { Input } from "@/components/panelui/input";
 import { Menu } from "@/components/panelui/menu";
+import { Sheet } from "@/components/panelui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Note, Vault } from "@/lib/db/types";
 import { cn } from "@/lib/utils";
@@ -24,6 +28,7 @@ import { useNoteActions } from "./note-actions";
 interface NoteListProps {
   /** The panel's title. */
   title: string;
+  inSheet?: boolean;
   /** Shown under the search, such as which notebook's notes these are. */
   banner?: React.ReactNode;
   notes: Note[];
@@ -34,6 +39,7 @@ interface NoteListProps {
   onOpen: (id: string, newTab?: boolean) => void;
   onCreate: () => void;
   onImport: (files: File[]) => void;
+  onOpenGraph?: () => void;
   onDeleted: (id: string) => void;
   /** The search field, focused by ⇧⌘F. */
   searchRef?: React.Ref<HTMLInputElement>;
@@ -53,6 +59,7 @@ export function matchNotes(notes: Note[], query: string): Note[] {
 /** The notes panel: search, pinned notes, folders and the tags in use. */
 export function NoteList({
   title,
+  inSheet,
   banner,
   notes,
   vaults,
@@ -62,10 +69,12 @@ export function NoteList({
   onOpen,
   onCreate,
   onImport,
+  onOpenGraph,
   onDeleted,
   searchRef,
 }: NoteListProps) {
   const { t } = useTranslation("notes");
+  const { t: common } = useTranslation();
   const importInput = useRef<HTMLInputElement>(null);
   const [closed, setClosed] = useState<Set<string>>(new Set());
   const shown = useMemo(() => matchNotes(notes, query), [notes, query]);
@@ -101,43 +110,67 @@ export function NoteList({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* The panel's head: its title, then import and a new note. */}
-      <div className="flex h-14 shrink-0 items-center gap-1 border-b ps-4 pe-3">
-        <h2 className="min-w-0 flex-1 truncate text-base font-semibold">{title}</h2>
-        <button
-          type="button"
-          onClick={() => importInput.current?.click()}
-          aria-label={t("actions.import")}
-          title={t("actions.import")}
-          className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <Icon icon={FileImportIcon} size={17} />
-        </button>
-        <button
-          type="button"
-          onClick={onCreate}
-          aria-label={t("new")}
-          title={t("new")}
-          className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-foreground text-background outline-none hover:bg-foreground/85 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
-        >
-          <Icon icon={Add01Icon} size={17} />
-        </button>
-      </div>
-      <div className="border-b p-3">
-        <Input.Group size="sm">
-          <Input.Addon>
-            <Icon icon={Search01Icon} size={14} />
-          </Input.Addon>
-          <Input
-            ref={searchRef}
-            size="sm"
-            type="search"
-            aria-label={t("search")}
-            placeholder={t("search")}
-            value={query}
-            onChange={(event) => onQuery(event.target.value)}
-          />
-        </Input.Group>
+      {/* In the phone sheet the list keeps its own head; on the page the header above holds the title. */}
+      {inSheet ? (
+        <div className="mt-3 flex h-13 shrink-0 items-center gap-1 border-b ps-4 pe-2">
+          <Sheet.Title className="min-w-0 flex-1 truncate text-[0.8125rem] font-medium">
+            {title}
+          </Sheet.Title>
+          {onOpenGraph ? (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              onClick={onOpenGraph}
+              aria-label={t("actions.graph")}
+              title={t("actions.graph")}
+              className="size-11 text-muted-foreground"
+            >
+              <Icon icon={HierarchyCircle01Icon} size={16} />
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            onClick={onCreate}
+            aria-label={t("new")}
+            title={t("new")}
+            className="size-11 text-muted-foreground"
+          >
+            <Icon icon={Add01Icon} size={16} />
+          </Button>
+          <Sheet.Close aria-label={common("actions.close")} className="size-11" />
+        </div>
+      ) : null}
+      <div className="px-3 pt-3 pb-2">
+        <div className="flex items-center gap-1">
+          <Input.Group size="sm" className="min-w-0 flex-1">
+            <Input.Addon>
+              <Icon icon={Search01Icon} size={14} />
+            </Input.Addon>
+            <Input
+              ref={searchRef}
+              size="sm"
+              type="search"
+              aria-label={t("search")}
+              placeholder={t("search")}
+              value={query}
+              onChange={(event) => onQuery(event.target.value)}
+            />
+          </Input.Group>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            onClick={() => importInput.current?.click()}
+            aria-label={t("actions.import")}
+            title={t("actions.import")}
+            className="text-muted-foreground max-md:size-11"
+          >
+            <Icon icon={FileImportIcon} size={16} />
+          </Button>
+        </div>
         {banner ? <div className="mt-2">{banner}</div> : null}
         <input
           ref={importInput}
@@ -189,7 +222,7 @@ export function NoteList({
                       return next;
                     })
                   }
-                  className="flex h-7 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-start text-xs font-medium text-muted-foreground outline-none hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring"
+                  className="flex h-10 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-start text-xs font-medium text-muted-foreground outline-none hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring md:h-7"
                 >
                   <Icon
                     icon={closed.has(folder) ? ArrowRight01Icon : ArrowDown01Icon}
@@ -221,7 +254,7 @@ export function NoteList({
                     type="button"
                     onClick={() => onQuery(query === `#${tag}` ? "" : `#${tag}`)}
                     className={cn(
-                      "cursor-pointer rounded-full px-2 py-0.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      "min-h-9 cursor-pointer rounded-full px-2 py-0.5 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring md:min-h-0",
                       query === `#${tag}`
                         ? "bg-primary text-primary-foreground"
                         : "bg-primary/10 text-primary hover:bg-primary/20",
@@ -252,12 +285,13 @@ function NoteRow({
   onOpen: (id: string, newTab?: boolean) => void;
   onDeleted: () => void;
 }) {
+  const { t } = useTranslation("notes");
   const { actions, dialogs } = useNoteActions(note, vaults, {
     onOpenTab: () => onOpen(note.id, true),
     onDeleted,
   });
   return (
-    <>
+    <div className="flex min-w-0 items-center gap-1">
       <ContextMenu>
         <ContextMenuTrigger
           render={
@@ -266,7 +300,7 @@ function NoteRow({
               aria-current={active ? "page" : undefined}
               onClick={(event) => onOpen(note.id, event.metaKey || event.ctrlKey)}
               className={cn(
-                "flex h-8 w-full min-w-0 cursor-pointer items-center gap-2 rounded-lg px-2 text-start text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "flex h-11 w-full min-w-0 cursor-pointer items-center gap-2 rounded-lg px-2 text-start text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring md:h-8",
                 active ? "bg-foreground/10 font-medium" : "hover:bg-accent/60",
               )}
             />
@@ -279,7 +313,18 @@ function NoteRow({
           <MenuActions actions={actions} />
         </Menu.Content>
       </ContextMenu>
+      <Menu>
+        <Menu.Trigger
+          aria-label={t("actions.moreForNote", { title: note.title })}
+          className="flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring md:hidden"
+        >
+          <Icon icon={MoreHorizontalIcon} size={18} />
+        </Menu.Trigger>
+        <Menu.Content align="end">
+          <MenuActions actions={actions} />
+        </Menu.Content>
+      </Menu>
       {dialogs}
-    </>
+    </div>
   );
 }

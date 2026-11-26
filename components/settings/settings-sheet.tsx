@@ -1,18 +1,14 @@
 import {
   AiBrain01Icon,
-  Calendar03Icon,
   CloudServerIcon,
-  Database01Icon,
   InformationCircleIcon,
-  LanguageSkillIcon,
   PaintBoardIcon,
   Settings01Icon,
-  SparklesIcon,
   PlugSocketIcon,
-  PuzzleIcon,
+  AiVoiceIcon,
 } from "@hugeicons/core-free-icons";
 import { useNavigate } from "react-router";
-import { useEffect, useRef, useState, type ReactElement } from "react";
+import { useEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/common/confirm-dialog";
@@ -34,11 +30,9 @@ import { StoragePanel } from "./storage-panel";
 import { StudioPanel } from "./studio-panel";
 import { McpPanel, useMcpRunning } from "./mcp-panel";
 import { PluginsPanel } from "./plugins-panel";
-import { usePlugins } from "@/lib/db/plugins";
 import { SubscriptionPanel } from "./subscription-panel";
+import { usePlugins } from "@/lib/db/plugins";
 import { useAccount } from "@/lib/account/account";
-import { Logo } from "@/components/brand/logo";
-import { useStudioSettings } from "@/lib/studio/settings";
 import { storageIds } from "@/lib/storage/catalog";
 import { isStorageReady, useStorageSettings } from "@/lib/storage/settings";
 import { AppearancePanel } from "./appearance-panel";
@@ -47,6 +41,12 @@ import { CalendarSubscribeDialog } from "./calendar-subscribe-dialog";
 import { ChatGPTDialog } from "./chatgpt-dialog";
 import { DataPanel } from "./data-panel";
 import { LanguagePanel } from "./language-panel";
+import { ReadingVoicePanel } from "./reading-voice-panel";
+import { CliProxyPanel } from "./cliproxyapi-sign-in";
+import {
+  subscriptionConnectionsAllowed,
+  useSubscriptionConnections,
+} from "@/lib/ai/cliproxyapi-client";
 import { ProvidersPanel } from "./providers-panel";
 import { SettingsRow } from "./settings-row";
 import { routes } from "@/lib/routes";
@@ -64,6 +64,7 @@ export const settingsPages = [
   "account",
   "subscription",
   "providers",
+  "subscriptions",
   "storage",
   "appearance",
   "studio",
@@ -71,10 +72,31 @@ export const settingsPages = [
   "plugins",
   "calendar",
   "language",
+  "voice",
   "data",
   "about",
 ] as const;
 export type SettingsPage = (typeof settingsPages)[number];
+export type SettingsGroup =
+  "ai" | "reading" | "account" | "storage" | "appearance" | "tools" | "about";
+
+/** The group that holds each page. */
+export const groupOf: Record<SettingsPage, SettingsGroup> = {
+  providers: "ai",
+  subscriptions: "ai",
+  studio: "ai",
+  voice: "reading",
+  account: "account",
+  subscription: "account",
+  storage: "storage",
+  data: "storage",
+  appearance: "appearance",
+  language: "appearance",
+  calendar: "tools",
+  mcp: "tools",
+  plugins: "tools",
+  about: "about",
+};
 
 /**
  * Opens one of the sheet's pages from code: it presses a hidden trigger for
@@ -88,14 +110,28 @@ function OpenPage({ page }: { page: SettingsPage }) {
   }, [page]);
   return (
     <Sheet.Trigger
-      to={page}
+      to={`group-${groupOf[page]}`}
       render={<button ref={button} type="button" hidden aria-hidden tabIndex={-1} />}
     />
   );
 }
 
+/** One group's page: its title and detail, then its sections. */
+function GroupPage({ id, children }: { id: SettingsGroup; children: ReactNode }) {
+  const { t } = useTranslation("settings");
+  return (
+    <>
+      <Sheet.Header title={t(`groups.${id}.label`)} description={t(`groups.${id}.lead`)} />
+      <Sheet.Body>
+        <div className="flex flex-col gap-8 pb-4">{children}</div>
+      </Sheet.Body>
+    </>
+  );
+}
+
 /**
- * General settings. Each row opens a sheet of its own on top. A choice that
+ * General settings: seven groups. Each opens a sheet of its own on top, with
+ * its sections one under another. Each a sheet of its own on top. A choice that
  * needs a dialog closes the sheets first.
  */
 export function SettingsSheet({ open: openProp, onOpenChange, trigger, page }: SettingsSheetProps) {
@@ -111,16 +147,15 @@ export function SettingsSheet({ open: openProp, onOpenChange, trigger, page }: S
   const [chatGPTOpen, setChatGPTOpen] = useState(false);
   const [subscribeOpen, setSubscribeOpen] = useState(false);
   const { t: tCommon } = useTranslation();
-  const { theme, accent } = useTheme();
+  const { theme } = useTheme();
   const settings = useSettings();
   const updates = useUpdates();
   const profile = useProfile();
   const storage = useStorageSettings();
-  const studio = useStudioSettings();
+  const account = useAccount();
+  const subscriptions = useSubscriptionConnections();
   const mcpRunning = useMcpRunning();
   const pluginsOn = usePlugins()?.filter((plugin) => plugin.enabled).length ?? 0;
-  const account = useAccount();
-  const hiddenTools = studio?.hidden.length ?? 0;
   const connected = storage ? storageIds.filter((id) => isStorageReady(storage, id)).length : 0;
   const updateVersion =
     updates.state.status === "available" ||
@@ -129,6 +164,12 @@ export function SettingsSheet({ open: openProp, onOpenChange, trigger, page }: S
       ? updates.state.version
       : null;
   const ready = settings ? providerIds.filter((id) => isProviderReady(settings, id)).length : 0;
+  const toolsActive = [
+    mcpRunning ? t("rows.mcpOn") : null,
+    pluginsOn > 0 ? `${t("rows.plugins")}: ${t("rows.pluginsHint", { count: pluginsOn })}` : null,
+  ].filter(Boolean);
+  const toolsHint = toolsActive.length ? toolsActive.join(" · ") : t("groups.tools.detail");
+  const aiHint = ready > 0 ? t("rows.providersHint", { count: ready }) : t("groups.ai.detail");
 
   return (
     <>
@@ -146,9 +187,26 @@ export function SettingsSheet({ open: openProp, onOpenChange, trigger, page }: S
           <Sheet.Header title={t("title")} description={t("description")} />
           {page ? <OpenPage page={page} /> : null}
           <Sheet.Body>
-            <nav className="-mx-2 flex flex-col gap-0.5">
+            <nav aria-label={t("title")} className="-mx-2 flex flex-col gap-0.5">
               <SettingsRow
-                to="account"
+                to="group-ai"
+                icon={AiBrain01Icon}
+                label={t("groups.ai.label")}
+                hint={aiHint}
+                end={
+                  subscriptions.accounts.some(({ status }) => status === "connected") ? (
+                    <span aria-hidden className="size-2 rounded-full bg-success" />
+                  ) : undefined
+                }
+              />
+              <SettingsRow
+                to="group-reading"
+                icon={AiVoiceIcon}
+                label={t("groups.reading.label")}
+                hint={t("groups.reading.detail")}
+              />
+              <SettingsRow
+                to="group-account"
                 icon={
                   <Avatar
                     profile={
@@ -160,94 +218,41 @@ export function SettingsSheet({ open: openProp, onOpenChange, trigger, page }: S
                     size={36}
                   />
                 }
-                label={profile?.name || account?.user.name || t("rows.account")}
+                label={t("groups.account.label")}
                 hint={
                   account
                     ? account.user.email
                     : profile?.name
-                      ? t("rows.accountHint")
-                      : t("rows.accountSetUp")
+                      ? profile.name
+                      : t("groups.account.detail")
                 }
               />
               <SettingsRow
-                to="subscription"
-                icon={<Logo size={22} />}
-                label={t("rows.subscription")}
-                hint={
-                  account?.account.plan
-                    ? t("rows.subscriptionPlan", {
-                        plan: t(`subscription.plans.${account.account.plan}`),
-                      })
-                    : t("rows.subscriptionNone")
-                }
-              />
-              <SettingsRow
-                to="providers"
-                icon={AiBrain01Icon}
-                label={t("rows.providers")}
-                hint={
-                  ready > 0 ? t("rows.providersHint", { count: ready }) : t("rows.providersNone")
-                }
-              />
-              <SettingsRow
-                to="storage"
+                to="group-storage"
                 icon={CloudServerIcon}
-                label={t("rows.storage")}
+                label={t("groups.storage.label")}
                 hint={
                   connected > 0
                     ? t("rows.storageHint", { count: connected })
-                    : t("rows.storageNone")
+                    : t("groups.storage.detail")
                 }
               />
               <SettingsRow
-                to="appearance"
+                to="group-appearance"
                 icon={PaintBoardIcon}
-                label={t("rows.appearance")}
-                hint={`${t(`appearance.${theme}`)} · ${t(`appearance.accents.${accent}`)}`}
+                label={t("groups.appearance.label")}
+                hint={`${t(`appearance.${theme}`)} · ${getLanguage(i18n.language).nativeName}`}
               />
               <SettingsRow
-                to="studio"
-                icon={SparklesIcon}
-                label={t("rows.studio")}
-                hint={
-                  hiddenTools > 0
-                    ? t("rows.studioHint", { count: hiddenTools })
-                    : t("rows.studioHintAll")
-                }
-              />
-              <SettingsRow
-                to="mcp"
+                to="group-tools"
                 icon={PlugSocketIcon}
-                label={t("rows.mcp")}
-                hint={mcpRunning ? t("rows.mcpOn") : t("rows.mcpOff")}
+                label={t("groups.tools.label")}
+                hint={toolsHint}
               />
               <SettingsRow
-                to="plugins"
-                icon={PuzzleIcon}
-                label={t("rows.plugins")}
-                hint={
-                  pluginsOn > 0
-                    ? t("rows.pluginsHint", { count: pluginsOn })
-                    : t("rows.pluginsNone")
-                }
-              />
-              <SettingsRow
-                to="calendar"
-                icon={Calendar03Icon}
-                label={t("rows.calendar")}
-                hint={t("rows.calendarHint")}
-              />
-              <SettingsRow
-                to="language"
-                icon={LanguageSkillIcon}
-                label={t("rows.language")}
-                hint={getLanguage(i18n.language).nativeName}
-              />
-              <SettingsRow to="data" icon={Database01Icon} label={t("rows.data")} />
-              <SettingsRow
-                to="about"
+                to="group-about"
                 icon={InformationCircleIcon}
-                label={t("rows.about")}
+                label={t("groups.about.label")}
                 hint={
                   updateVersion
                     ? t("updates.availableShort", { version: updateVersion })
@@ -262,56 +267,64 @@ export function SettingsSheet({ open: openProp, onOpenChange, trigger, page }: S
             </nav>
           </Sheet.Body>
 
-          <Sheet.Next name="account" closeLabel={tCommon("actions.close")}>
-            <AccountPanel />
+          <Sheet.Next name="group-ai" closeLabel={tCommon("actions.close")}>
+            <GroupPage id="ai">
+              {subscriptionConnectionsAllowed() ? (
+                <CliProxyPanel saved={settings?.providers.cliproxyapi} />
+              ) : null}
+              <ProvidersPanel
+                onChatGPTSignIn={() => {
+                  setOpen(false);
+                  setChatGPTOpen(true);
+                }}
+              />
+              <StudioPanel />
+            </GroupPage>
           </Sheet.Next>
-          <Sheet.Next name="subscription" closeLabel={tCommon("actions.close")}>
-            <SubscriptionPanel />
+          <Sheet.Next name="group-reading" closeLabel={tCommon("actions.close")}>
+            <GroupPage id="reading">
+              <ReadingVoicePanel />
+            </GroupPage>
           </Sheet.Next>
-          <Sheet.Next name="providers" closeLabel={tCommon("actions.close")}>
-            <ProvidersPanel
-              onChatGPTSignIn={() => {
-                setOpen(false);
-                setChatGPTOpen(true);
-              }}
-            />
+          <Sheet.Next name="group-account" closeLabel={tCommon("actions.close")}>
+            <GroupPage id="account">
+              <AccountPanel />
+              <SubscriptionPanel />
+            </GroupPage>
           </Sheet.Next>
-          <Sheet.Next name="storage" closeLabel={tCommon("actions.close")}>
-            <StoragePanel />
+          <Sheet.Next name="group-storage" closeLabel={tCommon("actions.close")}>
+            <GroupPage id="storage">
+              <StoragePanel />
+              <DataPanel
+                onDeleteAll={() => {
+                  setOpen(false);
+                  setConfirmDeleteAll(true);
+                }}
+              />
+            </GroupPage>
           </Sheet.Next>
-          <Sheet.Next name="appearance" closeLabel={tCommon("actions.close")}>
-            <AppearancePanel />
+          <Sheet.Next name="group-appearance" closeLabel={tCommon("actions.close")}>
+            <GroupPage id="appearance">
+              <AppearancePanel />
+              <LanguagePanel />
+            </GroupPage>
           </Sheet.Next>
-          <Sheet.Next name="studio" closeLabel={tCommon("actions.close")}>
-            <StudioPanel />
+          <Sheet.Next name="group-tools" closeLabel={tCommon("actions.close")}>
+            <GroupPage id="tools">
+              <CalendarPanel
+                onSubscribe={() => {
+                  setOpen(false);
+                  setSubscribeOpen(true);
+                }}
+              />
+              <McpPanel />
+              <PluginsPanel />
+            </GroupPage>
           </Sheet.Next>
-          <Sheet.Next name="mcp" closeLabel={tCommon("actions.close")}>
-            <McpPanel />
-          </Sheet.Next>
-          <Sheet.Next name="plugins" closeLabel={tCommon("actions.close")}>
-            <PluginsPanel />
-          </Sheet.Next>
-          <Sheet.Next name="calendar" closeLabel={tCommon("actions.close")}>
-            <CalendarPanel
-              onSubscribe={() => {
-                setOpen(false);
-                setSubscribeOpen(true);
-              }}
-            />
-          </Sheet.Next>
-          <Sheet.Next name="language" closeLabel={tCommon("actions.close")}>
-            <LanguagePanel />
-          </Sheet.Next>
-          <Sheet.Next name="data" closeLabel={tCommon("actions.close")}>
-            <DataPanel
-              onDeleteAll={() => {
-                setOpen(false);
-                setConfirmDeleteAll(true);
-              }}
-            />
-          </Sheet.Next>
-          <Sheet.Next name="about" closeLabel={tCommon("actions.close")}>
-            <AboutPanel updates={updates} />
+          <Sheet.Next name="group-about" closeLabel={tCommon("actions.close")}>
+            <GroupPage id="about">
+              <AboutPanel updates={updates} />
+            </GroupPage>
           </Sheet.Next>
         </Sheet.Content>
       </Sheet>

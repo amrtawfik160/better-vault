@@ -1,4 +1,4 @@
-import { net, protocol } from "electron";
+import { net, protocol, shell } from "electron";
 import { statSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -42,7 +42,7 @@ export function registerScheme() {
  *   address of electron-vite's dev server.
  */
 export function handleScheme(renderer: string) {
-  const api = createApi({ desktop: true });
+  const api = createApi({ desktop: true, openSignIn: (url) => shell.openExternal(url) });
   // Built pages only: the dev server injects scripts of its own.
   const pageHeaders = /^https?:/.test(renderer)
     ? null

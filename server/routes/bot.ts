@@ -10,6 +10,7 @@ import {
 } from "ai";
 import { z } from "zod";
 import { providers } from "@/lib/ai/catalog";
+import { rejectCliProxyRequest } from "@/lib/ai/cliproxyapi";
 import { describeError } from "@/lib/ai/errors";
 import { botSystemPrompt } from "@/lib/ai/prompts";
 import { createLanguageModel } from "@/lib/ai/providers";
@@ -79,6 +80,8 @@ export async function POST(request: Request) {
   const parsed = bodySchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Invalid request." }, { status: 400 });
   const { model, credentials, effort, roster } = parsed.data;
+  const denied = rejectCliProxyRequest(request, model.provider);
+  if (denied) return denied;
   // A bot hands tasks over only when there is someone to hand them to.
   const allowed = parsed.data.tools.filter((name) => name !== "ask_bot" || roster.length > 0);
   const messages = parsed.data.messages as unknown as ChatMessage[];

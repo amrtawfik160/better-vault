@@ -1,5 +1,8 @@
 import { listChatGPTModels } from "@/lib/chatgpt/model";
 import { providers, type ProviderCredentials, type ProviderId } from "./catalog";
+import { listRawCliProxyModels } from "./cliproxyapi";
+import { proxySnapshot } from "./cliproxyapi-accounts";
+import { cliProxyConnection, ensureCliProxy } from "./cliproxyapi-runtime";
 import { listOpenCodeModels } from "./opencode";
 import { chatGPTAllowed, localProvidersAllowed, parseBaseURL } from "./server-config";
 
@@ -151,6 +154,11 @@ async function listModelIds(
     }
     case "opencode":
       return listOpenCodeModels(credentials.baseURL);
+    case "cliproxyapi":
+      await ensureCliProxy();
+      return cliProxyConnection().management
+        ? (await proxySnapshot()).models
+        : listRawCliProxyModels();
     case "bettervault":
       return [...info.suggestedModels];
     case "elevenlabs": {

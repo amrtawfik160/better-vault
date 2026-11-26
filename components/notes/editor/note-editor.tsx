@@ -25,6 +25,8 @@ import {
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { NoteLink } from "@/lib/db/types";
+import { locateNoteMatch, noteCaptureLimit, type NoteMatch } from "@/lib/notes/search-match";
+import type { NoteStudySnapshot } from "@/lib/study/note-flashcards";
 import { linkCompletion, tagCompletion, type CompletionWorld } from "./completion";
 import { blockAt, blockHandle, moveBlock, type Block } from "./block-handle";
 import {
@@ -46,6 +48,8 @@ export interface NoteEditorHandle {
   focus: () => void;
   /** Puts the cursor at a character offset and scrolls it into view. */
   reveal: (offset: number) => void;
+  revealMatch: (match: NoteMatch) => void;
+  studySnapshot: () => NoteStudySnapshot | undefined;
 }
 
 interface NoteEditorProps {
@@ -81,11 +85,35 @@ export const NoteEditor = forwardRef<NoteEditorHandle, NoteEditorProps>(function
 
   useImperativeHandle(ref, () => ({
     focus: () => view.current?.focus(),
+    studySnapshot: () => {
+      const state = view.current?.state;
+      if (!state) return;
+      const { from, to } = state.selection.main;
+      const raw = state.sliceDoc(from, Math.min(to, from + noteCaptureLimit));
+      const text = raw.trim();
+      return {
+        body: state.doc.toString(),
+        selection: text
+          ? { text, match: { offset: from + raw.length - raw.trimStart().length, quote: text } }
+          : undefined,
+      };
+    },
     reveal: (offset) => {
       const current = view.current;
       if (!current) return;
       const at = Math.min(offset, current.state.doc.length);
       current.dispatch({ selection: { anchor: at }, scrollIntoView: true });
+      current.focus();
+    },
+    revealMatch: (match) => {
+      const current = view.current;
+      if (!current) return;
+      const from = locateNoteMatch(current.state.doc.toString(), match);
+      if (from === undefined) return;
+      current.dispatch({
+        selection: { anchor: from, head: from + match.quote.length },
+        effects: EditorView.scrollIntoView(from, { y: "center" }),
+      });
       current.focus();
     },
   }));

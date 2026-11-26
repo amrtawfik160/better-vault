@@ -482,11 +482,13 @@ export interface ModelPickerTriggerProps extends Omit<Popover.Trigger.Props, 'ch
   appearance?: 'ghost' | 'outline';
   /** What it says before a model is chosen. Default `Choose a model`. */
   placeholder?: ReactNode;
+  /** Shown after the model's name, such as its reasoning level. Added for better-vault's AIModelPicker. */
+  suffix?: ReactNode;
   className?: string;
 }
 
 /** The button that opens the list, showing the chosen model's icon and name. */
-function ModelPickerTrigger({ appearance, placeholder = 'Choose a model', className, ...props }: ModelPickerTriggerProps) {
+function ModelPickerTrigger({ appearance, placeholder = 'Choose a model', suffix, className, ...props }: ModelPickerTriggerProps) {
   const picker = usePicker('ModelPicker.Trigger');
   const slots = pickerVariants({ appearance });
   const chosen = picker.items.find((item) => item.value === picker.value);
@@ -503,7 +505,10 @@ function ModelPickerTrigger({ appearance, placeholder = 'Choose a model', classN
           {icon}
         </span>
       ) : null}
-      <span className={slots.triggerLabel()}>{chosen?.label ?? placeholder}</span>
+      <span className={slots.triggerLabel()}>
+        {chosen?.label ?? placeholder}
+        {chosen && suffix ? <span className="text-muted-foreground"> {suffix}</span> : null}
+      </span>
       <ChevronIcon className={slots.chevron()} />
     </Popover.Trigger>
   );
@@ -832,6 +837,11 @@ export interface ModelPickerContentProps extends Omit<Popover.Popup.Props, 'chil
   emptyText?: ReactNode;
   /** Where in the document it is put. Default `document.body`. */
   container?: Popover.Portal.Props['container'];
+  /**
+   * A column after the list, such as the chosen model's reasoning levels.
+   * Added for better-vault's AIModelPicker; the vendored picker has no such slot.
+   */
+  aside?: ReactNode;
   className?: string;
 }
 
@@ -843,6 +853,7 @@ function ModelPickerContent({
   placeholder = 'Search models…',
   emptyText = 'No models match',
   container,
+  aside,
   className,
   ...props
 }: ModelPickerContentProps) {
@@ -851,8 +862,13 @@ function ModelPickerContent({
   const slots = useMemo(() => pickerVariants({ variant }), [variant]);
   const input = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
+  // better-vault: the rail opens on the chosen model's provider, so the choice is in view.
+  const chosenProvider = picker.items.find((item) => item.value === picker.value)?.provider;
   const firstFilter = (): Filter =>
-    variant === 'rail' ? (picker.favorites.size > 0 ? 'favorites' : (picker.providerList[0]?.value ?? 'all')) : 'all';
+    variant === 'rail'
+      ? (chosenProvider ?? (picker.favorites.size > 0 ? 'favorites' : (picker.providerList[0]?.value ?? 'all')))
+      : 'all';
+  const main = useRef<HTMLDivElement>(null);
   const [filter, setFilter] = useState<Filter>(firstFilter);
   const [highlighted, setHighlighted] = useState<ModelPickerItem | undefined>(undefined);
 
@@ -862,6 +878,11 @@ function ModelPickerContent({
     setQuery('');
     setFilter(firstFilter());
     setHighlighted(undefined);
+    // better-vault: and scrolls to the chosen model once its rows are drawn.
+    const frame = requestAnimationFrame(() =>
+      main.current?.querySelector('[data-selected]')?.scrollIntoView({ block: 'nearest' })
+    );
+    return () => cancelAnimationFrame(frame);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [picker.open]);
 
@@ -993,7 +1014,7 @@ function ModelPickerContent({
               </div>
             ) : null}
 
-            <div className={slots.main()}>
+            <div ref={main} className={slots.main()}>
               <div className={slots.searchRow()}>
                 <Autocomplete.InputGroup className={slots.search()}>
                   <SearchIcon />
@@ -1038,6 +1059,7 @@ function ModelPickerContent({
             </div>
 
             {variant === 'detail' && shown ? <Pane item={shown} /> : null}
+            {aside}
             </RowContext.Provider>
           </Autocomplete.Root>
         </Popover.Popup>

@@ -2,15 +2,28 @@
  * Server-side switches, set with environment variables when hosting
  * better-vault for others.
  *
- * BETTER_VAULT_ALLOW_LOCAL_PROVIDERS=false turns off Ollama and LM Studio.
- * Their address comes from the user, so on a public server they would let
- * anyone make the server fetch addresses on its own network.
+ * BETTER_VAULT_ALLOW_LOCAL_PROVIDERS=false turns off Ollama, LM Studio and
+ * CLIProxyAPI. Ollama and LM Studio accept addresses supplied by the user.
  */
 export function localProvidersAllowed(): boolean {
   return process.env.BETTER_VAULT_ALLOW_LOCAL_PROVIDERS !== "false";
 }
 
 let desktopRuntime = false;
+let loopbackRuntime = false;
+
+export function isLoopbackHost(host: string): boolean {
+  return ["localhost", "127.0.0.1", "::1", "[::1]"].includes(host);
+}
+
+/** A web server must listen only on loopback to use its own proxy credentials. */
+export function setLoopbackRuntime(loopback: boolean) {
+  loopbackRuntime = loopback;
+}
+
+export function isLoopbackRuntime(): boolean {
+  return loopbackRuntime;
+}
 
 /** Set by `createApi({ desktop: true })` when the API runs inside the desktop app. */
 export function setDesktopRuntime(desktop: boolean) {
@@ -20,6 +33,20 @@ export function setDesktopRuntime(desktop: boolean) {
 /** True when the API runs inside the desktop app's main process. */
 export function isDesktopRuntime(): boolean {
   return desktopRuntime;
+}
+
+export function isLocalAppRequest(request: Request): boolean {
+  const url = new URL(request.url);
+  const desktop = desktopRuntime && url.protocol === "app:" && url.host === "better-vault";
+  const web = loopbackRuntime && url.protocol === "http:" && isLoopbackHost(url.hostname);
+  const origin = request.headers.get("origin");
+  const fetchSite = request.headers.get("sec-fetch-site");
+  return (
+    (desktop || web) &&
+    (origin === null || origin === (desktop ? "app://better-vault" : url.origin)) &&
+    fetchSite !== "cross-site" &&
+    fetchSite !== "same-site"
+  );
 }
 
 /**
