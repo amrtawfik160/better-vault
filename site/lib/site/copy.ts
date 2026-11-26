@@ -149,12 +149,12 @@ export const pluginKinds: { icon: IconSvgElement; title: string; body: string; h
 
 export const faq: { question: string; answer: string }[] = [
   {
-    question: "What is better-vault?",
+    question: "What is deepLe?",
     answer:
-      "better-vault is a free, open-source alternative to Google NotebookLM. You add PDFs, web pages, notes and text files to a notebook, chat with them with cited answers, and turn them into reports, flashcards, quizzes, mind maps, slide decks and infographics, using the AI model you choose.",
+      "deepLe is a free, open-source alternative to Google NotebookLM. You add PDFs, web pages, notes and text files to a notebook, chat with them with cited answers, and turn them into reports, flashcards, quizzes, mind maps, slide decks and infographics, using the AI model you choose.",
   },
   {
-    question: "Is better-vault free?",
+    question: "Is deepLe free?",
     answer:
       "Yes. It is MIT-licensed and free to use and host. You pay your AI provider for what you use with your own API key, or nothing at all with a local model through Ollama or LM Studio.",
   },
@@ -166,7 +166,7 @@ export const faq: { question: string; answer: string }[] = [
   {
     question: "Does it work with local models?",
     answer:
-      "Yes. Run better-vault on your computer and connect Ollama or LM Studio. Your sources then never leave your machine.",
+      "Yes. Run deepLe on your computer and connect Ollama or LM Studio. Your sources then never leave your machine.",
   },
   {
     question: "Where is my data stored?",
@@ -176,7 +176,7 @@ export const faq: { question: string; answer: string }[] = [
   {
     question: "Can I self-host it?",
     answer:
-      "Yes. better-vault is a Vite app with a small API and no database. Run bun run build and bun run start on any host with Node.js 22.12 or later, or use the desktop app for macOS, Windows and Linux.",
+      "Yes. deepLe is a Vite app with a small API and no database. Run bun run build and bun run start on any host with Node.js 22.12 or later, or use the desktop app for macOS, Windows and Linux.",
   },
   {
     question: "Does it make audio overviews like NotebookLM?",
@@ -186,6 +186,6 @@ export const faq: { question: string; answer: string }[] = [
   {
     question: "Is there a desktop app?",
     answer:
-      "Yes. better-vault runs as a desktop app on macOS, Windows and Linux, with the same interface as the web app. It keeps notebooks in a file on your computer and updates itself.",
+      "Yes. deepLe runs as a desktop app on macOS, Windows and Linux, with the same interface as the web app. It keeps notebooks in a file on your computer and updates itself.",
   },
 ];

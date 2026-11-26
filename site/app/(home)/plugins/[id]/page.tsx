@@ -123,13 +123,13 @@ export default async function PluginPage({ params }: Props) {
         <section className="flex flex-col gap-3 rounded-2xl border bg-card p-5">
           <h2 className="font-medium">Install it</h2>
           <p className="text-sm text-muted-foreground">
-            Open better-vault, go to Settings, then Tools, then Plugins, then Browse, and choose {plugin.name}.
+            Open deepLe, go to Settings, then Tools, then Plugins, then Browse, and choose {plugin.name}.
             The app shows its permissions and a warning before it installs, and you can uninstall it
             at any time.
           </p>
           <div className="flex flex-wrap gap-3">
             <Link href="/download" className={buttonVariants()}>
-              Get better-vault
+              Get deepLe
             </Link>
             <a
               href={
@@ -148,7 +148,7 @@ export default async function PluginPage({ params }: Props) {
         <div className="flex gap-3 rounded-2xl border border-warning/40 bg-warning/5 p-4 text-sm">
           <HugeiconsIcon icon={Alert02Icon} className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <p>
-            <strong className="font-medium">A third-party plugin.</strong> better-vault didn&apos;t
+            <strong className="font-medium">A third-party plugin.</strong> deepLe didn&apos;t
             write it. It was reviewed before it was listed and runs in a sandbox, but once on it can
             read and change what you allow. Only install plugins you trust.
           </p>

@@ -1,9 +1,9 @@
 {
-  "name": "better-vault-desktop",
-  "productName": "better-vault",
+  "name": "deeple-desktop",
+  "productName": "deepLe",
   "private": true,
   "version": "0.0.0",
-  "description": "The better-vault desktop app: Electron around the same Vite app.",
+  "description": "The deepLe desktop app: Electron around the same Vite app.",
   "license": "MIT",
   "author": {
     "name": "better-vault contributors"

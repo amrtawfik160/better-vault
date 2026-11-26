@@ -1,4 +1,4 @@
-# Contributing to better-vault
+# Contributing to deepLe
 
 Thank you for helping. This guide covers setup, the rules the code follows and how to send a change.
 

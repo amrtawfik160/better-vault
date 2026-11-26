@@ -6,7 +6,7 @@ import { absoluteUrl } from "@/lib/site/config";
 export const metadata: Metadata = {
   title: "Thank you for subscribing",
   description:
-    "Your better-vault plan is active. Go back to the app: Better Vault AI, your monthly AI credits, Better Vault Cloud and synced skills are ready to use.",
+    "Your deepLe plan is active. Go back to the app: Better Vault AI, your monthly AI credits, Better Vault Cloud and synced skills are ready to use.",
   alternates: { canonical: absoluteUrl("/subscribed") },
   robots: { index: false },
 };

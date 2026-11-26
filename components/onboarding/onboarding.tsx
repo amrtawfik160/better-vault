@@ -148,7 +148,7 @@ function Onboarding() {
         <div className="flex min-h-[min(34rem,calc(100dvh-4rem))] flex-col p-6 sm:p-10">
           <header className="flex items-center gap-3">
             <Logo size={28} />
-            <span className="text-sm font-semibold">better-vault</span>
+            <span className="text-sm font-semibold">deepLe</span>
             <span className="ms-auto text-xs text-muted-foreground tabular-nums">
               {t("onboarding.stepOf", { step: at + 1, total: steps.length })}
             </span>

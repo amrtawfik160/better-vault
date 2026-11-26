@@ -1,10 +1,10 @@
 # Accessibility
 
-better-vault should work for everyone who studies and writes with it, whatever they use to read, type, point or listen. This page says what we aim for, what we know falls short, and how to tell us about a barrier.
+deepLe should work for everyone who studies and writes with it, whatever they use to read, type, point or listen. This page says what we aim for, what we know falls short, and how to tell us about a barrier.
 
 ## Our goal
 
-We aim for the web app, the desktop app and better-vault.dev to meet [WCAG 2.2](https://www.w3.org/TR/WCAG22/) at level AA. This is a target, not a claim: better-vault has not been through a formal accessibility evaluation yet.
+We aim for the web app, the desktop app and better-vault.dev to meet [WCAG 2.2](https://www.w3.org/TR/WCAG22/) at level AA. This is a target, not a claim: deepLe has not been through a formal accessibility evaluation yet.
 
 We give most attention to the parts people use every day: the notebook chat, sources, notes, the Studio's tools and outputs, Settings, and the Vault page.
 
@@ -52,4 +52,4 @@ A maintainer reads every accessibility issue, labels it `accessibility`, and aim
 
 ## Keeping this page current
 
-The maintainers of better-vault own this statement and review it with each release. Suggestions for this page are welcome as an issue or a pull request.
+The maintainers of deepLe own this statement and review it with each release. Suggestions for this page are welcome as an issue or a pull request.

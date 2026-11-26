@@ -39,7 +39,7 @@ app.use("/*", serveStatic({ root: path.relative(process.cwd(), client) }));
 app.get("*", (c) => c.html(index));
 
 const listener = serve({ fetch: app.fetch, port, hostname }, (info) => {
-  console.log(`better-vault is running on http://${hostname}:${info.port}`);
+  console.log(`deepLe is running on http://${hostname}:${info.port}`);
 });
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {

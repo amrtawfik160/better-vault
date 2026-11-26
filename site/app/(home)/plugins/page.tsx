@@ -10,7 +10,7 @@ import { listPlugins, pluginsRepo } from "@/lib/site/plugins";
 export const metadata: Metadata = {
   title: "Plugins",
   description:
-    "Browse better-vault plugins: Studio tools, mods and themes from their creators' repositories, each reviewed before it is listed. Search, sort and install from the app.",
+    "Browse deepLe plugins: Studio tools, mods and themes from their creators' repositories, each reviewed before it is listed. Search, sort and install from the app.",
   alternates: { canonical: absoluteUrl("/plugins") },
 };
 

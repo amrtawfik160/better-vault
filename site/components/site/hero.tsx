@@ -124,7 +124,7 @@ export function Hero() {
           </a>
         </div>
 
-        <CopyCommand command="git clone https://github.com/better-vault/better-vault && cd better-vault && bun install && bun run dev" />
+        <CopyCommand command="git clone https://github.com/better-vault/better-vault && cd deepLe && bun install && bun run dev" />
       </div>
     </section>
   );

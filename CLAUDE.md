@@ -14,7 +14,7 @@ Everything in AGENTS.md applies. In addition:
 
 ## Desktop app
 
-better-vault also ships as a desktop app for macOS, Windows and Linux, in `desktop/` (its own bun project). It is the same Vite app, not a copy: AGENTS.md ("Desktop app") explains how it runs.
+deepLe also ships as a desktop app for macOS, Windows and Linux, in `desktop/` (its own bun project). It is the same Vite app, not a copy: AGENTS.md ("Desktop app") explains how it runs.
 
 **How it runs.** electron-vite builds the main process, the preload script and the root app's page into `desktop/out/`. The window shows the page as `app://better-vault`, and the main process answers `/api/…` itself with the app's Hono API (`server/app.ts`). Data lives in `better-vault.sqlite` in the app's data folder, through Node's built-in `node:sqlite`. The page reaches it over IPC (`window.betterVault`, from `desktop/src/preload.ts`), and `lib/db/store.ts` chooses that store over IndexedDB when it is present.
 

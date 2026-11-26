@@ -23,9 +23,9 @@ export function startAccount(isTrusted: (frame: WebFrameMain | null) => boolean)
         const ok = !!token && url.searchParams.get("state") === state;
         response.writeHead(ok ? 200 : 400, { "content-type": "text/html; charset=utf-8" });
         response.end(
-          `<!doctype html><meta charset="utf-8"><title>better-vault</title><body style="font:16px system-ui;display:grid;place-items:center;min-height:90vh"><p>${
+          `<!doctype html><meta charset="utf-8"><title>deepLe</title><body style="font:16px system-ui;display:grid;place-items:center;min-height:90vh"><p>${
             ok
-              ? "You're signed in. You can go back to better-vault."
+              ? "You're signed in. You can go back to deepLe."
               : "Something went wrong. Try signing in again."
           }</p></body>`,
         );

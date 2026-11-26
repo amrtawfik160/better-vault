@@ -27,7 +27,7 @@ const notarize = Boolean(process.env.APPLE_ID && process.env.APPLE_TEAM_ID);
 /** @type {import("electron-builder").Configuration} */
 const config = {
   appId: "dev.better-vault.app",
-  productName: "better-vault",
+  productName: "deepLe",
   copyright: "Copyright © better-vault contributors",
   extraMetadata: { version: web.version },
   directories: { output: "release", buildResources: "build" },
@@ -58,7 +58,7 @@ const config = {
     // macOS asks before the microphone is used, with this reason.
     extendInfo: {
       NSMicrophoneUsageDescription:
-        "better-vault listens when you ask the whiteboard by voice or practise speaking in Study.",
+        "deepLe listens when you ask the whiteboard by voice or practise speaking in Study.",
     },
     entitlements: "build/entitlements.mac.plist",
     entitlementsInherit: "build/entitlements.mac.plist",

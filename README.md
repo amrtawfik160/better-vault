@@ -2,10 +2,10 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="public/brand/logo-dark-transparent.png">
-  <img src="public/brand/logo-light-transparent.png" alt="better-vault logo" width="112">
+  <img src="public/brand/logo-light-transparent.png" alt="deepLe logo" width="112">
 </picture>
 
-# better-vault
+# deepLe
 
 **An open-source, bring-your-own-model alternative to NotebookLM.**
 Chat with your sources, and turn them into reports, flashcards, quizzes, tables and diagrams, using the AI model you choose.
@@ -31,7 +31,7 @@ Chat with your sources, and turn them into reports, flashcards, quizzes, tables 
 
 ## ✨ What it does
 
-better-vault is a free, open-source alternative to Google NotebookLM (now Gemini Notebook). It is a research and study notebook: you add **sources** such as PDFs, web pages, notes and text files to a **notebook**, and work with them using the AI model you choose.
+deepLe is a free, open-source alternative to Google NotebookLM (now Gemini Notebook). It is a research and study notebook: you add **sources** such as PDFs, web pages, notes and text files to a **notebook**, and work with them using the AI model you choose.
 
 **Chat with your sources** and get answers that cite the passages they came from. Switch to **Web** mode to let the model search the internet with its provider's built-in search.
 
@@ -84,10 +84,10 @@ bun run start
 ### Local models (Ollama, LM Studio)
 
 1. Install [Ollama](https://ollama.com) or [LM Studio](https://lmstudio.ai) and download a model (for example `ollama pull llama3.2`).
-2. In better-vault, open **Settings → AI → AI providers**, enable Ollama or LM Studio and check the address (`http://localhost:11434` for Ollama, `http://localhost:1234` for LM Studio).
+2. In deepLe, open **Settings → AI → AI providers**, enable Ollama or LM Studio and check the address (`http://localhost:11434` for Ollama, `http://localhost:1234` for LM Studio).
 3. Pick the model in the prompt bar.
 
-Local models work when better-vault runs on the same machine as the model server. Web search is only available with providers that have it built in (OpenAI, Anthropic, Google).
+Local models work when deepLe runs on the same machine as the model server. Web search is only available with providers that have it built in (OpenAI, Anthropic, Google).
 
 ### Study
 
@@ -103,11 +103,11 @@ Choose **Discuss in Study** on a note to get answers that cite it. Session repor
 
 When you choose **Draft cards from this answer** during flashcard practice, the draft can use the original card and the available source passages behind it. Links the model cites appear on the draft for you to check before you save. Open **View flashcards** to see the cards from that answer, or choose **Save and review** to review the cards you just saved. **Back to conversation** reopens the answer.
 
-For voice practice in the desktop app or on localhost, install [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and place its [multilingual tiny model](https://huggingface.co/ggerganov/whisper.cpp/blob/main/ggml-tiny.bin) at `~/.cache/deeple/whisper/ggml-tiny.bin`. better-vault looks for `whisper-cli` on your system path, including the standard Homebrew locations on macOS. You can also set `DEEPLE_WHISPER_BIN` and `DEEPLE_WHISPER_MODEL` to absolute paths before launching. **Dictate** adds a transcript to your draft. **Speak your answer** sends the transcript to your selected model and uses an installed system voice to read its reply. Use a local AI model as well to keep the entire conversation on your computer.
+For voice practice in the desktop app or on localhost, install [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and place its [multilingual tiny model](https://huggingface.co/ggerganov/whisper.cpp/blob/main/ggml-tiny.bin) at `~/.cache/deeple/whisper/ggml-tiny.bin`. deepLe looks for `whisper-cli` on your system path, including the standard Homebrew locations on macOS. You can also set `DEEPLE_WHISPER_BIN` and `DEEPLE_WHISPER_MODEL` to absolute paths before launching. **Dictate** adds a transcript to your draft. **Speak your answer** sends the transcript to your selected model and uses an installed system voice to read its reply. Use a local AI model as well to keep the entire conversation on your computer.
 
 Temporary voice turns clear after a report or when you leave the conversation. Enable transcript retention or select a default correction mode under **Study → Practice → Practice preferences**.
 
-The study workflows were adapted from [MemoFlash](https://github.com/amrtawfik160/memoflash).
+deepLe builds on [Better Vault](https://github.com/better-vault/better-vault). The study workflows were adapted from [MemoFlash](https://github.com/amrtawfik160/memoflash).
 
 ### Connect an AI subscription
 
@@ -121,7 +121,7 @@ Use **Reconnect** or **Disconnect** beside an account to manage it.
 
 Notebooks, sources, chats, Studio outputs and API keys stay on your device: in your browser's IndexedDB in the web app, or in `better-vault.sqlite` in the app's data folder in the desktop app. **Settings → Storage and data** exports and imports notebooks as a JSON file, which also moves them between the two.
 
-Each request sends your key to the app's own API route, which passes it to the provider and never stores or logs it. If you host better-vault for other people, they use their own keys in their own browsers.
+Each request sends your key to the app's own API route, which passes it to the provider and never stores or logs it. If you host deepLe for other people, they use their own keys in their own browsers.
 
 ### Hosting for others
 
@@ -130,7 +130,7 @@ These environment variables control how a self-hosted app reaches other services
 | Variable                             | Default                 | Effect                                                                                                                  |
 | ------------------------------------ | ----------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `BETTER_VAULT_ALLOW_LOCAL_PROVIDERS` | `true`                  | Set to `false` to turn off Ollama, LM Studio and CLIProxyAPI on a public server.                                        |
-| `BETTER_VAULT_CLIPROXYAPI_URL`       | `http://127.0.0.1:8317` | Address of the trusted CLIProxyAPI instance used by the better-vault server.                                            |
+| `BETTER_VAULT_CLIPROXYAPI_URL`       | `http://127.0.0.1:8317` | Address of the trusted CLIProxyAPI instance used by the deepLe server.                                            |
 | `BETTER_VAULT_ALLOW_PRIVATE_URLS`    | `false`                 | Set to `true` to let web-page sources point at private or local network addresses (only for trusted, private installs). |
 
 ## 🧱 Tech stack

@@ -1,7 +1,7 @@
 import Image from "next/image";
 
 /*
- * The providers flowing into better-vault: a tile per provider along the top,
+ * The providers flowing into deepLe: a tile per provider along the top,
  * a curved line from each down to the hub, and a pulse of colour running
  * along each line toward it. Drawn in a 1000 × 480 box; the tiles are HTML
  * placed at the same coordinates (as percentages) so they stay crisp and
@@ -132,7 +132,7 @@ export function ModelHub() {
       <div className={`${PANEL} flex flex-col items-center gap-5 p-5 sm:hidden`}>
         <ul
           className="flex w-full flex-wrap justify-center gap-y-4"
-          aria-label="Providers better-vault works with"
+          aria-label="Providers deepLe works with"
         >
           {PROVIDERS.map((p) => (
             <li key={p.name} className="flex w-1/3 flex-col items-center gap-1.5 px-1 text-center">
@@ -149,7 +149,7 @@ export function ModelHub() {
         <span aria-hidden="true" className="h-8 w-px bg-border" />
         <span className="flex flex-col items-center gap-1.5">
           <Hub className="size-16" />
-          <span className="text-sm font-semibold">better-vault</span>
+          <span className="text-sm font-semibold">deepLe</span>
         </span>
       </div>
 
@@ -177,7 +177,7 @@ export function ModelHub() {
             ))}
           </svg>
 
-          <ul className="absolute inset-0" aria-label="Providers better-vault works with">
+          <ul className="absolute inset-0" aria-label="Providers deepLe works with">
             {PROVIDERS.map((p, i) => (
               <li
                 key={p.name}
@@ -201,7 +201,7 @@ export function ModelHub() {
           >
             <Hub className="size-[clamp(3rem,10vw,5.5rem)]" />
             <span className="text-[clamp(0.6875rem,1.5vw,0.875rem)] font-semibold">
-              better-vault
+              deepLe
             </span>
           </div>
         </div>

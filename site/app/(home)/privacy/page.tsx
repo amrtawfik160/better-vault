@@ -5,7 +5,7 @@ import { absoluteUrl, site } from "@/lib/site/config";
 export const metadata: Metadata = {
   title: "Privacy policy",
   description:
-    "How better-vault handles your data: notebooks stay on your device, requests go only to the services you choose, and Google Drive access is limited to files you pick.",
+    "How deepLe handles your data: notebooks stay on your device, requests go only to the services you choose, and Google Drive access is limited to files you pick.",
   alternates: { canonical: absoluteUrl("/privacy") },
 };
 
@@ -18,7 +18,7 @@ export default function PrivacyPage() {
       updated={UPDATED}
       intro={
         <p>
-          better-vault is open-source software that runs on your own device: in your browser, or as
+          deepLe is open-source software that runs on your own device: in your browser, or as
           a desktop app on your computer. This policy explains what data it handles and where that
           data goes. The short version: your notebooks stay with you, and we, the project, never
           receive them.
@@ -27,7 +27,7 @@ export default function PrivacyPage() {
     >
       <LegalSection title="Who we are">
         <p>
-          better-vault is an MIT-licensed open-source project maintained by {site.author} and its
+          deepLe is an MIT-licensed open-source project maintained by {site.author} and its
           contributors. Its source code is public at{" "}
           <a href={site.repo}>github.com/better-vault/better-vault</a>, so you can check everything
           this policy says.
@@ -69,7 +69,7 @@ export default function PrivacyPage() {
 
       <LegalSection title="Services you choose to use">
         <p>
-          better-vault only sends data to the services you set up yourself, and only what a request
+          deepLe only sends data to the services you set up yourself, and only what a request
           needs:
         </p>
         <ul className="flex list-disc flex-col gap-2 ps-5">
@@ -99,16 +99,16 @@ export default function PrivacyPage() {
 
       <LegalSection title="Google user data">
         <p>
-          When you connect Google Drive, better-vault asks for one permission:{" "}
+          When you connect Google Drive, deepLe asks for one permission:{" "}
           <strong>
-            access to the files you pick in Google&apos;s file picker and the files better-vault
+            access to the files you pick in Google&apos;s file picker and the files deepLe
             creates
           </strong>{" "}
           (the <code>drive.file</code> scope). It cannot see the rest of your Drive. Google also
           shares your name and email address so the app can show which account is connected.
         </p>
         <p>
-          better-vault uses this access only to do what you ask: read the files you pick so they can
+          deepLe uses this access only to do what you ask: read the files you pick so they can
           become sources in a notebook, and save the backups and exports you choose into a
           &quot;better-vault&quot; folder in your Drive. The files&apos; contents are stored only on
           your device, as part of your notebooks.
@@ -145,7 +145,7 @@ export default function PrivacyPage() {
 
       <LegalSection title="Children">
         <p>
-          better-vault is not directed at children under 13 and collects no personal information
+          deepLe is not directed at children under 13 and collects no personal information
           from anyone.
         </p>
       </LegalSection>

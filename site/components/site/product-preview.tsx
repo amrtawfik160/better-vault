@@ -14,7 +14,7 @@ export function ProductPreview() {
       <div className="mx-auto max-w-6xl overflow-hidden rounded-2xl border bg-card p-1.5 shadow-sm">
         <Image
           src="/screenshots/studio-light.webp"
-          alt="A better-vault notebook with three sources and the Studio open, listing its twelve tools and the outputs made from the sources beside the chat"
+          alt="A deepLe notebook with three sources and the Studio open, listing its twelve tools and the outputs made from the sources beside the chat"
           width={2880}
           height={1800}
           unoptimized
@@ -23,7 +23,7 @@ export function ProductPreview() {
         />
         <Image
           src="/screenshots/studio-dark.webp"
-          alt="A better-vault notebook in dark mode, with the Studio tools and outputs beside the chat"
+          alt="A deepLe notebook in dark mode, with the Studio tools and outputs beside the chat"
           width={2880}
           height={1800}
           unoptimized

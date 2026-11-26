@@ -21,7 +21,7 @@ export const plans: Plan[] = [
     name: "Free",
     price: "$0",
     per: "forever",
-    tagline: "Everything in better-vault, with your own API keys.",
+    tagline: "Everything in deepLe, with your own API keys.",
     features: [
       "Notebooks, chat with citations and every Studio tool",
       "Notes with links, graph and canvas",
@@ -126,9 +126,9 @@ export const comparisonGroups: {
 
 export const pricingFaq: { question: string; answer: string }[] = [
   {
-    question: "Do I need a plan to use better-vault?",
+    question: "Do I need a plan to use deepLe?",
     answer:
-      "No. better-vault is free and open source. With your own API key, or a local model, every feature works without an account. A plan adds Better Vault AI, so you can ask without a key, and Better Vault Cloud.",
+      "No. deepLe is free and open source. With your own API key, or a local model, every feature works without an account. A plan adds Better Vault AI, so you can ask without a key, and Better Vault Cloud.",
   },
   {
     question: "What is an AI credit?",
@@ -141,7 +141,7 @@ export const pricingFaq: { question: string; answer: string }[] = [
       "Better Vault AI pauses until the next month, unless you turn on extra usage in Settings → Account and plan. Extra usage costs $2 per 1,000 credits, up to a monthly limit you choose. Your own API keys keep working either way.",
   },
   {
-    question: "Are my API keys or notebooks sent to Better Vault?",
+    question: "Are my API keys or notebooks sent to deepLe?",
     answer:
       "No. Your notebooks, notes and API keys stay on your device. Only the questions you ask Better Vault AI, the files you choose to put in Better Vault Cloud and, with sync on, your skills and plugins go to our servers.",
   },

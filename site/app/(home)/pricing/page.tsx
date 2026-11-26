@@ -9,7 +9,7 @@ import { comparisonGroups, plans, pricingFaq, type Cell } from "@/lib/site/prici
 export const metadata: Metadata = {
   title: "Pricing",
   description:
-    "better-vault is free and open source with your own API keys. Pro and Max add Better Vault AI without a key, monthly AI credits and Better Vault Cloud storage.",
+    "deepLe is free and open source with your own API keys. Pro and Max add Better Vault AI without a key, monthly AI credits and Better Vault Cloud storage.",
   alternates: { canonical: absoluteUrl("/pricing") },
 };
 

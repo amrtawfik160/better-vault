@@ -3,7 +3,7 @@ title: "Sources"
 description: "Add documents, spreadsheets, slides, PDFs, EPUBs, web pages, YouTube videos or pasted text to a notebook, then choose which sources the chat and Studio use."
 ---
 
-A source is a document you add to a notebook. better-vault stores it as plain text and splits it into passages, which it uses to answer questions and to create Studio outputs.
+A source is a document you add to a notebook. deepLe stores it as plain text and splits it into passages, which it uses to answer questions and to create Studio outputs.
 
 <Screenshot
   name="sources"
@@ -18,7 +18,7 @@ A source is a document you add to a notebook. better-vault stores it as plain te
 | **Word, Excel and PowerPoint**          | Upload a `.docx`, `.xlsx` or `.pptx` file. Each sheet becomes rows; each slide keeps its notes. |
 | **EPUB books**                          | Upload a `.epub` file. Its chapters are read in order.                                          |
 | **Markdown and text**                   | Upload a `.md` or `.txt` file, or choose **Paste text**.                                        |
-| **CSV, JSON, HTML, XML, YAML and code** | Upload the file. better-vault reads it as text and shows its format.                            |
+| **CSV, JSON, HTML, XML, YAML and code** | Upload the file. deepLe reads it as text and shows its format.                            |
 | **Web page**                            | Paste the full address into the Add box. Its main text is saved.                                |
 | **YouTube video**                       | Paste the video's address into the Add box. Its transcript is saved, with times.                |
 
@@ -28,11 +28,11 @@ A PDF, EPUB or Markdown file also keeps the file itself, so you can open the sou
 
 ## YouTube videos
 
-better-vault adds a YouTube video the way NotebookLM does: it imports the video's transcript, from captions the uploader wrote or YouTube made automatically. It prefers captions written by people in the language spoken. The video needs to be public; a private video can't be added, and the box says why.
+deepLe adds a YouTube video the way NotebookLM does: it imports the video's transcript, from captions the uploader wrote or YouTube made automatically. It prefers captions written by people in the language spoken. The video needs to be public; a private video can't be added, and the box says why.
 
 The transcript keeps a time, such as `[4:05]`, at the start of each paragraph, so citations point at a moment in the video. In the reader, the video plays above the transcript in YouTube's privacy-enhanced player, and pressing a time starts it there.
 
-Some videos have no captions. For those, better-vault offers to have Google Gemini watch the video and write the transcript, using your Google key. The offer shows about how many tokens it will use before you start. You can also add a video's subtitle file or a recording with **Transcript or recording** in the Add box.
+Some videos have no captions. For those, deepLe offers to have Google Gemini watch the video and write the transcript, using your Google key. The offer shows about how many tokens it will use before you start. You can also add a video's subtitle file or a recording with **Transcript or recording** in the Add box.
 
 ## Add sources
 
@@ -44,4 +44,4 @@ The chat and the Studio use only the sources that are selected. Open the list wi
 
 ## Read, rename or delete
 
-Each source has a menu. **Read** shows the text better-vault saved, and for a web page or video you can open the original. You can also rename or delete the source. Deleting it keeps the chats and outputs that were made from it.
+Each source has a menu. **Read** shows the text deepLe saved, and for a web page or video you can open the original. You can also rename or delete the source. Deleting it keeps the chats and outputs that were made from it.

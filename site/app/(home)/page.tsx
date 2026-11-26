@@ -235,7 +235,7 @@ export default function HomePage() {
       <ProductPreview />
 
       {/* The definition, stated plainly near the top for readers and answer engines. */}
-      <Section id="what" title="What is better-vault?" intro={site.definition}>
+      <Section id="what" title="What is deepLe?" intro={site.definition}>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {features.map(({ figure, title, body, href }) => (
             <Card key={title} className="relative">
@@ -365,19 +365,19 @@ export default function HomePage() {
 
       <Section
         id="compare"
-        title="better-vault vs NotebookLM"
-        intro="Google's NotebookLM, now called Gemini Notebook, runs only on Gemini and keeps your notebooks on Google's servers. better-vault is open source and runs on your terms."
+        title="deepLe vs NotebookLM"
+        intro="Google's NotebookLM, now called Gemini Notebook, runs only on Gemini and keeps your notebooks on Google's servers. deepLe is open source and runs on your terms."
       >
         <div className="relative overflow-x-auto rounded-xl border">
           <table className="w-full min-w-lg text-start text-sm">
-            <caption className="sr-only">better-vault compared with NotebookLM</caption>
+            <caption className="sr-only">deepLe compared with NotebookLM</caption>
             <thead className="bg-muted/60">
               <tr>
                 <th scope="col" className="p-3 text-start font-medium">
                   Feature
                 </th>
                 <th scope="col" className="p-3 text-start font-medium">
-                  better-vault
+                  deepLe
                 </th>
                 <th scope="col" className="p-3 text-start font-medium">
                   NotebookLM
@@ -413,7 +413,7 @@ export default function HomePage() {
       <Section
         id="roadmap"
         title="What's next"
-        intro="better-vault is young and moving fast. These are the next steps on the roadmap."
+        intro="deepLe is young and moving fast. These are the next steps on the roadmap."
       >
         <div className="grid gap-4 md:grid-cols-3">
           {roadmapTeaser.map((item) => (

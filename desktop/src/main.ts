@@ -94,7 +94,7 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     show: false,
-    title: "better-vault",
+    title: "deepLe",
     // The app's own background (--background in src/styles/tokens.css), so no white flash.
     backgroundColor: nativeTheme.shouldUseDarkColors ? "#0a0a0a" : "#ffffff",
     webPreferences: {
@@ -172,7 +172,7 @@ app.whenReady().then(() => {
     handleScheme(devServer ?? path.join(__dirname, "..", "renderer"));
   } catch (error) {
     dialog.showErrorBox(
-      "better-vault could not start",
+      "deepLe could not start",
       error instanceof Error ? error.message : String(error),
     );
     app.quit();

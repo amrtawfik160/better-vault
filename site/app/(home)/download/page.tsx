@@ -12,7 +12,7 @@ import { latestRelease, releasesUrl } from "@/lib/site/releases";
 export const metadata: Metadata = {
   title: "Download",
   description:
-    "Download the better-vault desktop app for macOS, Windows and Linux: the open-source NotebookLM alternative, with notebooks on your computer and auto-updates.",
+    "Download the deepLe desktop app for macOS, Windows and Linux: the open-source NotebookLM alternative, with notebooks on your computer and auto-updates.",
   alternates: { canonical: absoluteUrl("/download") },
 };
 
@@ -124,7 +124,7 @@ export default async function DownloadPage() {
             <div className="flex flex-col items-center gap-3">
               <p className="max-w-xl text-sm text-balance text-muted-foreground">
                 The first desktop installers are coming with the next release. Until then, you can
-                run better-vault from source in a few minutes.
+                run deepLe from source in a few minutes.
               </p>
               <div className="flex flex-wrap justify-center gap-3">
                 <Link href="/docs/quickstart" className={buttonVariants({ size: "lg" })}>

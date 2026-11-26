@@ -6,7 +6,7 @@ Please **do not open a public issue** for security problems. Report them private
 
 We aim to reply within a week and will credit you in the release notes unless you prefer otherwise.
 
-## How better-vault handles secrets
+## How deepLe handles secrets
 
 - API keys are stored in the user's browser (IndexedDB) and sent with each request to the app's own API routes over the same origin.
 - The routes pass keys to the chosen provider and never store or log them.
