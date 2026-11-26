@@ -19,7 +19,7 @@ export function DownloadMenu<Data>({
   title: string;
   data: Data;
   options: readonly ExportOption<Data>[];
-  /** The view's one filled button, for tools whose job is to be downloaded. */
+  /** The view's main action (tonal), for tools whose job is to be downloaded. */
   primary?: boolean;
 }) {
   const { t } = useTranslation("studio");
@@ -31,10 +31,12 @@ export function DownloadMenu<Data>({
     <Menu>
       <Menu.Trigger
         disabled={busy}
+        // The page's filled button is the header's Practise this, so the main action here is tonal.
         className={buttonVariants({
-          variant: primary ? "default" : "outline",
+          variant: primary ? "secondary" : "outline",
           shape: "pill",
           size: "sm",
+          className: primary ? "border border-input" : undefined,
         })}
       >
         <Icon

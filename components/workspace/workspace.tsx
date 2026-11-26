@@ -1,7 +1,7 @@
 import { Link, useLocation, useSearchParams } from "react-router";
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft01Icon } from "@hugeicons/core-free-icons";
+import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { Icon } from "@/components/icon";
 import { Button, buttonVariants } from "@/components/panelui/button";
 import { ChatProvider } from "@/components/chat/chat-provider";
@@ -64,6 +64,8 @@ function WorkspaceLayout() {
     openTool,
     closeTool,
     readSource,
+    openOutputId,
+    closeOutput,
   } = useWorkspace();
   const { t } = useTranslation();
   const { key, state } = useLocation();
@@ -111,12 +113,37 @@ function WorkspaceLayout() {
         {/* The main column: the overview, the sources to choose from, or Studio. */}
         <main className="flex min-w-0 flex-1 flex-col">
           {tab !== "overview" ? (
-            <div className="shrink-0 px-3 pt-2 sm:px-5">
-              <Button variant="ghost" size="sm" onClick={() => setTab("overview")}>
+            // One way back: the notebook, and from an open output, its list of outputs.
+            <nav
+              aria-label={t("header.breadcrumb", { ns: "workspace" })}
+              className="flex shrink-0 items-center gap-0.5 px-3 pt-2 sm:px-5"
+            >
+              <Button
+                variant="ghost"
+                size="sm"
+                className="min-w-0 shrink justify-start"
+                title={notebook.title}
+                onClick={() => setTab("overview")}
+              >
                 <Icon icon={ArrowLeft01Icon} size={16} className="rtl:rotate-180" />
-                {t("overview.back", { ns: "workspace", notebook: notebook.title })}
+                <span className="truncate">
+                  {t("overview.back", { ns: "workspace", notebook: notebook.title })}
+                </span>
               </Button>
-            </div>
+              {tab === "studio" && openOutputId ? (
+                <>
+                  <Icon
+                    icon={ArrowRight01Icon}
+                    size={14}
+                    aria-hidden
+                    className="shrink-0 text-muted-foreground rtl:rotate-180"
+                  />
+                  <Button variant="ghost" size="sm" onClick={closeOutput}>
+                    {t("viewer.back", { ns: "studio" })}
+                  </Button>
+                </>
+              ) : null}
+            </nav>
           ) : null}
           <div className="relative min-h-0 flex-1">
             {tab === "sources" ? <SourcesView /> : tab === "studio" ? <StudioView /> : <NotebookOverview />}

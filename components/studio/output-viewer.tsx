@@ -1,6 +1,5 @@
 import {
   Alert02Icon,
-  ArrowLeft01Icon,
   Delete02Icon,
   Loading03Icon,
   MoreVerticalIcon,
@@ -13,10 +12,12 @@ import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Icon } from "@/components/icon";
+import { Alert } from "@/components/panelui/alert";
 import { Button } from "@/components/panelui/button";
 import { Menu } from "@/components/panelui/menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useWorkspace } from "@/components/workspace/workspace-context";
+import { modelDisplayLabel, useSettings } from "@/lib/db/settings";
 import { addQuizMissesToStudy, addStudioFlashcards } from "@/lib/db/study";
 import { vaultOf } from "@/lib/db/vaults";
 import { studyHref } from "@/lib/study/links";
@@ -60,6 +61,7 @@ export function OutputViewer({ id }: { id: string }) {
   );
   const [annotating, setAnnotating] = useState(false);
   const exporter = useExporter();
+  const settings = useSettings();
   const storage = useStorageSettings();
   const connected = storage ? storageIds.filter((id) => isStorageReady(storage, id)) : [];
   const gone =
@@ -158,7 +160,8 @@ export function OutputViewer({ id }: { id: string }) {
   const meta = output.model
     ? t("viewer.meta", {
         sources: tCommon("sourceCount", { count: output.sourceIds.length }),
-        model: output.model.modelId,
+        // The model's name as the picker shows it, not its raw id.
+        model: modelDisplayLabel(settings, output.model),
         time: formatRelativeTime(output.createdAt, i18n.language),
       })
     : t("viewer.metaLocal", { time: formatRelativeTime(output.updatedAt, i18n.language) });
@@ -221,13 +224,8 @@ export function OutputViewer({ id }: { id: string }) {
           )}
         >
           {immersive ? null : (
-            <header className="mb-6 flex flex-col gap-3 border-b pb-4">
-              <nav aria-label={t("frame.breadcrumb")} className="-ms-2 flex items-center">
-                <Button variant="ghost" size="sm" onClick={closeOutput}>
-                  <Icon icon={ArrowLeft01Icon} size={16} className="rtl:rotate-180" />
-                  {t("viewer.back")}
-                </Button>
-              </nav>
+            // The way back (notebook › All outputs) is the breadcrumb above, in the workspace.
+            <header className="mt-2 mb-6 flex flex-col gap-3 border-b pb-4">
               <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
                 <span className="flex size-10 shrink-0 items-center justify-center rounded-2xl bg-muted">
                   <Icon icon={tool.icon} size={20} className={tool.tint} />
@@ -245,9 +243,12 @@ export function OutputViewer({ id }: { id: string }) {
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   {parsed?.success && output.toolId === "flashcards" ? (
+                    // Tonal: the header's Practise this is the page's one filled button.
                     <Button
+                      variant="secondary"
                       shape="pill"
                       size="sm"
+                      className="border border-input"
                       disabled={addingCards}
                       onClick={() => {
                         setAddingCards(true);
@@ -275,7 +276,14 @@ export function OutputViewer({ id }: { id: string }) {
                   <Menu>
                     <Menu.Trigger
                       aria-label={t("viewer.actions")}
-                      className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                      render={
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          shape="pill"
+                          className="text-muted-foreground"
+                        />
+                      }
                     >
                       <Icon icon={MoreVerticalIcon} size={16} />
                     </Menu.Trigger>
@@ -322,50 +330,53 @@ export function OutputViewer({ id }: { id: string }) {
               </p>
             </section>
           ) : output.status === "error" ? (
-            <section role="alert" className="flex gap-3 rounded-2xl border bg-card p-4">
-              <Icon icon={Alert02Icon} size={20} className="mt-0.5 shrink-0 text-destructive" />
-              <div className="min-w-0 flex-1">
-                <h2 className="text-sm font-medium">
-                  {t("frame.failedTitle", { tool: t(`tools.${output.toolId}.name`) })}
-                </h2>
-                {output.error ? (
-                  <p className="mt-1 text-sm text-muted-foreground">{output.error}</p>
-                ) : null}
-                <p className="mt-1 text-xs text-muted-foreground">{t("frame.choicesKept")}</p>
-                {local ? null : (
+            // design-system §7, inline AI errors: the cause, what was kept, and Retry (tonal).
+            <Alert tone="destructive" variant="plain" className="rounded-xl">
+              <Alert.Icon>
+                <Icon icon={Alert02Icon} size={16} />
+              </Alert.Icon>
+              <Alert.Title>
+                {t("frame.failedTitle", { tool: t(`tools.${output.toolId}.name`) })}
+              </Alert.Title>
+              <Alert.Description>
+                {output.error ? <span className="block">{output.error}</span> : null}
+                <span className="block">{t("frame.choicesKept")}</span>
+              </Alert.Description>
+              {local ? null : (
+                <Alert.Actions>
                   <Button
-                    variant="outline"
-                    shape="pill"
+                    variant="secondary"
                     size="sm"
-                    className="mt-3"
+                    className="border border-input"
                     onClick={() => void runner.retry(output)}
                   >
                     <Icon icon={RepeatIcon} size={16} />
                     {t("view.retry")}
                   </Button>
-                )}
-              </div>
-            </section>
+                </Alert.Actions>
+              )}
+            </Alert>
           ) : !parsed?.success || !client ? (
-            <section role="alert" className="flex gap-3 rounded-2xl border bg-card p-4">
-              <Icon icon={Alert02Icon} size={20} className="mt-0.5 shrink-0 text-destructive" />
-              <div className="min-w-0 flex-1">
-                <h2 className="text-sm font-medium">{t("frame.brokenTitle")}</h2>
-                <p className="mt-1 text-sm text-muted-foreground">{t("frame.brokenBody")}</p>
-                {local ? null : (
+            <Alert tone="destructive" variant="plain" className="rounded-xl">
+              <Alert.Icon>
+                <Icon icon={Alert02Icon} size={16} />
+              </Alert.Icon>
+              <Alert.Title>{t("frame.brokenTitle")}</Alert.Title>
+              <Alert.Description>{t("frame.brokenBody")}</Alert.Description>
+              {local ? null : (
+                <Alert.Actions>
                   <Button
-                    variant="outline"
-                    shape="pill"
+                    variant="secondary"
                     size="sm"
-                    className="mt-3"
+                    className="border border-input"
                     onClick={() => void runner.retry(output)}
                   >
                     <Icon icon={RepeatIcon} size={16} />
                     {t("frame.makeAgain")}
                   </Button>
-                )}
-              </div>
-            </section>
+                </Alert.Actions>
+              )}
+            </Alert>
           ) : (
             <client.Viewer
               key={output.id}

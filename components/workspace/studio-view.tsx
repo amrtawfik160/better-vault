@@ -20,9 +20,10 @@ export function StudioView() {
     return (
       <div className="grid h-full place-items-center p-6">
         <div className="max-w-sm text-center">
-          <h2 className="text-xl font-semibold tracking-tight">{t("view.emptyTitle")}</h2>
-          <p className="mt-2 text-muted-foreground">{t("view.emptyBody")}</p>
-          <Button className="mt-6" shape="pill" onClick={() => {
+          <h2 className="text-sm font-medium">{t("view.emptyTitle")}</h2>
+          <p className="mt-1 text-[0.8125rem] text-muted-foreground">{t("view.emptyBody")}</p>
+          {/* Tonal: the header's Practise this is the page's one filled button. */}
+          <Button className="mt-5 border border-input" variant="secondary" onClick={() => {
               // The Studio sheet lives in the companion's Make tab.
               setCompanion("make");
               setStudioOpen(true);

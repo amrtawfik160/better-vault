@@ -7,6 +7,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { useTranslation } from "react-i18next";
 import { Icon } from "@/components/icon";
+import { Button } from "@/components/panelui/button";
 import { Menu } from "@/components/panelui/menu";
 import { useWorkspace } from "@/components/workspace/workspace-context";
 import type { StudioOutput } from "@/lib/db/database";
@@ -61,10 +62,10 @@ export function OutputRow({ output, onOpen }: { output: StudioOutput; onOpen: ()
 
   return (
     <div className="group/output flex items-center gap-1 rounded-2xl pe-1 transition-colors hover:bg-muted">
-      <button
-        type="button"
+      <Button
+        variant="ghost"
         onClick={onOpen}
-        className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-2xl px-2.5 py-2.5 text-start outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="h-auto min-w-0 flex-1 shrink justify-start gap-3 rounded-2xl px-2.5 py-2.5 text-start font-normal whitespace-normal hover:not-disabled:bg-transparent active:not-disabled:scale-100"
       >
         {tool ? <Icon icon={tool.icon} size={20} className={cn("shrink-0", tool.tint)} /> : null}
         <span className="min-w-0 flex-1">
@@ -87,11 +88,18 @@ export function OutputRow({ output, onOpen }: { output: StudioOutput; onOpen: ()
         ) : output.status === "error" ? (
           <Icon icon={Alert02Icon} size={16} className="shrink-0 text-destructive" />
         ) : null}
-      </button>
+      </Button>
       <Menu>
         <Menu.Trigger
           aria-label={t("outputMenu", { title: output.title })}
-          className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-foreground/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          render={
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              shape="pill"
+              className="text-muted-foreground hover:not-disabled:bg-foreground/10"
+            />
+          }
         >
           <Icon icon={MoreVerticalIcon} size={16} />
         </Menu.Trigger>
