@@ -30,6 +30,7 @@ export function AnswerEditor({
   targetWords,
   minRows = 6,
   disabled,
+  secondary = false,
   children,
 }: {
   label: string;
@@ -40,6 +41,8 @@ export function AnswerEditor({
   targetWords?: number;
   minRows?: number;
   disabled?: boolean;
+  /** Submit is not the view's main action (a probing question in a round): tonal, not filled. */
+  secondary?: boolean;
   /** Buttons beside Submit: hints, Show me, Cancel. */
   children?: ReactNode;
 }) {
@@ -103,7 +106,14 @@ export function AnswerEditor({
             </Button>
           ) : null}
           {children}
-          <Button type="button" size="sm" disabled={disabled || dictating || !value.trim()} onClick={onSubmit}>
+          <Button
+            type="button"
+            size="sm"
+            variant={secondary ? "secondary" : "default"}
+            className={secondary ? "border border-input" : undefined}
+            disabled={disabled || dictating || !value.trim()}
+            onClick={onSubmit}
+          >
             {t("study.writingPractice.submit")}
           </Button>
         </div>

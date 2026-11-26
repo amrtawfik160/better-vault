@@ -85,7 +85,7 @@ export function PracticeFeedbackView({
 
       {feedback ? (
         <>
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-[repeat(auto-fit,minmax(13rem,1fr))]">
             {feedback.right.length ? (
               <Section title={t("study.writingPractice.right")}>
                 <PointList session={session} items={feedback.right} marker="bg-success" />

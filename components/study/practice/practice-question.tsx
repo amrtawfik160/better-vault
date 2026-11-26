@@ -303,7 +303,13 @@ export function PracticeQuestion({
                 {t("study.writingPractice.cancel")}
               </Button>
             ) : null}
-            <Button size="sm" disabled={draft.choice === undefined} onClick={() => void submit()}>
+            <Button
+              size="sm"
+              variant={compact ? "secondary" : "default"}
+              className={compact ? "border border-input" : undefined}
+              disabled={draft.choice === undefined}
+              onClick={() => void submit()}
+            >
               {t("study.writingPractice.check")}
             </Button>
           </div>
@@ -318,6 +324,7 @@ export function PracticeQuestion({
           targetWords={question.type === "write" ? question.targetWords : undefined}
           minRows={compact || question.type === "recall" ? 3 : 8}
           disabled={pending}
+          secondary={compact}
         >
           {helpers}
         </AnswerEditor>

@@ -836,7 +836,10 @@ function Suggestion({
         <span className="font-medium">{title}</span>
         <span className="text-muted-foreground"> · {detail}</span>
       </p>
+      {/* Tonal: the chosen exercise's Start practice below is the page's one filled button. */}
       <Button
+        variant="secondary"
+        className="border border-input"
         disabled={disabled}
         onClick={() =>
           suggestion.kind === "resume"
