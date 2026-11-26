@@ -7,7 +7,6 @@ import {
   Calendar03Icon,
   CloudIcon,
   ComputerIcon,
-  Database01Icon,
   DashboardSquare01Icon,
   FileAddIcon,
   Folder01Icon,
@@ -18,10 +17,12 @@ import {
   Note01Icon,
   Notebook01Icon,
   PaintBoardIcon,
+  PlugSocketIcon,
   QuoteDownIcon,
   SparklesIcon,
   Sun03Icon,
   UserIcon,
+  AiVoiceIcon as VoiceIcon,
 } from "@hugeicons/core-free-icons";
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
@@ -232,35 +233,54 @@ export function CommandPalette() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notebookId, t, tHome, tNotes, tSettings]);
 
-  const settingsActions: Action[] = [
-    {
-      page: "subscriptions",
-      icon: AiBrain02Icon,
-      keywords: [
-        "subscription",
-        "connect",
-        "reconnect",
-        "chatgpt",
-        "claude",
-        "antigravity",
-        "grok",
-      ],
-    },
-    { page: "providers", icon: AiBrain02Icon, keywords: ["ai", "model", "key", "api", "effort"] },
-    { page: "appearance", icon: PaintBoardIcon, keywords: ["theme", "colour", "color", "dark"] },
-    { page: "calendar", icon: Calendar03Icon, keywords: ["calendar", "google", "outlook", "ics"] },
-    { page: "storage", icon: CloudIcon, keywords: ["drive", "google", "s3", "backup"] },
-    { page: "account", icon: UserIcon, keywords: ["profile", "name"] },
-    { page: "language", icon: LanguageSkillIcon, keywords: ["language", "translate"] },
-    { page: "data", icon: Database01Icon, keywords: ["backup", "export", "import", "delete"] },
-    { page: "about", icon: InformationCircleIcon, keywords: ["version", "update"] },
-  ].map(({ page, icon, keywords }) => ({
-    id: `settings-${page}`,
-    label: tSettings(`rows.${page as SettingsPage}`),
+  // The Settings sheet's seven groups, named as the sheet names them; each opens on its first page.
+  const settingsActions: Action[] = (
+    [
+      {
+        group: "ai",
+        page: "providers",
+        icon: AiBrain02Icon,
+        keywords: [
+          "model",
+          "key",
+          "api",
+          "provider",
+          "subscription",
+          "connect",
+          "chatgpt",
+          "claude",
+          "studio",
+        ],
+      },
+      { group: "reading", page: "voice", icon: VoiceIcon, keywords: ["voice", "speech", "listen"] },
+      { group: "account", page: "account", icon: UserIcon, keywords: ["profile", "name", "plan"] },
+      {
+        group: "storage",
+        page: "storage",
+        icon: CloudIcon,
+        keywords: ["drive", "google", "s3", "backup", "export", "import", "delete"],
+      },
+      {
+        group: "appearance",
+        page: "appearance",
+        icon: PaintBoardIcon,
+        keywords: ["theme", "colour", "color", "dark", "translate"],
+      },
+      {
+        group: "tools",
+        page: "calendar",
+        icon: PlugSocketIcon,
+        keywords: ["calendar", "outlook", "ics", "mcp", "skills"],
+      },
+      { group: "about", page: "about", icon: InformationCircleIcon, keywords: ["version", "update"] },
+    ] as const
+  ).map(({ group, page, icon, keywords }) => ({
+    id: `settings-${group}`,
+    label: tSettings(`groups.${group}.label`),
     icon,
-    keywords: ["settings", ...keywords],
+    keywords: ["settings", tSettings(`groups.${group}.detail`), ...keywords],
     kind: tSettings("title"),
-    run: () => openSettings(page as SettingsPage),
+    run: () => openSettings(page),
   }));
 
   const vaultActions: Action[] = (catalogue?.vaults ?? []).map((vault) => ({
