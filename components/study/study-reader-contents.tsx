@@ -338,15 +338,18 @@ export function StudyReaderContents({
         className="min-h-0 flex-1 gap-0"
       >
         <div className="flex h-13 shrink-0 items-center gap-2 border-b px-3">
+          {/* Three tabs fit the 20rem panel: tighter padding, and a count only when there is something. */}
           <Tabs.List aria-label={t("study.readerCompanion.contents.label")} className="min-w-0 flex-1">
-            <Tabs.Trigger value="outline">{t("study.readerCompanion.contents.outline")}</Tabs.Trigger>
-            <Tabs.Trigger value="highlights">
-              {t("study.reader.panel.highlights")}
-              <Tabs.Badge>{highlights.length}</Tabs.Badge>
+            <Tabs.Trigger value="outline" className="px-2.5">
+              {t("study.readerCompanion.contents.outline")}
             </Tabs.Trigger>
-            <Tabs.Trigger value="words">
+            <Tabs.Trigger value="highlights" className="gap-1.5 px-2.5">
+              {t("study.reader.panel.highlights")}
+              {highlights.length ? <Tabs.Badge>{highlights.length}</Tabs.Badge> : null}
+            </Tabs.Trigger>
+            <Tabs.Trigger value="words" className="gap-1.5 px-2.5">
               {t("study.reader.panel.words")}
-              <Tabs.Badge>{words.length}</Tabs.Badge>
+              {words.length ? <Tabs.Badge>{words.length}</Tabs.Badge> : null}
             </Tabs.Trigger>
           </Tabs.List>
           <Button
